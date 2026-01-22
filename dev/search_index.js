@@ -1,0 +1,3 @@
+var documenterSearchIndex = {"docs":
+[{"location":"#PhyloPOMP.jl","page":"Home","title":"PhyloPOMP.jl","text":"The package is for doing phylodynamics in Julia.","category":"section"},{"location":"#Package-Features","page":"Home","title":"Package Features","text":"","category":"section"},{"location":"#Function-Documentation","page":"Home","title":"Function Documentation","text":"","category":"section"},{"location":"#Examples","page":"Home","title":"Examples","text":"","category":"section"}]
+}
