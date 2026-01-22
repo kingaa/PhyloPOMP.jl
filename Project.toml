@@ -1,6 +1,6 @@
 name = "PhyloPOMP"
 uuid = "d3093253-1426-44ff-8fa8-1ab5fe440962"
-version = "0.0.1-1"
+version = "0.0.1"
 authors = ["Aaron A. King <kingaa@umich.edu>"]
 
 [deps]
