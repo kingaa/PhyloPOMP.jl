@@ -1,2 +1,6 @@
 [deps]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+PhyloPOMP = "d3093253-1426-44ff-8fa8-1ab5fe440962"
+
+[sources]
+PhyloPOMP = {path = ".."}
