@@ -269,7 +269,7 @@ parse_newick(
                 b = b-1
             end
         elseif input[b] == '['
-            error("invalid Newick: unbalanced square brackets.")a
+            error("invalid Newick: unbalanced square brackets.")
         else
             b = b-1
         end
