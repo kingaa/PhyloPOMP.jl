@@ -1,4 +1,4 @@
-using Documenter, RCall
+using Documenter
 using PhyloPOMP
 
 makedocs(

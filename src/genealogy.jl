@@ -1,112 +1,83 @@
-using AbstractTrees
-import OrderedCollections: OrderedDict
-import NewickTree: readnw, getheights, getleaves, prewalk, Node, NewickData, distance, nv
-export parse_newick, NodeType
+export Genealogy, GenealNode
 
-@enum NodeType begin
-    Root
-    Sample
-    Branch
-end
+const Name = Int64
+const Time = Union{Float64,Int64}
+@enum NodeType Sample Node
 
-repair_roots(x::Node{I, T}, i::J) where {I <: Integer, J <: Integer, D, S, T <: NewickData{D, S}} = begin
-    bl = distance(x)
-    if bl != 0
-        m = Node(I(i + 1), NewickData(d = zero(D)))
-        push!(m, x)
-    else
-        x
+"""
+    GenealNode{D,T}
+
+Implements a *genealogical node*.
+The `Enum` type `D` enumerates the demes, and `T` is the type of the time.
+"""
+mutable struct GenealNode{D<:Enum,T<:Time}
+    type::NodeType
+    name::Name
+    slate::T
+    deme::Union{Missing,D}
+    parent::Union{Nothing,Name}
+    children::Vector{Name}
+    GenealNode{D}(
+        name::Name,
+        slate::T,
+        deme = missing,
+        type::NodeType = Node
+    ) where {D <: Enum, T <: Time} = begin
+        new{D,T}(type,name,slate,deme,nothing,Name[])
     end
 end
 
-repair_roots(x::Node{I, T}) where {I, T} = begin
-    n = nv(x)
-    y = similar(x.children)
-    for k in eachindex(y)
-        y[k] = repair_roots(pop!(x), n += 1)
+"""
+    Genealogy{D,T}
+
+Implements a genealogy over a time interval `[t0,t]`.
+The `Enum`-type `D` enumerates the demes and `T` is the type of the time variable.
+Internally, this is represented as a time-ordered sequence of *genealogical nodes* (represented by [`GenealNode`](@ref) objects).
+"""
+mutable struct Genealogy{D <: Enum, T <: Time}
+    t0::T
+    time::T
+    safe::Bool
+    nodes::Vector{GenealNode{D,T}}
+    Genealogy{D}(t0::T) where {D <: Enum, T <: Time} = begin
+        new{D,T}(t0,t0,true,GenealNode{D,T}[])
     end
-    for k in eachindex(y)
-        push!(x, y[k])
-    end
-    x
 end
 
-parse_newick(
-    input::Vector{<:AbstractString},
-    time::Real;
-    t0::Real = 0.0,
-) = begin
-    x = "(" * join(map(n -> match(r"^(.+);\w*$", n).captures[1], input), ",") * ");" |> readnw |> repair_roots
-    ids = [n.id for n in prewalk(x)]
-    n = OrderedDict(zip(ids, eachindex(ids) .- 1))
-    sort!(n, byvalue = true)
-    h = getheights(x)
-    ids = sort(ids, lt = (i1, i2) -> ((h[i1] < h[i2]) || (h[i1] == h[i2] && n[i1] < n[i2])))
-    children = Dict([
-        n.id => if isdefined(n, :children)
-            map(n -> n.id, n.children)
-        else
-            UInt16[]
-        end
-        for n in prewalk(x)]
-                    )
-    parent = Dict([
-        n.id => if isdefined(n, :parent)
-            n.parent.id
-        else
-            missing
-        end
-        for n in prewalk(x)]
-                  )
-    labels = Dict(
-        [n.id => match(r"([bsgmo])_(\d+)_(\d+)", n.data.name)
-         for n in prewalk(x)]
+"""
+    weed!(G)
+
+Removes all dead roots.
+The genealogy becomes incorrect and needs to be repaired (see [`repair!`](@ref)).
+"""
+weed!(G::Genealogy) = begin
+    filter!(
+        n -> (!isnothing(n.parent) || !isempty(n.children)),
+        G.nodes
     )
-    typemap = Dict("b" => Sample, "s" => Sample, "g" => Branch, "m" => Root)
-    type = Dict([
-        if !isnothing(v)
-            k => typemap[v.captures[1]]
-        else
-            k => 0
-        end for (k, v) in labels
-            ]
-                )
-    deme = Dict([
-        if !isnothing(v)
-            k => parse(Int, v.captures[2])
-        else
-            k => missing
-        end for (k, v) in labels
-            ]
-                )
-    names = Dict([
-        if !isnothing(v)
-            k => parse(Int, v.captures[3])
-        else
-            k => missing
-        end for (k, v) in labels
-            ]
-                 )
-    lineages = Dict([
-        n.id => minimum(map(k -> names[k.id], getleaves(n)))
-        for n in prewalk(x)]
-                    )
-    dur = Dict(zip(ids, diff([getindex.(Ref(h), ids)..., time])))
-    seq = [
-        (
-            n = n[id],
-            id = id,
-            lineage = lineages[id],
-            parent = begin
-                p = getindex(n, parent[id])
-                p == 0 ? n[id] : p
-            end,
-            children = map(i -> n[i], children[id]),
-            time = t0 + h[id],
-            duration = dur[id],
-            type = type[id],
-            deme = deme[id],
-            saturation = length(children[id]),
-        ) for id in Base.rest(ids, 2)
-            ]
+    G.safe = false
+    nothing
+end
+
+"""
+   repair!(G)
+
+Re-sorts the genealogical nodes.
+Renames all nodes and corrects the parent/child relationships.
+"""
+repair!(G::Genealogy{D,T}) where {D,T} = begin
+    if !G.safe
+        compare(p,q) = p.slate < q.slate ||
+            (p.slate == q.slate &&
+            (p==q.parent || (q!=p.parent && p.name < q.name)))
+        sort!(G.nodes,lt=compare)
+        namemap = Dict((n.name,k) for (k,n) ∈ enumerate(G.nodes))
+        for n ∈ G.nodes
+            n.name = namemap[n.name]
+            n.parent = get(namemap,n.parent,nothing)
+            n.children = map(x->namemap[x],n.children)
+        end
+        G.safe = true
+    end
+    G
 end

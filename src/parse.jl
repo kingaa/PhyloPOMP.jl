@@ -1,12 +1,4 @@
-using AbstractTrees
-
-@enum NodeType begin
-    Sample
-    Node
-end
-
-const Name = Int64
-const Time = Union{Float64,Int64}
+export parse_newick
 
 enum_name(name::E) where {E <: Enum} = lowercase(String(Symbol(name)))
 
@@ -23,43 +15,6 @@ end
 const nodetypemap = name2enum(Val(NodeType))
 
 typemap(s::AbstractString) = get(nodetypemap,lowercase(s),Node)
-
-mutable struct GenealNode{D<:Enum,T<:Time}
-    type::NodeType
-    name::Name
-    slate::T
-    deme::Union{Missing,D}
-    parent::Union{Nothing,Name}
-    children::Vector{Name}
-    GenealNode{D}(
-        name::Name,
-        slate::T,
-        deme = missing,
-        type::NodeType = Node
-    ) where {D <: Enum, T <: Time} = begin
-        new{D,T}(type,name,slate,deme,nothing,Name[])
-    end
-end
-
-mutable struct Genealogy{D <: Enum, T <: Time}
-    t0::T
-    time::T
-    safe::Bool
-    nodes::Vector{GenealNode{D,T}}
-    Genealogy{D}(t0::T) where {D <: Enum, T <: Time} = begin
-        new{D,T}(t0,t0,true,GenealNode{D,T}[])
-    end
-end
-
-AbstractTrees.ParentLinks(::Type{<:GenealNode}) = AbstractTrees.StoredParents()
-AbstractTrees.SiblingLinks(::Type{<:GenealNode}) = AbstractTrees.ImplicitSiblings()
-AbstractTrees.ChildIndexing(::Type{<:GenealNode}) = AbstractTrees.IndexedChildren()
-AbstractTrees.NodeType(::Type{<:GenealNode}) = HasNodeType()
-AbstractTrees.childindices(tree, idx) = tree.nodes[idx].children
-AbstractTrees.parentindex(tree, idx) = tree.nodes[idx].parent
-AbstractTrees.nodevalue(tree, idx) = tree.nodes[idx]
-Base.IteratorEltype(::Type{<:TreeIterator{<:GenealNode}}) = Base.HasEltype()
-Base.eltype(::Type{<:TreeIterator{<:GenealNode{D,T}}}) where {D,T} = GenealNode{D,T}
 
 """
     cap_tips!(G)
@@ -78,8 +33,8 @@ end
 """
     drop_zlb!(G)
 
-Removes zero-length branches from Genealogy G as needed.
-The genealogy is now incorrect: and needs to be repaired (see repair!).
+Removes zero-length branches from Genealogy `G` as needed.
+The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
 """
 drop_zlb!(G::Genealogy) = begin
     for n ∈ G.nodes
@@ -100,54 +55,16 @@ drop_zlb!(G::Genealogy) = begin
 end
 
 """
-    weed!(G)
-
-Removes all dead roots.
-The genealogy becomes incorrect and needs to be repaired (see repair!).
-"""
-weed!(G::Genealogy) = begin
-    filter!(
-        n -> (!isnothing(n.parent) || !isempty(n.children)),
-        G.nodes
-    )
-    G.safe = false
-    nothing
-end
-
-"""
-   repair!(G)
-
-Re-sorts the genealogical nodes.
-Renames all nodes and corrects the parent/child relationships.
-"""
-repair!(G::Genealogy{D,T}) where {D,T} = begin
-    if !G.safe
-        compare(p,q) = p.slate < q.slate ||
-            (p.slate == q.slate &&
-            (p==q.parent || (q!=p.parent && p.name < q.name)))
-        sort!(G.nodes,lt=compare)
-        namemap = Dict((n.name,k) for (k,n) ∈ enumerate(G.nodes))
-        for n ∈ G.nodes
-            n.name = namemap[n.name]
-            n.parent = get(namemap,n.parent,nothing)
-            n.children = map(x->namemap[x],n.children)
-        end
-        G.safe = true
-    end
-    G
-end
-
-"""
     scan_branch!(input, G, p, mapper)
 
 Parse the branch-string in `input`, appending the corresponding
-node to Genealogy G.
+node to Genealogy `G`.
 
 Arguments:
-- `input`: the string containing the branch information
+- `input`: the string, or vector of strings, containing the branch information
 - `G`: the genealogy to be modified
 - `p`: the name of the parent node
-- `mapper`: a Dict mapping the deme-specification string to the correct deme.
+- `mapper`: a `Dict` mapping the deme-specification string to the correct deme.
 """
 scan_branch!(
     s::String,
@@ -186,14 +103,14 @@ scan_branch!(
 end
 
 """
-    parse_newick(input, Val(DemeType), t0, time)
+    parse_newick(input, Val(Demes), t0, time)
 
-Parse the Newick-format string `input`.
+Parse the Newick-format string (or vector of strings) `input`.
 
 Arguments:
 - `t0` is the assumed root-time.
 - `time` is the (optional) final-time.
-- `DemeType` (of type Enum) enumerates the demes.
+- `Demes` (of type `Enum`) enumerates the demes.
 """
 parse_newick(
     input::AbstractString,
@@ -296,39 +213,3 @@ end
 
 parse_newick(input::AbstractVector{V},args...) where {V<:AbstractString} =
     parse_newick(join(input),args...)
-
-@enum MERSDemes begin
-    Camel
-    Human
-end
-
-x1 = readlines("data/MERS_274_sCoal_phylopomp.nwk")
-
-g1 = parse_newick(x1,Val(MERSDemes),0.0)
-
-@enum Strains begin
-    Strain1
-    Strain2
-    Strain3
-end
-
-x2 = readlines("data/B.1.617.all.nwk")
-g2 = parse_newick(x2,Val(Strains),0.0)
-
-parse_newick("():0.1;",Val(Strains),0.0)
-
-try
-    parse_newick("(:0.1;",Val(Strains),0.0)
-catch e
-    if hasproperty(e,:msg)
-        @info "error: $(e.msg)"
-    end
-end
-
-try
-    parse_newick("[bob=3 tom=[]:0.1;",Val(Strains),0.0)
-catch e
-    if hasproperty(e,:msg)
-        @info "error: $(e.msg)"
-    end
-end
