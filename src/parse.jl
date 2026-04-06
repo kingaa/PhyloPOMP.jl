@@ -12,9 +12,12 @@ enum2name(::Val{E}) where {E <: Enum} = begin
     Dict(i,zip(enum_name.(i)))
 end
 
-const nodetypemap = name2enum(Val(NodeType))
+const nodetypemap = Dict(
+    "node"=>Node,"branch"=>Node,"migration"=>Node,"root"=>Node,
+    "sample"=>Sample,
+)
 
-typemap(s::AbstractString) = get(nodetypemap,lowercase(s),Node)
+typemap(s::AbstractString) = get(nodetypemap,lowercase(s),missing)
 
 """
     cap_tips!(G)
@@ -45,7 +48,9 @@ drop_zlb!(G::Genealogy) = begin
                 append!(p.children,n.children)
                 empty!(n.children)
                 n.parent = nothing
-                @assert p.type==Node
+                if (p.type != Node)
+                    @warn "dropping zero-length branch yields multiple samples at one node"
+                end
                 p.type = n.type
             end
         end
@@ -72,7 +77,7 @@ scan_branch!(
     p::Name,
     mapper::Dict{String,D}
 ) where {D <: Enum, T <: Time} = begin
-    m = match(r":(.+)$",s)
+    m = match(r"^.*:([^:]+)$",s)
     if isnothing(m)
         bl = zero(T)
     else
@@ -83,12 +88,18 @@ scan_branch!(
         deme = missing
     else
         deme = get(mapper,lowercase(m.captures[1]),missing)
+        if ismissing(deme)
+            error("unrecognized deme=$(m.captures[1]).")
+        end
     end
     m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i,s)
     if isnothing(m)
         type = Node
     else
         type = typemap(m.captures[1])
+        if ismissing(type)
+            error("unrecognized type=$(m.captures[1]).")
+        end
     end
     q = length(G.nodes)+1
     slate = G.nodes[p].slate + bl
@@ -172,7 +183,7 @@ parse_newick(
             open = true
         elseif input[b] == ']'
             sqstack += 1
-            while b >= f && sqstack > 0
+            while b > f && sqstack > 0
                 b = b-1
                 if input[b] == ']'
                     sqstack += 1
