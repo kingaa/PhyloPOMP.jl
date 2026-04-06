@@ -24,6 +24,9 @@ update:
 docs: build
 	make -C docs
 
+serve: build
+	julia --project -e 'import LiveServer; LiveServer.servedocs()'
+
 session: build
 	julia --project
 

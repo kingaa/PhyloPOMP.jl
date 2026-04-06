@@ -3,6 +3,6 @@ using Test
 
 @testset verbose=true "PhyloPOMP.jl" begin
 
-	include("newick.jl")
+    include("parse.jl")
 
 end

@@ -1,5 +1,7 @@
 export parse_newick
 
+@enum Unstructured default
+
 enum_name(name::E) where {E <: Enum} = lowercase(String(Symbol(name)))
 
 name2enum(::Val{E}) where {E <: Enum} = begin
@@ -124,8 +126,8 @@ Arguments:
 - `Demes` (of type `Enum`) enumerates the demes.
 """
 parse_newick(
-    input::AbstractString,
-    ::Val{D},
+    input::AbstractString;
+    demes::Type{D} = Unstructured,
     t0::T = zero(T),
     time::Union{Missing,Time} = missing,
 ) where {D <: Enum, T <: Time} = begin
@@ -222,5 +224,5 @@ parse_newick(
     G
 end
 
-parse_newick(input::AbstractVector{V},args...) where {V<:AbstractString} =
-    parse_newick(join(input),args...)
+parse_newick(input::AbstractVector{V};args...) where {V<:AbstractString} =
+    parse_newick(join(input);args...)
