@@ -116,14 +116,14 @@ scan_branch!(
 end
 
 """
-    parse_newick(input, Val(Demes), t0, time)
+    parse_newick(input; demes, t0, time)
 
 Parse the Newick-format string (or vector of strings) `input`.
 
 Arguments:
+- `demes` is the enumeration of the demes.
 - `t0` is the assumed root-time.
 - `time` is the (optional) final-time.
-- `Demes` (of type `Enum`) enumerates the demes.
 """
 parse_newick(
     input::AbstractString;
