@@ -1,119 +1,11 @@
 export parse_newick
 
-@enum Unstructured default
-
-enum_name(name::E) where {E <: Enum} = lowercase(String(Symbol(name)))
-
-name2enum(::Val{E}) where {E <: Enum} = begin
-    i = instances(E)
-    Dict(zip(enum_name.(i),i))
-end
-
-enum2name(::Val{E}) where {E <: Enum} = begin
-    i = instances(E)
-    Dict(i,zip(enum_name.(i)))
-end
-
 const nodetypemap = Dict(
     "node"=>Node,"branch"=>Node,"migration"=>Node,"root"=>Node,
     "sample"=>Sample,
 )
 
 typemap(s::AbstractString) = get(nodetypemap,lowercase(s),missing)
-
-"""
-    cap_tips!(G)
-
-Converts tip-nodes to sample-nodes.  The genealogy remains correct.
-"""
-cap_tips!(G::Genealogy) = begin
-    for n ∈ G.nodes
-        if isempty(n.children)
-            n.type = Sample
-        end
-    end
-    nothing
-end
-
-"""
-    drop_zlb!(G)
-
-Removes zero-length branches from Genealogy `G` as needed.
-The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
-"""
-drop_zlb!(G::Genealogy) = begin
-    for n ∈ G.nodes
-        if !isnothing(n.parent)
-            p = G.nodes[n.parent]
-            if n.slate == p.slate && n.deme === p.deme
-                setdiff!(p.children,n.name)
-                append!(p.children,n.children)
-                empty!(n.children)
-                n.parent = nothing
-                if (p.type != Node)
-                    @warn "dropping zero-length branch yields multiple samples at one node"
-                end
-                p.type = n.type
-            end
-        end
-    end
-    G.safe = false
-    nothing
-end
-
-"""
-    scan_branch!(input, G, p, mapper)
-
-Parse the branch-string in `input`, appending the corresponding
-node to Genealogy `G`.
-
-Arguments:
-- `input`: the string, or vector of strings, containing the branch information
-- `G`: the genealogy to be modified
-- `p`: the name of the parent node
-- `mapper`: a `Dict` mapping the deme-specification string to the correct deme.
-"""
-scan_branch!(
-    s::String,
-    G::Genealogy{D,T},
-    p::Name,
-    mapper::Dict{String,D}
-) where {D <: Enum, T <: Time} = begin
-    m = match(r"^.*:([^:]+)$",s)
-    if isnothing(m)
-        bl = zero(T)
-    else
-        bl = parse(T,m.captures[1])
-    end
-    m = match(r"^.*\[&&PhyloPOMP.*deme=(\w+).*\].*$"i,s)
-    if isnothing(m)
-        deme = missing
-    else
-        deme = get(mapper,lowercase(m.captures[1]),missing)
-        if ismissing(deme)
-            error("unrecognized deme=$(m.captures[1]).")
-        end
-    end
-    m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i,s)
-    if isnothing(m)
-        type = Node
-    else
-        type = typemap(m.captures[1])
-        if ismissing(type)
-            error("unrecognized type=$(m.captures[1]).")
-        end
-    end
-    q = length(G.nodes)+1
-    slate = G.nodes[p].slate + bl
-    n = GenealNode{D}(q,slate,deme,type)
-    n.parent = p
-    push!(G.nodes[p].children,q)
-    push!(G.nodes,n)
-    if (n.slate > G.time)
-        G.time = n.slate
-    end
-    q
-end
 
 """
     parse_newick(input; demes, t0, time)
@@ -125,16 +17,20 @@ Arguments:
 - `t0` is the assumed root-time.
 - `time` is the (optional) final-time.
 """
+parse_newick(input::AbstractVector{V};args...) where {V<:AbstractString} =
+    parse_newick(join(input);args...)
+
 parse_newick(
     input::AbstractString;
     demes::Type{D} = Unstructured,
-    t0::T = zero(T),
-    time::Union{Missing,Time} = missing,
-) where {D <: Enum, T <: Time} = begin
-    nsample = count(')',input)    # number of tips
-    dememapper = name2enum(Val(D))
+    t0::Real = zero(Time),
+    time::Union{Missing,Real} = missing,
+) where {D <: Enum} = begin
+    ntip = count(')',input)     # number of tips
+    dememapper = name2enum(demes)
+    t0 = Time(t0)
     G = Genealogy{D}(t0)
-    sizehint!(G.nodes,2*nsample)
+    sizehint!(G.nodes,2*ntip)
     p = 0
     tf = t0
     open = false
@@ -170,7 +66,7 @@ parse_newick(
             if open
                 scan_branch!(input[b+1:e],G,p,dememapper)
             end
-            p = G.nodes[p].parent
+            p = G[p].parent
             e = b = b-1
             stack -= 1
             open = false
@@ -211,18 +107,110 @@ parse_newick(
         scan_branch!(input[b+1:e],G,p,dememapper)
     end
     if !ismissing(time)
-        if G.time > T(time)
+        if G.time > Time(time)
             error("final time from data ($tf) exceeds specified final time ($time)")
         else
-            G.time = T(time)
+            G.time = Time(time)
         end
     end
     cap_tips!(G)
-    drop_zlb!(G)
-    weed!(G)
+    clip_zlb!(G)
     repair!(G)
     G
 end
 
-parse_newick(input::AbstractVector{V};args...) where {V<:AbstractString} =
-    parse_newick(join(input);args...)
+"""
+    cap_tips!(G)
+
+Converts tip-nodes to sample-nodes.  The genealogy remains correct.
+"""
+cap_tips!(G::Genealogy) = begin
+    for n ∈ G.nodes
+        if isempty(n.children)
+            n.type = Sample
+        end
+    end
+    nothing
+end
+
+"""
+    clip_zlb!(G)
+
+Isolates zero-length branches from Genealogy `G` as needed.
+The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
+"""
+clip_zlb!(G::Genealogy) = begin
+    for n ∈ G.nodes
+        if !isnothing(n.parent)
+            p = G[n.parent]
+            if n.slate == p.slate && n.deme === p.deme
+                for c ∈ n.children
+                    G[c].parent = p.name
+                end
+                setdiff!(p.children,n.name)
+                append!(p.children,n.children)
+                empty!(n.children)
+                n.parent = nothing
+                if (p.type != Node)
+                    @warn "dropping zero-length branch yields multiple samples at one node."
+                end
+                p.type = n.type
+            end
+        end
+    end
+    nothing
+end
+
+"""
+    scan_branch!(input, G, p, mapper)
+
+Parse the branch-string in `input`, appending the corresponding
+node to Genealogy `G`.
+
+Arguments:
+- `input`: the string, or vector of strings, containing the branch information
+- `G`: the genealogy to be modified
+- `p`: the name of the parent node
+- `mapper`: a `Dict` mapping the deme-specification string to the correct deme.
+"""
+scan_branch!(
+    s::String,
+    G::Genealogy{D},
+    p::Name,
+    mapper::Dict{String,D}
+) where {D <: Enum} = begin
+    m = match(r"^.*:([^:]+)$",s)
+    if isnothing(m)
+        bl = zero(Time)
+    else
+        bl = parse(Time,m.captures[1])
+    end
+    m = match(r"^.*\[&&PhyloPOMP.*deme=(\w+).*\].*$"i,s)
+    if isnothing(m)
+        deme = missing
+    else
+        deme = get(mapper,lowercase(m.captures[1]),missing)
+        if ismissing(deme)
+            error("unrecognized deme=$(m.captures[1]).")
+        end
+    end
+    m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i,s)
+    if isnothing(m)
+        type = Node
+    else
+        type = typemap(m.captures[1])
+        if ismissing(type)
+            error("unrecognized type=$(m.captures[1]).")
+        end
+    end
+    q = length(G.nodes)+1
+    slate = G[p].slate + bl
+    n = GenealNode{D}(q,slate,deme,type)
+    n.parent = p
+    push!(G[p].children,q)
+    push!(G.nodes,n)
+    if (n.slate > G.time)
+        G.time = n.slate
+    end
+    q
+end
