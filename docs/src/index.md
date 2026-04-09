@@ -7,6 +7,7 @@ It enables computation of the phylodynamic likelihood using tools from [POMP.jl]
 
 ```@docs
 parse_newick
+newick
 ```
 
 ## Reference

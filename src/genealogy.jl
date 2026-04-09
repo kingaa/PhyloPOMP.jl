@@ -21,9 +21,10 @@ mutable struct GenealNode{D<:Enum}
         name::Name,
         slate::Time,
         deme = missing,
-        type::NodeType = Node
+        type::NodeType = Node,
+        parent::Union{Nothing,Name} = nothing,
     ) where {D <: Enum} = begin
-        new{D}(type,name,slate,deme,nothing,Name[])
+        new{D}(type,name,slate,deme,parent,Name[])
     end
 end
 

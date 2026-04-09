@@ -71,9 +71,11 @@ end
     @time g = parse_newick(x,demes=SEIR,t0=5.0);
     @time n = newick(g);
     @test length(n)==length(x)
-    @test isa(n[1],String)
+    @test all(isa.(n,Ref(String)))
     nn = (x->count(")",x)).(n);
     nx = (x->count(")",x)).(x);
     @test nn==reverse(nx)
+    @time n = newick(g,extended=false,sigdigits=4);
+    @test all(isa.(n,Ref(String)))
     
 end

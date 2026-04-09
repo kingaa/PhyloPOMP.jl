@@ -26,11 +26,11 @@ parse_newick(
     t0::Real = zero(Time),
     time::Union{Missing,Real} = missing,
 ) where {D <: Enum} = begin
-    ntip = count(')',input)     # number of tips
+    nnodes = count(')',input)+count(',',input)+2*count(';',input)
     dememapper = name2enum(demes)
     t0 = Time(t0)
     G = Genealogy{D}(t0)
-    sizehint!(G.nodes,2*ntip)
+    sizehint!(G.nodes,nnodes)
     p = 0
     tf = t0
     open = false
@@ -133,12 +133,10 @@ cap_tips!(G::Genealogy) = begin
     nothing
 end
 
-"""
-    clip_zlb!(G)
-
-Isolates zero-length branches from Genealogy `G` as needed.
-The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
-"""
+##     clip_zlb!(G)
+##
+## Isolates zero-length branches from Genealogy `G` as needed.
+## The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
 clip_zlb!(G::Genealogy) = begin
     for n ∈ G.nodes
         if !isnothing(n.parent)
@@ -156,6 +154,23 @@ clip_zlb!(G::Genealogy) = begin
                 end
                 p.type = n.type
             end
+        end
+    end
+    nothing
+end
+
+##     insert_zlb!(G)
+##
+## Adds zero-length branches where needed.
+## The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
+insert_zlb!(G::Genealogy{D}) where D = begin
+    for n ∈ G.nodes
+        if n.type==Sample && !isempty(n.children)
+            q = length(G)+1
+            node = GenealNode{D}(q,n.slate,n.deme,Sample,n.name)
+            push!(G.nodes,node)
+            push!(n.children,q)
+            n.type = Node
         end
     end
     nothing
