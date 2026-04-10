@@ -21,6 +21,10 @@ using Test
     @test length(g.nodes)==40
     @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Sample)==19
     @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Node)==21
+    @test all((x->x.type).(g[PhyloPOMP.tips(g)]).==PhyloPOMP.Sample)
+    @test all(PhyloPOMP.tips(g) .∈ Ref(PhyloPOMP.samples(g)))
+    @test all(PhyloPOMP.roots(g) .∈ Ref(PhyloPOMP.nodes(g)))
+    @test isempty(intersect(PhyloPOMP.tips(g),PhyloPOMP.nodes(g)))
 
     g=parse_newick("():0.1;",t0=0.0);
     @test length(g.nodes)==2
@@ -33,6 +37,10 @@ using Test
     @test g.nodes[2].type==PhyloPOMP.Sample
     g = parse_newick("A:4;()B:3;",t0=0.0,time=5.0);
     @test length(g.nodes)==4
+    g = parse_newick("(:[Bob:yes]2.5)A:3.2[&&NHX:type=node];",t0=0.0);
+    @test length(g)==3
+    @test g.time==5.7
+    @test g.nodes[3].type==PhyloPOMP.Sample
 
     @test_throws "unbalanced parentheses" parse_newick("(:0.1;",demes=SEIR,t0=0.0)
     @test_throws "unbalanced square brackets" parse_newick(")3:1;(((:0.1)),[&&PhyloPOMP:deme=E]type=sample]:1.00,(((:0.3,:0.1),),):0.3)a:0.5;",demes=SEIR,t0=0.0)
@@ -49,8 +57,12 @@ using Test
     @test_throws "missing comma or semicolon" parse_newick("()();",demes=SEIR,t0=0.0)
     @test_throws "unbalanced parentheses" parse_newick("(A();",demes=SEIR,t0=0.0)
     @test_throws "misplaced comma or unbalanced parentheses" parse_newick(",();",demes=SEIR,t0=0.0)
-    @test_throws "misplaced comma or unbalanced parentheses" parse_newick(":2 ,:3 ();",demes=SEIR,t0=0.0)
+    @test_throws "misplaced comma or unbalanced parentheses" parse_newick(":2 , 3 ();",demes=SEIR,t0=0.0)
+    @test_throws "misplaced colon" parse_newick(":2 ,:3 ();",demes=SEIR,t0=0.0)
     @test_throws "unbalanced square brackets" parse_newick("()[bob =3 jack=[4]:0.3;",demes=SEIR,t0=0.0)
+    @test_throws "negative branch length" parse_newick("():-32.5;")
+    @test_warn "zero branch-length" parse_newick("():;")
+    @test_throws r"cannot parse .* as Float64" parse_newick("():A;")
 
 end
 

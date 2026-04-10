@@ -34,6 +34,7 @@ parse_newick(
     p = 0
     tf = t0
     open = false
+    bl = zero(Time)
     stack = 0
     sqstack = 0
     f = firstindex(input)
@@ -52,9 +53,10 @@ parse_newick(
             push!(G.nodes,n)
             e = b = b-1
             open = true
+            bl = zero(Time)
         elseif input[b] == ')'
             if (open)
-                q = scan_branch!(input[(b+1):e],G,p,dememapper)
+                q = scan_branch!(input[(b+1):e], G, p, dememapper, bl)
                 p = q
             else
                 error("invalid Newick: missing comma or semicolon.")
@@ -62,9 +64,10 @@ parse_newick(
             stack += 1
             e = b = b-1
             open = true
+            bl = zero(Time)
         elseif input[b] == '('
             if open
-                scan_branch!(input[b+1:e],G,p,dememapper)
+                scan_branch!(input[(b+1):e], G, p, dememapper, bl)
             end
             p = G[p].parent
             e = b = b-1
@@ -75,10 +78,11 @@ parse_newick(
                 error("invalid Newick string: misplaced comma or unbalanced parentheses.")
             end
             if open
-                scan_branch!(input[b+1:e],G,p,dememapper)
+                scan_branch!(input[(b+1):e], G, p, dememapper, bl)
             end
             e = b = b-1
             open = true
+            bl = zero(Time)
         elseif input[b] == ']'
             sqstack += 1
             while b > f && sqstack > 0
@@ -96,6 +100,13 @@ parse_newick(
             end
         elseif input[b] == '['
             error("invalid Newick: unbalanced square brackets.")
+        elseif input[b] == ':'
+            if open
+                bl = scan_length(input[(b+1):e])
+                e = b = b-1
+            else
+                error("invalid Newick format: misplaced colon.")
+            end
         else
             b = b-1
         end
@@ -104,7 +115,7 @@ parse_newick(
         error("invalid Newick format: unbalanced parentheses.")
     end
     if open
-        scan_branch!(input[b+1:e],G,p,dememapper)
+        scan_branch!(input[(b+1):e], G, p, dememapper, bl)
     end
     if !ismissing(time)
         if G.time > Time(time)
@@ -192,24 +203,19 @@ scan_branch!(
     s::String,
     G::Genealogy{D},
     p::Name,
-    mapper::Dict{String,D}
+    mapper::Dict{String, D},
+    bl::Time,
 ) where {D <: Enum} = begin
-    m = match(r"^.*:([^:]+)$",s)
-    if isnothing(m)
-        bl = zero(Time)
-    else
-        bl = parse(Time,m.captures[1])
-    end
-    m = match(r"^.*\[&&PhyloPOMP.*deme=(\w+).*\].*$"i,s)
+    m = match(r"^.*\[&&PhyloPOMP.*deme=(\w+).*\].*$"i, s)
     if isnothing(m)
         deme = missing
     else
-        deme = get(mapper,lowercase(m.captures[1]),missing)
+        deme = get(mapper, lowercase(m.captures[1]), missing)
         if ismissing(deme)
             error("unrecognized deme=$(m.captures[1]).")
         end
     end
-    m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i,s)
+    m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i, s)
     if isnothing(m)
         type = Node
     else
@@ -228,4 +234,21 @@ scan_branch!(
         G.time = n.slate
     end
     q
+end
+
+scan_length(s::String) = begin
+    m = match(
+        r"^(?:\[.*?\])?([^\[\]]+?)(?:\[.*?\])?$",
+        s,
+    )
+    if isnothing(m)
+        @warn "no valid branch-length spec found in '$s', assuming zero branch-length."
+        bl = zero(Time)
+    else
+        bl = parse(Time,m.captures[1])
+    end
+    if (bl < zero(Time))
+        error("negative branch length detected.")
+    end
+    bl
 end

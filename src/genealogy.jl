@@ -45,6 +45,7 @@ mutable struct Genealogy{D <: Enum}
 end
 
 Base.getindex(g::Genealogy, i::Integer) = g.nodes[i]
+Base.getindex(g::Genealogy, i::Vector{<:Integer}) = g.nodes[i]
 Base.length(g::Genealogy) = length(g.nodes)
 Base.eachindex(g::Genealogy) = eachindex(g.nodes)
 
