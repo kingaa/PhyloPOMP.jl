@@ -1,5 +1,3 @@
-export newick
-
 """
     newick(g; extended = true, sigdigits = 6)
 
@@ -40,7 +38,7 @@ plainnewick(g::Genealogy{D}, sigdigits::Integer = 6) where D = begin
 end
 
 extnewick(g::Genealogy{D}, sigdigits::Integer = 6) where D = begin
-    typenodemap = Dict(Node=>"node",Sample=>"sample")
+    typenodemap = Dict(Node=>"node",Sample=>"sample",Root=>"root")
     nstr = similar(Array{String},length(g))
     dememap = enum2name(Val(D))
     for i ∈ reverse(eachindex(g))

@@ -1,8 +1,9 @@
-export Genealogy, GenealNode
+import Base: eachindex, length, getindex, eachindex
 
 const Name = Int64
 const Time = Float64
-@enum NodeType Sample Node
+## FIXME: inclusion of Root in NodeType introduces some inelegant redundancy
+@enum NodeType Root Sample Node
 
 """
     GenealNode{D}
@@ -15,6 +16,7 @@ mutable struct GenealNode{D<:Enum}
     name::Name
     slate::Time
     deme::Union{Missing,D}
+    lineage::Union{Missing,Name}
     parent::Union{Nothing,Name}
     children::Vector{Name}
     GenealNode{D}(
@@ -24,7 +26,7 @@ mutable struct GenealNode{D<:Enum}
         type::NodeType = Node,
         parent::Union{Nothing,Name} = nothing,
     ) where {D <: Enum} = begin
-        new{D}(type,name,slate,deme,parent,Name[])
+        new{D}(type,name,slate,deme,missing,parent,Name[])
     end
 end
 
@@ -49,7 +51,7 @@ Base.getindex(g::Genealogy, i::Vector{<:Integer}) = g.nodes[i]
 Base.length(g::Genealogy) = length(g.nodes)
 Base.eachindex(g::Genealogy) = eachindex(g.nodes)
 
-roots(g::Genealogy) = findall(i->isnothing(g[i].parent),eachindex(g))
+roots(g::Genealogy) = findall(i->(g[i].type==Root),eachindex(g))
 tips(g::Genealogy) = findall(i->isempty(g[i].children),eachindex(g))
 samples(g::Genealogy) = findall(i->(g[i].type==Sample),eachindex(g))
 nodes(g::Genealogy) = findall(i->(g[i].type==Node),eachindex(g))
@@ -71,14 +73,37 @@ repair!(G::Genealogy{D}) where {D} = begin
         (p.slate == q.slate &&
         (p==q.parent || (q!=p.parent && p.name < q.name)))
     sort!(G.nodes,lt=compare)
-    ## repair names:
+    ## repair names and types:
     namemap = Dict(n.name=>k for (k,n) ∈ enumerate(G.nodes))
     for n ∈ G.nodes
         n.name = namemap[n.name]
-        if !isnothing(n.parent)
+        if isnothing(n.parent)
+            n.type = Root
+        else
             n.parent = namemap[n.parent]
         end
         n.children = map(i->namemap[i],n.children)
     end
+    trace_lineages!(G)
     G
+end
+
+trace_lineages!(G::Genealogy, p::Integer, i::Integer) = begin
+    G[p].lineage = i
+    q = G[p].parent
+    if !isnothing(q) && ismissing(G[q].lineage)
+        trace_lineages!(G,q,i)
+    end
+    nothing
+end
+
+trace_lineages!(G::Genealogy) = begin
+    i::Int64 = 1
+    for p ∈ eachindex(G)
+        if G[p].type==Sample
+            trace_lineages!(G,p,i)
+            i = i+1
+        end
+    end
+    nothing
 end

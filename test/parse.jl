@@ -13,6 +13,7 @@ using Test
     @test_throws r"final time from data \(.+\) exceeds" parse_newick(x,demes=SEIR,t0=5.0,time=6);
     @time g = parse_newick(x,demes=SEIR,t0=5.0,time=7.0);
     @test isa(g,Genealogy)
+    @test isa(g,Genealogy{SEIR})
     @test ismissing(g.nodes[3].deme)
     @test sum(map(x->ismissing(x.deme),g.nodes))==23
     @test sum(map(x->!ismissing(x.deme),g.nodes))==17
@@ -20,11 +21,15 @@ using Test
     @test sum(map(x->x.deme===E,g.nodes))==1
     @test length(g.nodes)==40
     @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Sample)==19
-    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Node)==21
+    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Node)==13
+    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Root)==8
     @test all((x->x.type).(g[PhyloPOMP.tips(g)]).==PhyloPOMP.Sample)
     @test all(PhyloPOMP.tips(g) .∈ Ref(PhyloPOMP.samples(g)))
-    @test all(PhyloPOMP.roots(g) .∈ Ref(PhyloPOMP.nodes(g)))
     @test isempty(intersect(PhyloPOMP.tips(g),PhyloPOMP.nodes(g)))
+    @test isempty(intersect(PhyloPOMP.roots(g),PhyloPOMP.nodes(g)))
+    @test occursin(r"^<genealogy on .*>>"s,sprint(show,g))
+    @test length(collect(eachmatch(r"time",sprint(show,g))))==length(g)
+    @test occursin(r"lineage=4 .* parent=10",sprint(show,g[11]))
 
     g=parse_newick("():0.1;",t0=0.0);
     @test length(g.nodes)==2
@@ -41,6 +46,7 @@ using Test
     @test length(g)==3
     @test g.time==5.7
     @test g.nodes[3].type==PhyloPOMP.Sample
+    @test occursin(r"^<genealogy on .*>>"s,sprint(show,g))
 
     @test_throws "unbalanced parentheses" parse_newick("(:0.1;",demes=SEIR,t0=0.0)
     @test_throws "unbalanced square brackets" parse_newick(")3:1;(((:0.1)),[&&PhyloPOMP:deme=E]type=sample]:1.00,(((:0.3,:0.1),),):0.3)a:0.5;",demes=SEIR,t0=0.0)

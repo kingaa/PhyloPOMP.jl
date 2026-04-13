@@ -1,5 +1,3 @@
-export parse_newick
-
 const nodetypemap = Dict(
     "node"=>Node,"branch"=>Node,"migration"=>Node,"root"=>Node,
     "sample"=>Sample,
