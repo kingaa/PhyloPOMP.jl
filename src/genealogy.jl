@@ -61,6 +61,7 @@ nodes(g::Genealogy) = findall(i->(g[i].type==Node),eachindex(g))
 
 Re-sorts the genealogical nodes.
 Renames all nodes and corrects the parent/child relationships.
+Traces sample-lineages.
 """
 repair!(G::Genealogy{D}) where {D} = begin
     ## weed out dead roots:
@@ -85,7 +86,7 @@ repair!(G::Genealogy{D}) where {D} = begin
         n.children = map(i->namemap[i],n.children)
     end
     trace_lineages!(G)
-    G
+    nothing
 end
 
 trace_lineages!(G::Genealogy, p::Integer, i::Integer) = begin

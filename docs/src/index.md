@@ -6,6 +6,7 @@ It enables computation of the phylodynamic likelihood using tools from [POMP.jl]
 ## Function Documentation
 
 ```@docs
+@demes
 parse_newick
 newick
 ```
@@ -14,5 +15,5 @@ newick
 
 ```@autodocs
 Modules = [PhyloPOMP]
-Order   = [:function, :type]
+Order   = [:function, :macro, :type]
 ```

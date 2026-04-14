@@ -9,7 +9,7 @@ using Test
         "((((((((([&&PhyloPOMP type=sample deme=I]33:0.121768)[&&PhyloPOMP type=node deme=I]30:0.256093)[&&PhyloPOMP type=sample deme=I]23:0.048347)[&&PhyloPOMP type=node deme=I]21:0.000896)[&&PhyloPOMP type=node deme=I]20:0.272773)[&&PhyloPOMP type=node deme=I]14:0.039280)[&&PhyloPOMP type=node deme=I]13:0.100483)[&&PhyloPOMP type=node deme=I]12:0.001259)[&&PhyloPOMP type=node deme=I]11:0.058041)[&&PhyloPOMP type=root]9:0.000000;(([&&PhyloPOMP type=sample deme=I]22:0.218679)[&&PhyloPOMP type=node deme=I]16:0.269299)[&&PhyloPOMP type=root]8:0.000000;(([&&PhyloPOMP type=sample deme=I]18:0.291933)[&&PhyloPOMP type=sample deme=I]10:0.039330)[&&PhyloPOMP type=root]5:0.000000;(((([&&PhyloPOMP type=sample deme=I]39:0.011566)[&&PhyloPOMP type=sample deme=I]38:0.111957)[&&PhyloPOMP type=sample deme=I]32:0.089940)[&&PhyloPOMP type=node deme=E]28:0.759231)[&&PhyloPOMP type=root]4:0.000000;",
     ];
 
-    @enum SEIR E I
+    @demes SEIR E I
     @test_throws r"final time from data \(.+\) exceeds" parse_newick(x,demes=SEIR,t0=5.0,time=6);
     @time g = parse_newick(x,demes=SEIR,t0=5.0,time=7.0);
     @test isa(g,Genealogy)

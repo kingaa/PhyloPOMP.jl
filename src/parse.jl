@@ -1,10 +1,3 @@
-const nodetypemap = Dict(
-    "node"=>Node,"branch"=>Node,"migration"=>Node,"root"=>Node,
-    "sample"=>Sample,
-)
-
-typemap(s::AbstractString) = get(nodetypemap,lowercase(s),missing)
-
 """
     parse_newick(input; demes, t0, time)
 
@@ -15,7 +8,10 @@ Arguments:
 - `t0` is the assumed root-time.
 - `time` is the (optional) final-time.
 """
-parse_newick(input::AbstractVector{V};args...) where {V<:AbstractString} =
+parse_newick(
+    input::AbstractVector{V};
+    args...,
+) where {V<:AbstractString} =
     parse_newick(join(input);args...)
 
 parse_newick(
@@ -128,6 +124,11 @@ parse_newick(
     G
 end
 
+const nodetypemap = Dict(
+    "node"=>Node,"branch"=>Node,"migration"=>Node,"root"=>Node,
+    "sample"=>Sample,
+)
+
 """
     cap_tips!(G)
 
@@ -195,31 +196,31 @@ Arguments:
 - `input`: the string, or vector of strings, containing the branch information
 - `G`: the genealogy to be modified
 - `p`: the name of the parent node
-- `mapper`: a `Dict` mapping the deme-specification string to the correct deme.
+- `mapper`: a function that maps strings to demes.
 """
 scan_branch!(
-    s::String,
+    input::String,
     G::Genealogy{D},
     p::Name,
-    mapper::Dict{String, D},
+    dememapper::Function,
     bl::Time,
 ) where {D <: Enum} = begin
-    m = match(r"^.*\[&&PhyloPOMP.*deme=(\w+).*\].*$"i, s)
+    m = match(r"^.*\[&&PhyloPOMP.*deme=(\w+).*\].*$"i, input)
     if isnothing(m)
         deme = missing
     else
-        deme = get(mapper, lowercase(m.captures[1]), missing)
+        deme = dememapper(m.captures[1])
         if ismissing(deme)
-            error("unrecognized deme=$(m.captures[1]).")
+            error("unrecognized deme '$(m.captures[1])'.")
         end
     end
-    m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i, s)
+    m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i, input)
     if isnothing(m)
         type = Node
     else
-        type = typemap(m.captures[1])
+        type = get(nodetypemap,lowercase(m.captures[1]),missing)
         if ismissing(type)
-            error("unrecognized type=$(m.captures[1]).")
+            error("unrecognized type '$(m.captures[1])'.")
         end
     end
     q = length(G.nodes)+1
@@ -234,13 +235,13 @@ scan_branch!(
     q
 end
 
-scan_length(s::String) = begin
+scan_length(input::String) = begin
     m = match(
         r"^(?:\[.*?\])?([^\[\]]+?)(?:\[.*?\])?$",
-        s,
+        input
     )
     if isnothing(m)
-        @warn "no valid branch-length spec found in '$s', assuming zero branch-length."
+        @warn "no valid branch-length spec found in '$input', assuming zero branch-length."
         bl = zero(Time)
     else
         bl = parse(Time,m.captures[1])

@@ -2,6 +2,7 @@ module PhyloPOMP
 
 import PartiallyObservedMarkovProcesses as POMP
 
+export @demes
 include("demes.jl")
 
 export GenealNode, Genealogy
