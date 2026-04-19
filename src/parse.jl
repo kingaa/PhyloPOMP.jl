@@ -238,7 +238,7 @@ end
 scan_length(input::String) = begin
     m = match(
         r"^(?:\[.*?\])?([^\[\]]+?)(?:\[.*?\])?$",
-        input
+        input,
     )
     if isnothing(m)
         @warn "no valid branch-length spec found in '$input', assuming zero branch-length."

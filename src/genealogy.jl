@@ -67,7 +67,7 @@ repair!(G::Genealogy{D}) where {D} = begin
     ## weed out dead roots:
     filter!(
         n -> !(isnothing(n.parent) && isempty(n.children)),
-        G.nodes
+        G.nodes,
     )
     ## sort nodes:
     compare(p,q) = p.slate < q.slate ||
