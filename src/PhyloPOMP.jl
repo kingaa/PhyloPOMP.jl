@@ -17,7 +17,7 @@ export newick
 include("newick.jl")
 
 include("fsmarkov.jl")
-using .FSMarkov: fsmarkov
-export fsmarkov
+using .FSMarkov: fsmarkov, transition, generator, statdist
+export fsmarkov, transition, generator, statdist
 
 end # module PhyloPOMP

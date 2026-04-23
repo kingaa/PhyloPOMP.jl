@@ -4,6 +4,6 @@ using Test
 @testset verbose=true "PhyloPOMP.jl" begin
 
     include("parse.jl")
-    include("guide.jl")
+    include("fsmarkov.jl")
 
 end

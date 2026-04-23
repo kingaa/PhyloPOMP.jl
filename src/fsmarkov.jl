@@ -5,7 +5,7 @@ This module contains facilities for constructing and working with finite-state M
 """
 module FSMarkov
 
-export fsmarkov, statdist, transition, relprob, relhaz, demekron
+export fsmarkov, statdist, transition, generator
 
 import LinearAlgebra: Diagonal, Symmetric, Transpose, eigen
 
@@ -27,46 +27,11 @@ struct FSMarkovProc{F<:AbstractFloat,D<:Enum}
         F::Type{<:AbstractFloat},
         args::Union{Pair{D,<:Real},Pair{Tuple{D,D},<:Real}}...,
     ) where {D <: Enum} = begin
-        idx = Int.(instances(D))
-        n = length(idx)
-        pi = zeros(F,n)
-        Q = zeros(F,n,n)
-        for r ∈ args
-            if isa(r,Pair{D,<:Real})
-                s = F(r.second)
-                if s ≤ 0.0
-                    error("non-positive stationary probability $r")
-                end
-                pi[Int(r.first)] = s
-            else
-                if r.first[1] == r.first[2]
-                    error("cannot specify conductance of a deme to itself (here, $(r.first[1]) to $(r.first[2]))")
-                elseif Q[Int(r.first[2]),Int(r.first[1])] ≠ zero(F)
-                    error("double specification of conductance ($(r.first[1]) to $(r.first[2]))")
-                else
-                    s = F(r.second)
-                    if (s < zero(F))
-                        error("negative conductance for $(r.first[1]) to $(r.first[2])")
-                    end
-                    Q[Int(r.first[1]),Int(r.first[2])] = s
-                    Q[Int(r.first[2]),Int(r.first[1])] = s
-                end
-            end
-        end
-        for i ∈ idx
-            if pi[i] ≤ zero(F)
-                error("unspecified stationary probability for $(D(i))")
-            end
-        end
-        pi = pi./sum(pi)        # normalize stationary distribution
-        Q = Diagonal(pi)*Q
-        for i ∈ idx
-            Q[i,i] = -sum(Q[:,i])
-        end
+        pi,Q = make_generator(F,args...)
         s = sqrt.(pi)
         d = Diagonal(s)
         di = Diagonal(one(F)./s)
-        Lambda,U = eigen(Symmetric(di*Q*d),sortby=x->abs(x))
+        Lambda,U = eigen(Symmetric(di*Q*d),sortby=-)
         Lambda[1] = zero(F)
         new{F,D}(pi,Q,Lambda,d*U,Transpose(U)*di)
     end
@@ -86,10 +51,13 @@ fsmarkov(args...,) = FSMarkovProc(args...)
 
 statdist(m::FSMarkovProc,) = m.statdist
 
+generator(m::FSMarkovProc,) = m.generator
+
 transition(
     m::FSMarkovProc{F}, s::Real,
 ) where F = begin
-    m.left_trans*(Diagonal(exp.(m.eigenvals.*F(s)))*m.right_trans)
+    d = exp.(m.eigenvals.*F(s))
+    m.left_trans*(Diagonal(d)*m.right_trans)
 end
 
 transition(
@@ -101,30 +69,51 @@ transition(
     if n != length(statdist(m))
         error("size mismatch in 'transition'")
     end
-    m.left_trans*(Diagonal(exp.(m.eigenvals.*F(s)))*(m.right_trans*X))
+    d = exp.(m.eigenvals.*F(s))
+    m.left_trans*(Diagonal(d)*(m.right_trans*X))
 end
 
-relprob(
-    m::FSMarkovProc,
-    s::Real,
-    q::AbstractVector{<:Real},
-) = begin
-    transition(m,s,q) ./ statdist(m)
+make_generator(
+    F::Type{<:AbstractFloat},
+    args::Union{Pair{D,<:Real},Pair{Tuple{D,D},<:Real}}...,
+) where {D <: Enum} = begin
+    idx = Int.(instances(D))
+    n = length(idx)
+    pi = zeros(F,n)
+    Q = zeros(F,n,n)
+    for arg ∈ args
+        if isa(arg,Pair{D,<:Real})
+            s = F(arg.second)
+            if s ≤ 0.0
+                error("non-positive stationary probability $arg")
+            end
+            pi[Int(arg.first)] = s
+        else
+            if arg.first[1] == arg.first[2]
+                error("cannot specify conductance of a deme to itself (here, $(arg.first[1]) to $(arg.first[2]))")
+            elseif Q[Int(arg.first[2]),Int(arg.first[1])] ≠ zero(F)
+                error("double specification of conductance ($(arg.first[1]) to $(arg.first[2]))")
+            else
+                s = F(arg.second)
+                if (s < zero(F))
+                    error("negative conductance for $(arg.first[1]) to $(arg.first[2])")
+                end
+                Q[Int(arg.first[1]),Int(arg.first[2])] = s
+                Q[Int(arg.first[2]),Int(arg.first[1])] = s
+            end
+        end
+    end
+    for i ∈ idx
+        if pi[i] ≤ zero(F)
+            error("unspecified stationary probability for $(D(i))")
+        end
+    end
+    pi = pi./sum(pi)        # normalize stationary distribution
+    Q = Diagonal(pi)*Q
+    for i ∈ idx
+        Q[i,i] = -sum(Q[:,i])
+    end
+    pi, Q
 end
-
-relhaz(
-    m::FSMarkovProc{F}, s::Real, q::AbstractVector{<:Real},
-) where F = begin
-    Q = m.generator
-    Pback = relprob(m,s,q)
-    [Q[i,j] > 0 ? Pback[i]/Pback[j] : one(F)
-     for i ∈ axes(Q,1), j ∈ axes(Q,2)]
-end
-
-demekron(F::Type{<:Real}, d::D,) where {D <: Enum} = begin
-    [ i == d ? one(F) : zero(F) for i ∈ instances(D) ]
-end
-
-demekron(d::Enum,) = demekron(Float64,d)
 
 end
