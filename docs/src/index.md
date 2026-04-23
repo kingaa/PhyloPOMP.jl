@@ -1,7 +1,7 @@
 # PhyloPOMP.jl
 
-For doing phylodynamics in Julia....
-It enables computation of the phylodynamic likelihood using tools from [POMP.jl](https://github.com/kingaa/PartiallyObservedMarkovProcesses.jl/).
+For doing phylodynamics in Julia.
+**PhyloPOMP.jl** enables computation of the phylodynamic likelihood using tools from [POMP.jl](https://github.com/kingaa/PartiallyObservedMarkovProcesses.jl/).
 
 ## Function Documentation
 
@@ -9,11 +9,12 @@ It enables computation of the phylodynamic likelihood using tools from [POMP.jl]
 @demes
 parse_newick
 newick
+fsmarkov
 ```
 
 ## Reference
 
 ```@autodocs
-Modules = [PhyloPOMP]
-Order   = [:function, :macro, :type]
+Modules = [PhyloPOMP, PhyloPOMP.FSMarkov]
+Order   = [:function, :macro, :module, :type]
 ```

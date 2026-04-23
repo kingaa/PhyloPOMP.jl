@@ -11,7 +11,7 @@ using Test
 
     @demes SEIR E I
     @test_throws r"final time from data \(.+\) exceeds" parse_newick(x,demes=SEIR,t0=5.0,time=6);
-    @time g = parse_newick(x,demes=SEIR,t0=5.0,time=7.0);
+    g = parse_newick(x,demes=SEIR,t0=5.0,time=7.0);
     @test isa(g,Genealogy)
     @test isa(g,Genealogy{SEIR})
     @test ismissing(g.nodes[3].deme)
@@ -86,14 +86,14 @@ end
         "(((([&&PhyloPOMP type=sample deme=I]39:0.011566)[&&PhyloPOMP type=sample deme=I]38:0.111957)[&&PhyloPOMP type=sample deme=I]32:0.089940)[&&PhyloPOMP type=node deme=E]28:0.759231)[&&PhyloPOMP type=root]4:0.000000;"
     ];
 
-    @time g = parse_newick(x,demes=SEIR,t0=5.0);
-    @time n = newick(g);
+    g = parse_newick(x,demes=SEIR,t0=5.0);
+    n = newick(g);
     @test length(n)==length(x)
     @test all(isa.(n,Ref(String)))
     nn = (x->count(")",x)).(n);
     nx = (x->count(")",x)).(x);
     @test nn==reverse(nx)
-    @time n = newick(g,extended=false,sigdigits=4);
+    n = newick(g,extended=false,sigdigits=4);
     @test all(isa.(n,Ref(String)))
 
 end

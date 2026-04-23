@@ -15,6 +15,8 @@ clean:
 
 build:
 	julia --project -e 'import Pkg; Pkg.instantiate(); Pkg.build(); Pkg.precompile()'
+	cd test; julia --project -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
+	cd docs; julia --project -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
 
 update:
 	julia --project -e 'import Pkg; Pkg.instantiate(); Pkg.update(); Pkg.gc()'

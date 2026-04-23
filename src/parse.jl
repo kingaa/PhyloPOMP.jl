@@ -129,11 +129,9 @@ const nodetypemap = Dict(
     "sample"=>Sample,
 )
 
-"""
-    cap_tips!(G)
-
-Converts tip-nodes to sample-nodes.  The genealogy remains correct.
-"""
+##     cap_tips!(G)
+##
+## Converts tip-nodes to sample-nodes.  The genealogy remains correct.
 cap_tips!(G::Genealogy) = begin
     for n ∈ G.nodes
         if isempty(n.children)
@@ -186,18 +184,16 @@ insert_zlb!(G::Genealogy{D}) where D = begin
     nothing
 end
 
-"""
-    scan_branch!(input, G, p, mapper)
-
-Parse the branch-string in `input`, appending the corresponding
-node to Genealogy `G`.
-
-Arguments:
-- `input`: the string, or vector of strings, containing the branch information
-- `G`: the genealogy to be modified
-- `p`: the name of the parent node
-- `mapper`: a function that maps strings to demes.
-"""
+##     scan_branch!(input, G, p, mapper)
+##
+## Parse the branch-string in `input`, appending the corresponding
+## node to Genealogy `G`.
+##
+## Arguments:
+## - `input`: the string, or vector of strings, containing the branch information
+## - `G`: the genealogy to be modified
+## - `p`: the name of the parent node
+## - `mapper`: a function that maps strings to demes.
 scan_branch!(
     input::String,
     G::Genealogy{D},

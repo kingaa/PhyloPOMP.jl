@@ -16,4 +16,8 @@ include("parse.jl")
 export newick
 include("newick.jl")
 
+include("fsmarkov.jl")
+using .FSMarkov: fsmarkov
+export fsmarkov
+
 end # module PhyloPOMP
