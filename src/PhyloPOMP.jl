@@ -2,6 +2,10 @@ module PhyloPOMP
 
 import PartiallyObservedMarkovProcesses as POMP
 
+const Name = UInt64
+const Size = UInt64
+const Time = Float64
+
 export @demes
 include("demes.jl")
 

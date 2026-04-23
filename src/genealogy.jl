@@ -1,7 +1,5 @@
 import Base: eachindex, length, getindex, eachindex
 
-const Name = Int64
-const Time = Float64
 ## FIXME: inclusion of Root in NodeType introduces some inelegant redundancy
 @enum NodeType Root Sample Node
 
@@ -20,13 +18,13 @@ mutable struct GenealNode{D<:Enum}
     parent::Union{Nothing,Name}
     children::Vector{Name}
     GenealNode{D}(
-        name::Name,
+        name::Integer,
         slate::Time,
         deme = missing,
         type::NodeType = Node,
         parent::Union{Nothing,Name} = nothing,
     ) where {D <: Enum} = begin
-        new{D}(type,name,slate,deme,missing,parent,Name[])
+        new{D}(type,Name(name),slate,deme,missing,parent,Name[])
     end
 end
 
@@ -40,9 +38,10 @@ Internally, this is represented as a time-ordered sequence of *genealogical node
 mutable struct Genealogy{D <: Enum}
     t0::Time
     time::Time
+    nsample::Size
     nodes::Vector{GenealNode{D}}
     Genealogy{D}(t0::Real) where {D <: Enum} = begin
-        new{D}(Time(t0),Time(t0),GenealNode{D}[])
+        new{D}(Time(t0),Time(t0),zero(Size),GenealNode{D}[])
     end
 end
 
@@ -55,6 +54,8 @@ roots(g::Genealogy) = findall(i->(g[i].type==Root),eachindex(g))
 tips(g::Genealogy) = findall(i->isempty(g[i].children),eachindex(g))
 samples(g::Genealogy) = findall(i->(g[i].type==Sample),eachindex(g))
 nodes(g::Genealogy) = findall(i->(g[i].type==Node),eachindex(g))
+
+nsample(g::Genealogy) = g.nsample
 
 """
     repair!(G)
@@ -76,6 +77,7 @@ repair!(G::Genealogy{D}) where {D} = begin
     sort!(G.nodes,lt=compare)
     ## repair names and types:
     namemap = Dict(n.name=>k for (k,n) ∈ enumerate(G.nodes))
+    G.nsample = zero(Size)
     for n ∈ G.nodes
         n.name = namemap[n.name]
         if isnothing(n.parent)
@@ -84,6 +86,9 @@ repair!(G::Genealogy{D}) where {D} = begin
             n.parent = namemap[n.parent]
         end
         n.children = map(i->namemap[i],n.children)
+        if n.type==Sample
+            G.nsample += 1
+        end
     end
     trace_lineages!(G)
     nothing

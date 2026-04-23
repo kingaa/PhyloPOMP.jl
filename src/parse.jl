@@ -25,7 +25,7 @@ parse_newick(
     t0 = Time(t0)
     G = Genealogy{D}(t0)
     sizehint!(G.nodes,nnodes)
-    p = 0
+    p::Name = 0
     tf = t0
     open = false
     bl = zero(Time)
@@ -63,7 +63,7 @@ parse_newick(
             if open
                 scan_branch!(input[(b+1):e], G, p, dememapper, bl)
             end
-            p = G[p].parent
+            p = isnothing(G[p].parent) ? 0 : G[p].parent
             e = b = b-1
             stack -= 1
             open = false

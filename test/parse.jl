@@ -30,6 +30,7 @@ using Test
     @test occursin(r"^<genealogy on .*>>"s,sprint(show,g))
     @test length(collect(eachmatch(r"time",sprint(show,g))))==length(g)
     @test occursin(r"lineage=4 .* parent=10",sprint(show,g[11]))
+    @test PhyloPOMP.nsample(g)==19
 
     g=parse_newick("():0.1;",t0=0.0);
     @test length(g.nodes)==2
