@@ -40,22 +40,22 @@ pretty_string(p::GenealNode; sigdigits = 4) = begin
 end
 
 pretty_string(g::Guide; sigdigits = 4) = begin
-    "<guide:\n" *
-        join(
-            map(eachindex(g)) do i
-                "  $i: "*pretty_string(g[i],sigdigits=sigdigits)
-            end,
-            '\n'
-        ) * ">"
+    nodes = map(eachindex(g)) do i
+        "  $i: "*pretty_string(g[i],sigdigits=sigdigits)
+    end
+    "<guide:\n" * join(nodes,'\n') * ">"
 end
 
 pretty_string(n::GuideNode; sigdigits = 4) = begin
     t1 = round(n.tbeg,sigdigits=sigdigits)
     t2 = round(n.tend,sigdigits=sigdigits)
+    chillins = join(map(i->"$i",n.chillins),',')
     lins = map(eachindex(n.lineages)) do i
         ell = n.lineages[i]
         prob = round.(n.probs[:,i],sigdigits=sigdigits)
         " $ell => $prob"
     end
-    "<t ∈ [$t1,$t2]:$(join(lins,','))>"
+    "<$(lowercase(String(Symbol(n.type)))): t ∈ [$t1,$t2] " *
+        "parlin=$(n.parlin) chillins=[$chillins]:" *
+        join(lins,',') * ">"
 end

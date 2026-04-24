@@ -1,8 +1,11 @@
 import Base: eachindex, length, getindex, eachindex
 
 struct GuideNode{F<:AbstractFloat,D<:Enum}
+    type::NodeType
     tbeg::Time
     tend::Time
+    parlin::Name
+    chillins::Vector{Name}
     lineages::Vector{Name}
     probs::Matrix{F}
 end
@@ -21,28 +24,32 @@ struct Guide{F<:AbstractFloat,D<:Enum}
         g::Genealogy{D},
         m::FSMarkovProc{F,D},
     ) where {F<:AbstractFloat,D<:Enum} = begin
-        ndeme = length(instances(D))
-        probs = zeros(F,ndeme,g.nsample)
+        probs = zeros(F,length(instances(D)),g.nsample)
         nodes = Vector{GuideNode{F,D}}(undef,length(g))
         tend::Time = g.time
         lins::Set{Name} = Set{Name}()
         for n ∈ reverse(eachindex(g))
             ells = collect(lins)
-            nodes[n] = GuideNode{F,D}(g[n].slate,tend,ells,probs[:,ells])
-            probs[:,ells] = forward_action(m,tend-g[n].slate,probs[:,ells])
             parlin = g[n].lineage
-            childlins = map(x->g[x].lineage, g[n].children)
+            chillins = map(x->g[x].lineage, g[n].children)
+            nodes[n] = GuideNode{F,D}(
+                g[n].type,
+                g[n].slate,tend,
+                parlin,chillins,ells,
+                probs[:,ells]
+            )
+            probs[:,ells] = forward_action(m,tend-g[n].slate,probs[:,ells])
             if ismissing(g[n].deme)
                 @inbounds assimil!(
                     @view(probs[:,parlin]),
-                    @view(probs[:,childlins]),
+                    @view(probs[:,chillins]),
                     statdist(m)
                 )
             else
                 probs[:,parlin] = demekron(F,g[n].deme)
             end
             tend = g[n].slate
-            union!(setdiff!(lins,childlins),parlin)
+            union!(setdiff!(lins,chillins),parlin)
         end
         new{F,D}(m,nodes)
     end

@@ -13,7 +13,7 @@ using Test
     z = guide(g,m)
     @test length(g)==length(z)
     @test occursin(r"^<guide:.*>$"s,sprint(show,z))
-    @test occursin(r"^<t ∈ \[[\d\.]+,[\d\.]+\]:.*>$"s,sprint(show,z[19]))
+    @test occursin(r"t ∈ \[[\d\.]+,[\d\.]+\]"s,sprint(show,z[19]))
     @test length(z[12:15])==4
     t = z[7].tend
     h1 = relhaz(z,t-0.1,7)
