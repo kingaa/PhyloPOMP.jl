@@ -1,12 +1,3 @@
-"""
-    FSMarkov
-
-This module contains facilities for constructing and working with finite-state Markov processes in continuous time.
-"""
-module FSMarkov
-
-export fsmarkov, statdist, transition, generator
-
 import LinearAlgebra: Diagonal, Symmetric, Transpose, eigen
 
 """
@@ -22,7 +13,7 @@ struct FSMarkovProc{F<:AbstractFloat,D<:Enum}
     right_trans::Matrix{F}
     FSMarkovProc(
         args::Union{Pair{D,<:Real},Pair{Tuple{D,D},<:Real}}...,
-    ) where {D <: Enum} = FSMarkovProc(Float64,args...)
+    ) where {D <: Enum} = FSMarkovProc(Prob,args...)
     FSMarkovProc(
         F::Type{<:AbstractFloat},
         args::Union{Pair{D,<:Real},Pair{Tuple{D,D},<:Real}}...,
@@ -54,7 +45,8 @@ statdist(m::FSMarkovProc,) = m.statdist
 generator(m::FSMarkovProc,) = m.generator
 
 transition(
-    m::FSMarkovProc{F}, s::Real,
+    m::FSMarkovProc{F},
+    s::Real,
 ) where F = begin
     d = exp.(m.eigenvals.*F(s))
     m.left_trans*(Diagonal(d)*m.right_trans)
@@ -114,6 +106,4 @@ make_generator(
         Q[i,i] = -sum(Q[:,i])
     end
     pi, Q
-end
-
 end

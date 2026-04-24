@@ -1,7 +1,7 @@
 name = "PhyloPOMP"
 uuid = "d3093253-1426-44ff-8fa8-1ab5fe440962"
 authors = ["Aaron A. King <kingaa@umich.edu>"]
-version = "0.0.5-2"
+version = "0.0.5-3"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

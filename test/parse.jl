@@ -6,7 +6,7 @@ using Test
 
     x = [
         "((50:0.195305,(64:0.155799,81:0.000000)55:0.308953)41:1.296678)1:0.000000;(65:1.762283)4:0.000000;(72:1.885165)5;((((((76:0.534765,80:0.000000)46:0.253820,67:0.618309)36:0.375403,73:1.107300)27:0.060102,79:0.000000)24:0.652522,26:0.706297)10:0.095550)7;",
-        "((((((((([&&PhyloPOMP type=sample deme=I]33:0.121768)[&&PhyloPOMP type=node deme=I]30:0.256093)[&&PhyloPOMP type=sample deme=I]23:0.048347)[&&PhyloPOMP type=node deme=I]21:0.000896)[&&PhyloPOMP type=node deme=I]20:0.272773)[&&PhyloPOMP type=node deme=I]14:0.039280)[&&PhyloPOMP type=node deme=I]13:0.100483)[&&PhyloPOMP type=node deme=I]12:1.259E-3)[&&PhyloPOMP type=node deme=I]11:0.058041)[&&PhyloPOMP type=root]9:0.000000;(([&&PhyloPOMP type=sample deme=I]22:0.218679)[&&PhyloPOMP type=node deme=I]16:0.269299)[&&PhyloPOMP type=root]8:0.000000;(([&&PhyloPOMP type=sample deme=I]18:0.291933)[&&PhyloPOMP type=sample deme=I]10:0.039330)[&&PhyloPOMP type=root]5:0.000000;(((([&&PhyloPOMP type=sample deme=I]39:0.011566)[&&PhyloPOMP type=sample deme=I]38:0.111957)[&&PhyloPOMP type=sample deme=I]32:0.089940)[&&PhyloPOMP type=node deme=E]28:0.759231)[&&PhyloPOMP type=root]4:0.000000;",
+        "(((((((((((((((([&&PhyloPOMP type=sample deme=I]101:0.348292)[&&PhyloPOMP type=sample deme=I]71:0.043151)[&&PhyloPOMP type=node deme=I]64:0.248533)[&&PhyloPOMP type=node deme=I]49:0.009989)[&&PhyloPOMP type=node deme=E]46:0.005282,((([&&PhyloPOMP type=sample deme=I]75:0.053987)[&&PhyloPOMP type=node deme=I]68:0.070730)[&&PhyloPOMP type=node deme=I]59:0.191481)[&&PhyloPOMP type=node deme=I]51:0.029079)[&&PhyloPOMP type=node deme=I]42:0.186568,((([&&PhyloPOMP type=sample deme=I]74:0.254742)[&&PhyloPOMP type=node deme=I]56:0.059999)[&&PhyloPOMP type=node deme=I]48:0.000421)[&&PhyloPOMP type=node deme=E]47:0.201246)[&&PhyloPOMP type=node deme=I]25:0.166445)[&&PhyloPOMP type=node deme=I]21:0.135240)[&&PhyloPOMP type=node deme=I]15:0.175788)[&&PhyloPOMP type=node deme=I]9:0.134695,(((((((((([&&PhyloPOMP type=sample deme=I]102:0.027845)[&&PhyloPOMP type=sample deme=I]100:0.629270)[&&PhyloPOMP type=node deme=I]50:0.016357)[&&PhyloPOMP type=node deme=I]43:0.025963)[&&PhyloPOMP type=node deme=I]41:0.002351,((([&&PhyloPOMP type=sample deme=I]107:0.213945)[&&PhyloPOMP type=node deme=I]91:0.038432)[&&PhyloPOMP type=node deme=I]88:0.172176)[&&PhyloPOMP type=node deme=E]70:0.325434)[&&PhyloPOMP type=node deme=I]40:0.025929)[&&PhyloPOMP type=node deme=I]37:0.012487)[&&PhyloPOMP type=node deme=I]35:0.004896)[&&PhyloPOMP type=node deme=E]34:0.485078)[&&PhyloPOMP type=node deme=I]12:0.053967)[&&PhyloPOMP type=node deme=E]10:0.189925)[&&PhyloPOMP type=node deme=I]6:0.095254)[&&PhyloPOMP type=node deme=I]5:0.000298)[&&PhyloPOMP type=sample deme=I]4:0.044483)[&&PhyloPOMP type=node deme=E]3:0.066014,((((([&&PhyloPOMP type=sample deme=I]30:0.192045,(((([&&PhyloPOMP type=sample deme=I]106:0.135813)[&&PhyloPOMP type=node deme=I]95:0.097167)[&&PhyloPOMP type=node deme=E]89:0.087857)[&&PhyloPOMP type=node deme=I]83:0.397810)[&&PhyloPOMP type=node deme=E]44:0.296515)[&&PhyloPOMP type=node deme=I]22:0.109389)[&&PhyloPOMP type=node deme=I]20:0.009961)[&&PhyloPOMP type=node deme=I]19:0.279611)[&&PhyloPOMP type=node deme=I]8:0.045107,((((([&&PhyloPOMP type=sample deme=I]92:0.202637)[&&PhyloPOMP type=node deme=E]72:0.477023)[&&PhyloPOMP type=node deme=I]26:0.270156,(((((((([&&PhyloPOMP type=sample deme=I]82:0.029926)[&&PhyloPOMP type=node deme=I]80:0.071942)[&&PhyloPOMP type=node deme=E]69:0.031919)[&&PhyloPOMP type=node deme=I]65:0.028600)[&&PhyloPOMP type=sample deme=I]61:0.148185)[&&PhyloPOMP type=node deme=E]57:0.031422)[&&PhyloPOMP type=node deme=I]54:0.136358)[&&PhyloPOMP type=node deme=I]33:0.076175)[&&PhyloPOMP type=node deme=E]27:0.280337)[&&PhyloPOMP type=node deme=I]17:0.023589)[&&PhyloPOMP type=node deme=I]16:0.079893)[&&PhyloPOMP type=node deme=E]13:0.197383)[&&PhyloPOMP type=node deme=I]7:0.267953)[&&PhyloPOMP type=node deme=I]2:0.063324)[&&PhyloPOMP type=node deme=I]1:0.077664)[&&PhyloPOMP type=root]0:0;",
     ];
 
     @demes SEIR E I
@@ -15,22 +15,22 @@ using Test
     @test isa(g,Genealogy)
     @test isa(g,Genealogy{SEIR})
     @test ismissing(g.nodes[3].deme)
-    @test sum(map(x->ismissing(x.deme),g.nodes))==23
-    @test sum(map(x->!ismissing(x.deme),g.nodes))==17
-    @test sum(map(x->x.deme===I,g.nodes))==16
-    @test sum(map(x->x.deme===E,g.nodes))==1
-    @test length(g.nodes)==40
-    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Sample)==19
-    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Node)==13
-    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Root)==8
+    @test sum(map(x->ismissing(x.deme),g.nodes))==20
+    @test sum(map(x->!ismissing(x.deme),g.nodes))==65
+    @test sum(map(x->x.deme===I,g.nodes))==52
+    @test sum(map(x->x.deme===E,g.nodes))==13
+    @test length(g.nodes)==85
+    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Sample)==24
+    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Node)==56
+    @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Root)==5
     @test all((x->x.type).(g[PhyloPOMP.tips(g)]).==PhyloPOMP.Sample)
     @test all(PhyloPOMP.tips(g) .∈ Ref(PhyloPOMP.samples(g)))
     @test isempty(intersect(PhyloPOMP.tips(g),PhyloPOMP.nodes(g)))
     @test isempty(intersect(PhyloPOMP.roots(g),PhyloPOMP.nodes(g)))
     @test occursin(r"^<genealogy on .*>>"s,sprint(show,g))
     @test length(collect(eachmatch(r"time",sprint(show,g))))==length(g)
-    @test occursin(r"lineage=4 .* parent=10",sprint(show,g[11]))
-    @test PhyloPOMP.nsample(g)==19
+    @test occursin(r"lineage=7 .* parent=10",sprint(show,g[11]))
+    @test PhyloPOMP.nsample(g)==24
 
     g=parse_newick("():0.1;",t0=0.0);
     @test length(g.nodes)==2
@@ -87,7 +87,7 @@ end
         "(((([&&PhyloPOMP type=sample deme=I]39:0.011566)[&&PhyloPOMP type=sample deme=I]38:0.111957)[&&PhyloPOMP type=sample deme=I]32:0.089940)[&&PhyloPOMP type=node deme=E]28:0.759231)[&&PhyloPOMP type=root]4:0.000000;"
     ];
 
-    g = parse_newick(x,demes=SEIR,t0=5.0);
+    g = parse_newick(x,demes=SEIR,t0=0.0);
     n = newick(g);
     @test length(n)==length(x)
     @test all(isa.(n,Ref(String)))

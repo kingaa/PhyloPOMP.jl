@@ -15,6 +15,6 @@ fsmarkov
 ## Reference
 
 ```@autodocs
-Modules = [PhyloPOMP, PhyloPOMP.FSMarkov]
+Modules = [PhyloPOMP]
 Order   = [:function, :macro, :module, :type]
 ```

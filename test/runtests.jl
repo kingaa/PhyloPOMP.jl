@@ -5,5 +5,6 @@ using Test
 
     include("parse.jl")
     include("fsmarkov.jl")
+    include("guide.jl")
 
 end
