@@ -19,10 +19,10 @@ include("parse.jl")
 export newick
 include("newick.jl")
 
-export fsmarkov, statdist, transition, generator
+export fsmarkov
 include("fsmarkov.jl")
 
-export Guide, relhaz
+export guide, relhaz
 include("guide.jl")
 
 include("print.jl")

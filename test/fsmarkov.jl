@@ -7,9 +7,9 @@ using Test
     @demes SI3R I1 I2 I3
 
     p = fsmarkov(I1=>1,I2=>1,I3=>1);
-    @test sum(statdist(p))==1
-    @test sum(abs.(generator(p)))==0
-    @test all(sum(generator(p),dims=1).==0)
+    @test sum(PhyloPOMP.statdist(p))==1
+    @test sum(abs.(PhyloPOMP.generator(p)))==0
+    @test all(sum(PhyloPOMP.generator(p),dims=1).==0)
 
     @test_throws UndefVarError fsmarkov()
     @test_throws r"unspecified stationary probability" fsmarkov(I1=>1,I3=>1)
@@ -17,20 +17,19 @@ using Test
     @test_throws r"non-positive stationary probability" fsmarkov(I1=>1,I3=>1,I2=>-1)
 
     p = fsmarkov(Float32,I1=>1,I3=>2,(I1,I2)=>3,(I2,I3)=>1,I2=>1);
-    @test isa(generator(p),Matrix{Float32})
-    @test isa(transition(p,0),Matrix{Float32})
+    @test isa(PhyloPOMP.generator(p),Matrix{Float32})
+    @test isa(PhyloPOMP.forward_action(p,0),Matrix{Float32})
 
     p = fsmarkov(I1=>1,I3=>2,(I1,I2)=>3,(I2,I3)=>1,I2=>1);
-    @test sum(statdist(p))==1
-    @test sum(abs.(generator(p)))==4.5
-    @test all(sum(generator(p),dims=1).==0)
-    @test_throws r"size mismatch" transition(p,10,[1,2])
-    @test maximum(abs.(transition(p,0,[1,2,3])-[1,2,3]))+100-100==0
-    @test maximum(abs.(transition(p,1e5,[1,1,1])-[0.75,0.75,1.5]))+100-100==0
+    @test sum(PhyloPOMP.statdist(p))==1
+    @test sum(abs.(PhyloPOMP.generator(p)))==4.5
+    @test all(sum(PhyloPOMP.generator(p),dims=1).==0)
+    @test_throws r"size mismatch" PhyloPOMP.forward_action(p,10,[1,2])
+    @test maximum(abs.(PhyloPOMP.forward_action(p,0,[1,2,3])-[1,2,3]))+100-100==0
+    @test maximum(abs.(PhyloPOMP.forward_action(p,1e5,[1,1,1])-[0.75,0.75,1.5]))+100-100==0
 
     @test_throws r"negative conductance" fsmarkov(I1=>1,I3=>2,(I1,I2)=>3,I2=>1,(I2,I3)=>-1)
     @test_throws r"double specification of conductance" fsmarkov(I2=>1,I3=>2,(I1,I2)=>3,I1=>1,(I2,I1)=>3)
     @test_throws r"cannot specify conductance of a deme to itself" fsmarkov(I1=>1,I2=>1,I3=>2,(I1,I2)=>3,(I2,I2)=>3)
-
 
 end

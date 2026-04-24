@@ -44,7 +44,7 @@ statdist(m::FSMarkovProc,) = m.statdist
 
 generator(m::FSMarkovProc,) = m.generator
 
-transition(
+forward_action(
     m::FSMarkovProc{F},
     s::Real,
 ) where F = begin
@@ -52,14 +52,14 @@ transition(
     m.left_trans*(Diagonal(d)*m.right_trans)
 end
 
-transition(
+forward_action(
     m::FSMarkovProc{F},
     s::Real,
     X::AbstractArray{<:Real,N},
 ) where {F,N} = begin
     n = size(X,1)
     if n != length(statdist(m))
-        error("size mismatch in 'transition'")
+        error("size mismatch in 'forward_action'")
     end
     d = exp.(m.eigenvals.*F(s))
     m.left_trans*(Diagonal(d)*(m.right_trans*X))
