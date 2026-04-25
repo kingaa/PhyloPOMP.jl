@@ -49,13 +49,18 @@ end
 pretty_string(n::GuideNode; sigdigits = 4) = begin
     t1 = round(n.tbeg,sigdigits=sigdigits)
     t2 = round(n.tend,sigdigits=sigdigits)
-    chillins = join(map(i->"$i",n.chillins),',')
-    lins = map(eachindex(n.lineages)) do i
-        ell = n.lineages[i]
-        prob = round.(n.probs[:,i],sigdigits=sigdigits)
-        " $ell => $prob"
+    chillins = map(eachindex(n.chillins)) do i
+        ell = n.chillins[i]
+        prob = round.(n.present[:,i],sigdigits=sigdigits)
+        "$ell=>$prob"
+    end
+    targs = map(eachindex(n.alllins)) do i
+        ell = n.alllins[i]
+        prob = round.(n.target[:,i],sigdigits=sigdigits)
+        "$ell=>$prob"
     end
     "<$(lowercase(String(Symbol(n.type)))): t ∈ [$t1,$t2] " *
-        "parlin=$(n.parlin) chillins=[$chillins]:" *
-        join(lins,',') * ">"
+        "parlin=$(n.parlin)" *
+        " children:{" * join(chillins,',') *
+        "} targets:{" * join(targs,',') * "}>"
 end
