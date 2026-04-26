@@ -10,8 +10,7 @@ using Test
 
     @demes SEIRDemes E I
     g = parse_newick(x,demes=SEIRDemes,t0=0,time=1);
-    m = fsmarkov(I=>0.5,E=>0.5,(I,E)=>5);
-    z = guide(g,m)
+    z = guide(g,I=>0.5,E=>0.5,(I,E)=>5);
     @test length(g)==length(z)
     @test occursin(r"^<guide:.*>$"s,sprint(show,z))
     @test occursin(r"t ∈ \[[\d\.]+,[\d\.]+\]"s,sprint(show,z[19]))

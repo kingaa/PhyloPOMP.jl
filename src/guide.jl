@@ -1,5 +1,8 @@
 import Base: eachindex, length, getindex, eachindex
 
+include("fsmarkov.jl")
+import .FSMarkov: FSMarkovProc, statdist, forward_action
+
 """
     GuideNode{F,D}
 
@@ -37,10 +40,13 @@ It contains the `FSMarkovProc` object encoding the Markov process and a sequence
 struct Guide{F<:AbstractFloat,D<:Enum}
     process::FSMarkovProc{F,D}
     nodes::Vector{GuideNode{F,D}}
+    Guide(g::Genealogy,args...,) = Guide(Prob,g,args...)
     Guide(
+        F::Type{<:AbstractFloat},
         g::Genealogy{D},
-        m::FSMarkovProc{F,D},
-    ) where {F<:AbstractFloat,D<:Enum} = begin
+        args...,
+    ) where {D<:Enum} = begin
+        m = FSMarkovProc(F,args...)
         probs = zeros(F,length(instances(D)),g.nsample)
         nodes = Vector{GuideNode{F,D}}(undef,length(g))
         tend::Time = g.time
@@ -75,10 +81,11 @@ struct Guide{F<:AbstractFloat,D<:Enum}
 end
 
 """
-    guide(g, m)
+    guide(g, ...)
 
 - `g` is a `Genealogy`.
-- `m` is a finite-state Markov process (type `FSMarkovProc`) constructed via a call to `fsmarkov`.
+- `...`: additional arguments specify the guiding finite-state Markov process.
+  In particular, these are passed to `FSMarkov.fsmarkov()`.
 """
 guide(args...) = Guide(args...)
 

@@ -19,9 +19,6 @@ include("parse.jl")
 export newick
 include("newick.jl")
 
-export fsmarkov
-include("fsmarkov.jl")
-
 export guide, relhaz
 include("guide.jl")
 

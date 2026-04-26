@@ -10,12 +10,11 @@ For doing phylodynamics in Julia.
 parse_newick
 newick
 guide
-fsmarkov
 ```
 
 ## Reference
 
 ```@autodocs
-Modules = [PhyloPOMP]
-Order   = [:function, :macro, :module, :type]
+Modules = [PhyloPOMP, PhyloPOMP.FSMarkov]
+Order   = [:type, :function, :macro, :module]
 ```

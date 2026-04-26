@@ -1,4 +1,14 @@
+"""
+    FSMarkov
+
+Module implementing finite-state Markov processes for use in filter guides.
+"""
+module FSMarkov
+
+export fsmarkov, FSMarkovProc, forward_action, statdist, generator
+
 import LinearAlgebra: Diagonal, Symmetric, Transpose, eigen
+import ..PhyloPOMP: Prob
 
 """
     FSMarkovProc
@@ -106,4 +116,6 @@ make_generator(
         Q[i,i] = -sum(Q[:,i])
     end
     pi, Q
+end
+
 end
