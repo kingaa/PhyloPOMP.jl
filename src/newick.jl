@@ -4,10 +4,10 @@
 Generates a Newick-format description of the `Genealogy` `g`.
 """
 newick(
-    g::Genealogy{D};
+    g::Genealogy;
     extended::Bool = true,
     sigdigits::Integer = 6
-) where D = begin
+) = begin
     if extended
         extnewick(g,sigdigits)
     else
@@ -15,7 +15,10 @@ newick(
     end
 end
 
-plainnewick(g::Genealogy{D}, sigdigits::Integer = 6) where D = begin
+plainnewick(
+    g::Genealogy,
+    sigdigits::Integer = 6,
+) = begin
     g = deepcopy(g)
     insert_zlb!(g)
     nstr = similar(Array{String},length(g))
@@ -37,7 +40,10 @@ plainnewick(g::Genealogy{D}, sigdigits::Integer = 6) where D = begin
     nstr[roots(g)]
 end
 
-extnewick(g::Genealogy{D}, sigdigits::Integer = 6) where D = begin
+extnewick(
+    g::Genealogy{D},
+    sigdigits::Integer = 6,
+) where D = begin
     typenodemap = Dict(Node=>"node",Sample=>"sample",Root=>"root")
     nstr = similar(Array{String},length(g))
     dememap = enum2name(Val(D))

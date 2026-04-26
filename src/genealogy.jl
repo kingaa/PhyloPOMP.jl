@@ -7,7 +7,7 @@ import Base: eachindex, length, getindex, eachindex
     GenealNode{D}
 
 Implements a *genealogical node*.
-The `Enum` type `D` enumerates the demes.
+The module `D` enumerates the demes (see [`@demes`](@ref)).
 """
 mutable struct GenealNode{D<:Enum}
     type::NodeType
@@ -32,7 +32,7 @@ end
     Genealogy{D}
 
 Implements a genealogy over a time interval `[t0,t]`.
-The `Enum`-type `D` enumerates the demes.
+The module `D` enumerates the demes (see [`@demes`](@ref)).
 Internally, this is represented as a time-ordered sequence of *genealogical nodes* (represented by [`GenealNode`](@ref) objects).
 """
 mutable struct Genealogy{D <: Enum}
@@ -64,7 +64,7 @@ Re-sorts the genealogical nodes.
 Renames all nodes and corrects the parent/child relationships.
 Traces sample-lineages.
 """
-repair!(G::Genealogy{D}) where {D} = begin
+repair!(G::Genealogy) = begin
     ## weed out dead roots:
     filter!(
         n -> !(isnothing(n.parent) && isempty(n.children)),

@@ -1,6 +1,7 @@
 module PhyloPOMP
 
 import PartiallyObservedMarkovProcesses as POMP
+using Reexport: @reexport
 
 const Name = UInt64
 const Size = UInt64

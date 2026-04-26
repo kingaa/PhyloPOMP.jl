@@ -20,6 +20,11 @@ build:
 	cd test; $(JULIA) -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
 	cd docs; $(JULIA) -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
 
+resolve:
+	$(JULIA) -e 'import Pkg; Pkg.resolve()'
+	cd test; $(JULIA) -e 'import Pkg; Pkg.resolve()'
+	cd docs; $(JULIA) -e 'import Pkg; Pkg.resolve()'
+
 update:
 	$(JULIA) -e 'import Pkg; Pkg.instantiate(); Pkg.update(); Pkg.gc()'
 	cd test; $(JULIA) -e 'import Pkg; Pkg.instantiate(); Pkg.update(); Pkg.gc()'

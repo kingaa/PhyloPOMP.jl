@@ -6,7 +6,7 @@ using Test
 @testset verbose=true "finite-state Markov" begin
 
     @demes SI3R I1 I2 I3
-
+    using .SI3R: I1, I2, I3
     p = fsmarkov(I1=>1,I2=>1,I3=>1);
     @test sum(statdist(p))==1
     @test sum(abs.(generator(p)))==0
@@ -18,8 +18,8 @@ using Test
     @test_throws r"non-positive stationary probability" fsmarkov(I1=>1,I3=>1,I2=>-1)
 
     p = fsmarkov(Float32,I1=>1,I3=>2,(I1,I2)=>3,(I2,I3)=>1,I2=>1);
-    @test isa(generator(p),Matrix{Float32})
-    @test isa(forward_action(p,0),Matrix{Float32})
+    @test generator(p) isa Matrix{Float32}
+    @test forward_action(p,0) isa Matrix{Float32}
 
     p = fsmarkov(I1=>1,I3=>2,(I1,I2)=>3,(I2,I3)=>1,I2=>1);
     @test sum(statdist(p))==1

@@ -84,7 +84,7 @@ make_generator(
     pi = zeros(F,n)
     Q = zeros(F,n,n)
     for arg ∈ args
-        if isa(arg,Pair{D,<:Real})
+        if arg isa Pair{D,<:Real}
             s = F(arg.second)
             if s ≤ 0.0
                 error("non-positive stationary probability $arg")

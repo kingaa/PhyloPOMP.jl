@@ -4,7 +4,7 @@
 Parse the Newick-format string (or vector of strings) `input`.
 
 Arguments:
-- `demes` is the enumeration of the demes.
+- `demes` enumerates the demes (see [`@demes`](@ref)).
 - `t0` is the assumed root-time.
 - `time` is the (optional) final-time.
 """
@@ -16,12 +16,13 @@ parse_newick(
 
 parse_newick(
     input::AbstractString;
-    demes::Type{D} = Unstructured,
+    demes::Module = Unstructured,
     t0::Real = zero(Time),
     time::Union{Missing,Real} = missing,
-) where {D <: Enum} = begin
+) = begin
+    D = demes.T
     nnodes = count(')',input)+count(',',input)+2*count(';',input)
-    dememapper = name2enum(demes)
+    dememapper = name2enum(D)
     t0 = Time(t0)
     G = Genealogy{D}(t0)
     sizehint!(G.nodes,nnodes)

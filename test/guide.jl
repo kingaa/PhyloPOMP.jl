@@ -8,8 +8,9 @@ using Test
         "((((((:0.197946,[&&PhyloPOMP type=sample deme=I]:0.221360):0.160234,[&&PhyloPOMP type=sample deme=I]:0.572431)[&&PhyloPOMP type=branch deme=I]:0.192588)[&&PhyloPOMP type=sample deme=I]:0.033812):0.0913934,(([&&PhyloPOMP type=sample deme=I]:0.102642e-2,(([&&PhyloPOMP type=sample deme=I]:0.100027)[&&PhyloPOMP type=sample deme=I]:0.020000)[&&PhyloPOMP deme=I type=sample]:0.414031):0.161720,(([&&PhyloPOMP deme=I type=sample]:8.22165e-2,[&&PhyloPOMP deme=E type=node]:0.164473):0.015591)[&&PhyloPOMP deme=I]:0.449640):0.179927):0.0297577):0;"
     ];
 
-    @demes SEIRDemes E I
-    g = parse_newick(x,demes=SEIRDemes,t0=0,time=1);
+    @demes SEIR E I
+    using .SEIR: E, I
+    g = parse_newick(x,demes=SEIR,t0=0,time=1);
     z = guide(g,I=>0.5,E=>0.5,(I,E)=>5);
     @test length(g)==length(z)
     @test occursin(r"^<guide:.*>$"s,sprint(show,z))

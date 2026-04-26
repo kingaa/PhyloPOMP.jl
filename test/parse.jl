@@ -12,13 +12,12 @@ using Test
     @demes SEIR E I
     @test_throws r"final time from data \(.+\) exceeds" parse_newick(x,demes=SEIR,t0=5.0,time=6);
     g = parse_newick(x,demes=SEIR,t0=5.0,time=7.0);
-    @test isa(g,Genealogy)
-    @test isa(g,Genealogy{SEIR})
+    @test g isa Genealogy{SEIR.T}
     @test ismissing(g.nodes[3].deme)
     @test sum(map(x->ismissing(x.deme),g.nodes))==20
     @test sum(map(x->!ismissing(x.deme),g.nodes))==65
-    @test sum(map(x->x.deme===I,g.nodes))==52
-    @test sum(map(x->x.deme===E,g.nodes))==13
+    @test sum(map(x->x.deme===SEIR.I,g.nodes))==52
+    @test sum(map(x->x.deme===SEIR.E,g.nodes))==13
     @test length(g.nodes)==85
     @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Sample)==24
     @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Node)==56
