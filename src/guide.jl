@@ -1,13 +1,11 @@
-import Base: eachindex, length, getindex, eachindex
-
-include("fsmarkov.jl")
+import Base: eachindex, length, getindex, eachindex, show
 import .FSMarkov: FSMarkovProc, statdist, forward_action
 
 """
     GuideNode{F,D}
 
 A `GuideNode` contains the information needed to guide a phylodynamic Monte Carlo filter on a particular interval between genealogical events.
-`F` is an `AbstractFloat` type and `D` is the enumeration of the demes.
+`F` is an `AbstractFloat` type and `D` is the enumeration of the demes (see [`@demes`](@ref)).
 
 A `GuideNode` contains:
 - the time interval to which it pertains
@@ -33,20 +31,17 @@ end
     Guide{F,D}
 
 This type holds a "filter-guide" based on a reverse-time finite-state Markov process.
-Construct it with a call to `guide`.
+Construct it with a call to [`guide`](@ref).
 `F` is an `AbstractFloat` type and `D` is the enumeration of the demes.
-It contains the `FSMarkovProc` object encoding the Markov process and a sequence of `GuideNode` objects.
+It contains the [`FSMarkovProc`](@ref) object encoding the Markov process and a sequence of [`GuideNode`](@ref) objects.
 """
 struct Guide{F<:AbstractFloat,D<:Enum}
     process::FSMarkovProc{F,D}
     nodes::Vector{GuideNode{F,D}}
-    Guide(g::Genealogy,args...,) = Guide(Prob,g,args...)
     Guide(
-        F::Type{<:AbstractFloat},
         g::Genealogy{D},
-        args...,
-    ) where {D<:Enum} = begin
-        m = FSMarkovProc(F,args...)
+        m::FSMarkovProc{F,D},
+    ) where {F<:AbstractFloat,D<:Enum} = begin
         probs = zeros(F,length(instances(D)),g.nsample)
         nodes = Vector{GuideNode{F,D}}(undef,length(g))
         tend::Time = g.time
@@ -81,11 +76,11 @@ struct Guide{F<:AbstractFloat,D<:Enum}
 end
 
 """
-    guide(g, ...)
+    guide(g, m)
 
-- `g` is a `Genealogy`.
-- `...`: additional arguments specify the guiding finite-state Markov process.
-  In particular, these are passed to `FSMarkov.fsmarkov()`.
+- `g` is a [`Genealogy`](@ref).
+- `m`: is an [`FSMarkovProc`](@ref) encoding the guiding finite-state Markov process.
+  Construct it with a call to [`fsmarkov`](@ref).
 """
 guide(args...) = Guide(args...)
 
@@ -148,3 +143,37 @@ Base.getindex(g::Guide, i::Integer) = g.nodes[i]
 Base.getindex(g::Guide, i::AbstractVector{<:Integer}) = g.nodes[i]
 Base.length(g::Guide) = length(g.nodes)
 Base.eachindex(g::Guide) = eachindex(g.nodes)
+
+Base.show(
+    io::IO,
+    g::Union{Guide,GuideNode};
+    kwargs...,
+) = begin
+    print(io,pretty_string(g;kwargs...))
+end
+
+pretty_string(g::Guide; sigdigits = 4) = begin
+    nodes = map(eachindex(g)) do i
+        "  $i: "*pretty_string(g[i],sigdigits=sigdigits)
+    end
+    "<guide:\n" * join(nodes,'\n') * ">"
+end
+
+pretty_string(n::GuideNode; sigdigits = 4) = begin
+    t1 = round(n.tbeg,sigdigits=sigdigits)
+    t2 = round(n.tend,sigdigits=sigdigits)
+    chillins = map(eachindex(n.chillins)) do i
+        ell = n.chillins[i]
+        prob = round.(n.present[:,i],sigdigits=sigdigits)
+        "$ell=>$prob"
+    end
+    targs = map(eachindex(n.alllins)) do i
+        ell = n.alllins[i]
+        prob = round.(n.target[:,i],sigdigits=sigdigits)
+        "$ell=>$prob"
+    end
+    "<$(lowercase(String(Symbol(n.type)))): t ∈ [$t1,$t2] " *
+        "parlin=$(n.parlin)" *
+        " children:{" * join(chillins,',') *
+        "} targets:{" * join(targs,',') * "}>"
+end

@@ -11,6 +11,7 @@ using Test
     @test sum(statdist(p))==1
     @test sum(abs.(generator(p)))==0
     @test all(sum(generator(p),dims=1).==0)
+    @test occursin(r"with generator",sprint(show,p))
 
     @test_throws UndefVarError fsmarkov()
     @test_throws r"unspecified stationary probability" fsmarkov(I1=>1,I3=>1)

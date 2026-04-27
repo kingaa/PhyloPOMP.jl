@@ -2,9 +2,12 @@
     parse_newick(input; demes, t0, time)
 
 Parse the Newick-format string (or vector of strings) `input`.
+It is possible to include metadata tags of format `[&&PhyloPOMP ...]` in the label-strings.
+All tips are assumed to be samples.
+Zero-length branches are dropped.
 
 Arguments:
-- `demes` enumerates the demes (see [`@demes`](@ref)).
+- `demes` is a `Module` enumerating the demes (see [`@demes`](@ref)).
 - `t0` is the assumed root-time.
 - `time` is the (optional) final-time.
 """

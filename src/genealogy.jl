@@ -1,7 +1,12 @@
-import Base: eachindex, length, getindex, eachindex
+import Base: eachindex, length, getindex, eachindex, show
 
-## FIXME: inclusion of Root in NodeType introduces some inelegant redundancy
+"""
+    NodeType
+
+Genealogical nodes (see [`GenealNode`](@ref)) can be one of three types: Root, Node, or Sample.
+"""
 @enum NodeType Root Sample Node
+## FIXME: inclusion of Root in NodeType introduces some inelegant redundancy
 
 """
     GenealNode{D}
@@ -112,4 +117,43 @@ trace_lineages!(G::Genealogy) = begin
         end
     end
     nothing
+end
+
+Base.show(
+    io::IO,
+    g::Union{Genealogy,GenealNode};
+    kwargs...,
+) = begin
+    print(io,pretty_string(g;kwargs...))
+end
+
+pretty_string(g::Genealogy; sigdigits=4) = begin
+    "<genealogy on ["*
+        "$(round(g.t0,sigdigits=sigdigits)),"*
+        "$(round(g.time,sigdigits=sigdigits))]:\n" *
+        join(
+            map(eachindex(g)) do i
+                "  $i: " * pretty_string(g[i],sigdigits=sigdigits)
+            end,
+            '\n'
+        ) * ">"
+end
+
+pretty_string(p::GenealNode; sigdigits = 4) = begin
+    parent_string = if isnothing(p.parent)
+        ""
+    else
+        "parent=$(p.parent) "
+    end
+    children_string = if isempty(p.children)
+        ""
+    else
+        join(map(i->"$i",p.children),',')
+    end
+    "<$(lowercase(String(Symbol(p.type)))) " *
+        "lineage=$(p.lineage) " *
+        "deme=$(p.deme) " *
+        "time=$(round(p.slate,sigdigits=sigdigits)) " *
+        parent_string *
+        "children=[$children_string]" * ">"
 end

@@ -1,7 +1,8 @@
 """
     newick(g; extended = true, sigdigits = 6)
 
-Generates a Newick-format description of the `Genealogy` `g`.
+Generates a `String` containing a Newick-format description of the [`Genealogy`](@ref) `g`.
+If `extended = true` (the default), then the **PhyloPOMP**-flavored Newick extension is used (i.e., metadata tags are included).
 """
 newick(
     g::Genealogy;

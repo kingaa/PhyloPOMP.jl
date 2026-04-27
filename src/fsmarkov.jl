@@ -7,6 +7,7 @@ module FSMarkov
 
 export fsmarkov, FSMarkovProc, forward_action, statdist, generator
 
+import Base: show
 import LinearAlgebra: Diagonal, Symmetric, Transpose, eigen
 import ..PhyloPOMP: Prob
 
@@ -41,7 +42,7 @@ end
 """
     fsmarkov(...)
 
-Constructs a finite-state Markov process in continuous time, represented as an object of type `FSMarkovProc`.
+Constructs a finite-state Markov process in continuous time, represented as an object of type [`FSMarkovProc`](@ref).
 Each argument is of the form `D => prob` or
 `(D1,D2) => cond`, where `D`, `D1`, `D2` are demes, `prob` is a probability, and `cond` is a conductance.
 Specifically,
@@ -116,6 +117,15 @@ make_generator(
         Q[i,i] = -sum(Q[:,i])
     end
     pi, Q
+end
+
+Base.show(
+    io::IO,m::FSMarkovProc;kwargs...,
+) = print(io,pretty_string(m;kwargs...))
+
+pretty_string(m::FSMarkovProc,) = begin
+    Q = generator(m)
+    "<FSMarkovProc with generator = $Q>"
 end
 
 end

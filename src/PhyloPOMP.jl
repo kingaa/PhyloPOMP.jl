@@ -20,9 +20,10 @@ include("parse.jl")
 export newick
 include("newick.jl")
 
+include("fsmarkov.jl")
+@reexport using .FSMarkov: fsmarkov
+
 export guide, relhaz
 include("guide.jl")
-
-include("print.jl")
 
 end # module PhyloPOMP
