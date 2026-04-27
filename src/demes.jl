@@ -1,4 +1,4 @@
-using Reexport
+using Reexport: @reexport
 @reexport using EnumX: @enumx
 
 """

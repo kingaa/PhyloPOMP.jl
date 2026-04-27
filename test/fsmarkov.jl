@@ -1,5 +1,4 @@
 using PhyloPOMP
-using PhyloPOMP.FSMarkov
 using Test
 
 @info "testing finite-state Markov processes"

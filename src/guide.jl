@@ -1,5 +1,4 @@
 import Base: eachindex, length, getindex, eachindex, show
-import .FSMarkov: FSMarkovProc, statdist, forward_action
 
 """
     GuideNode{F,D}

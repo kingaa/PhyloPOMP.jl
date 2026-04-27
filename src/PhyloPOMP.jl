@@ -1,7 +1,13 @@
+"""
+    PhyloPOMP
+
+Phylodynamic inference based on POMP models (partially observed Markov processes).
+
+Documentation for **PhyloPOMP.jl** v$(pkgversion(@__MODULE__)).
+"""
 module PhyloPOMP
 
 import PartiallyObservedMarkovProcesses as POMP
-using Reexport: @reexport
 
 const Name = UInt64
 const Size = UInt64
@@ -20,8 +26,8 @@ include("parse.jl")
 export newick
 include("newick.jl")
 
+export fsmarkov, generator, forward_action, statdist
 include("fsmarkov.jl")
-@reexport using .FSMarkov: fsmarkov
 
 export guide, relhaz
 include("guide.jl")

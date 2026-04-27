@@ -1,15 +1,5 @@
-"""
-    FSMarkov
-
-Module implementing finite-state Markov processes for use in filter guides.
-"""
-module FSMarkov
-
-export fsmarkov, FSMarkovProc, forward_action, statdist, generator
-
 import Base: show
 import LinearAlgebra: Diagonal, Symmetric, Transpose, eigen
-import ..PhyloPOMP: Prob
 
 """
     FSMarkovProc
@@ -126,6 +116,4 @@ Base.show(
 pretty_string(m::FSMarkovProc,) = begin
     Q = generator(m)
     "<FSMarkovProc with generator = $Q>"
-end
-
 end
