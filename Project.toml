@@ -1,6 +1,6 @@
 name = "PhyloPOMP"
 uuid = "d3093253-1426-44ff-8fa8-1ab5fe440962"
-version = "0.0.6-2"
+version = "0.0.6-3"
 authors = ["Aaron A. King <kingaa@umich.edu>"]
 
 [deps]
@@ -15,3 +15,9 @@ LinearAlgebra = "1.11"
 PartiallyObservedMarkovProcesses = "0.5"
 Reexport = "1.2.2"
 julia = "1.12"
+
+[extras]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
+LocalCoverage = "5f6e1e16-694c-5876-87ef-16b5274f298e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

@@ -1,6 +1,5 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-LatexSVG = "b81a8e73-d03d-4f31-826c-30040db55cb2"
 PhyloPOMP = "d3093253-1426-44ff-8fa8-1ab5fe440962"
 
 [sources]
