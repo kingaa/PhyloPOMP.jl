@@ -1,6 +1,3 @@
-using Reexport: @reexport
-@reexport using EnumX: @enumx
-
 """
     @demes Name deme1 deme2 ...
 

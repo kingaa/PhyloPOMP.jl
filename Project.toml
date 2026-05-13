@@ -1,6 +1,6 @@
 name = "PhyloPOMP"
 uuid = "d3093253-1426-44ff-8fa8-1ab5fe440962"
-version = "0.0.6"
+version = "0.0.7-1"
 authors = ["Aaron A. King <kingaa@umich.edu>"]
 
 [deps]
@@ -20,4 +20,5 @@ julia = "1.12"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
 LocalCoverage = "5f6e1e16-694c-5876-87ef-16b5274f298e"
+Tally = "4a7475b6-8451-4f36-8c0c-176e4d128198"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

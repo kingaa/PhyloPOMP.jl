@@ -14,6 +14,9 @@ const Size = UInt64
 const Time = Float64
 const Prob = Float64
 
+using Reexport: @reexport
+@reexport using EnumX: @enumx
+
 export @demes
 include("demes.jl")
 
@@ -31,5 +34,8 @@ include("fsmarkov.jl")
 
 export guide, relhaz
 include("guide.jl")
+
+export @marks, rcateg
+include("rcateg.jl")
 
 end # module PhyloPOMP

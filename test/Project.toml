@@ -1,6 +1,8 @@
 [deps]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 PhyloPOMP = "d3093253-1426-44ff-8fa8-1ab5fe440962"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Tally = "4a7475b6-8451-4f36-8c0c-176e4d128198"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]
 PhyloPOMP = {path = ".."}

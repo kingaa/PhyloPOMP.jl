@@ -7,5 +7,6 @@ using Test
     include("newick.jl")
     include("fsmarkov.jl")
     include("guide.jl")
+    include("rcateg.jl")
 
 end
