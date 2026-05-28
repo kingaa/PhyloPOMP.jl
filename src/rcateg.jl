@@ -9,11 +9,11 @@ macro marks(name, first, rest...)
 end
 
 rcateg(
-    p::AbstractVector{<:AbstractFloat},
+    p::AbstractVector{<:Real},
 ) = begin
     s = zero(Float64)
     for i ∈ eachindex(p)
-        @assert p[i]>=0 "negative p detected"
+        @assert p[i]>=0 "invalid p[$i]=$(p[i]) detected"
         s += p[i]
     end
     r = s*rand()
@@ -26,7 +26,7 @@ rcateg(
 end
 
 rcateg(
-    p::AbstractVector{<:AbstractFloat},
+    p::AbstractVector{<:Real},
     types::Module,
 ) = begin
     k,s = rcateg(p)

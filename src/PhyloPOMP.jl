@@ -20,7 +20,7 @@ using Reexport: @reexport
 export @demes
 include("demes.jl")
 
-export GenealNode, Genealogy
+export GenealNode, Genealogy, times, timezero
 include("genealogy.jl")
 
 export parse_newick
@@ -37,5 +37,8 @@ include("guide.jl")
 
 export @marks, rcateg
 include("rcateg.jl")
+
+export indic
+indic(P::Bool) = Int(P)
 
 end # module PhyloPOMP
