@@ -3,7 +3,7 @@ using Tally
 using Random: seed!
 using Test
 
-@info "testing random draw from categorical distribution"
+@info h1("testing random draw from categorical distribution")
 @testset verbose=true "rcateg tests" begin
 
     seed!(263260083)

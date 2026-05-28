@@ -1,7 +1,7 @@
 using PhyloPOMP
 using Test
 
-@info "testing guides"
+@info h1("testing guides")
 @testset verbose=true "filter guides" begin
 
     x = [

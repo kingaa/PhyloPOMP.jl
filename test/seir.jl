@@ -1,15 +1,14 @@
 using PhyloPOMP
 using PartiallyObservedMarkovProcesses
 import PartiallyObservedMarkovProcesses as POMP
-using Random
 using Test
-using BenchmarkTools
 
 @info h1("SEIR model tests")
 
 @testset verbose=true "SEIR model" begin
 
     g = parse_newick(readlines("seir1.nwk"),time=50.0)
+    @test g isa Genealogy{PhyloPOMP.Unstructured.T}
 
     seir_singular(
         geneal,node;
@@ -18,12 +17,11 @@ using BenchmarkTools
         n = geneal[node]
         if n.type==PhyloPOMP.Root
             if E-length(linE)+I-length(linI) > 0
-                k,s = rcateg([E-length(linE),I-length(linI)])
+                k,_,p = rcateg([E-length(linE),I-length(linI)],true)
+                ll -= log(p)
                 if k==1
-                    ll -= log((E-length(linE))/s)
                     push!(linE,n.lineage)
                 else
-                    ll -= log((I-length(linI))/s)
                     push!(linI,n.lineage)
                 end
             else
@@ -57,15 +55,14 @@ using BenchmarkTools
             @assert length(n.children)==2 "impossible: $(length(n.children)) ≠ 2 at node $(n.name), t=$(n.time)"
             ll += log(β*S*I/pop)
             delete!(linI,n.lineage)
-            k,_ = rcateg([1,1])
+            k,_,p = rcateg([1,1],true)
+            ll -= log(p)
             if k==1
                 push!(linE,geneal[n.children[1]].lineage)
                 push!(linI,geneal[n.children[2]].lineage)
-                ll -= log(0.5)
             else
                 push!(linI,geneal[n.children[1]].lineage)
                 push!(linE,geneal[n.children[2]].lineage)
-                ll -= log(0.5)
             end
             S -= 1; E += 1;
             ll -= log(E*I)
@@ -186,7 +183,6 @@ using BenchmarkTools
                     node,ll,linE,linI,geneal,
                     args...,
                     )
-                    n = geneal[node]
                     linE = copy(linE)
                     linI = copy(linI)
                     ll = zero(Float64)
@@ -217,6 +213,9 @@ using BenchmarkTools
     end
 
     p = seir(g)
-    @time pfilter(p,Np=100)
+    @test p isa POMP.PompObject
+    @time pf = pfilter(p,Np=100)
+    @test isfinite(pf.logLik)
+    @test pf isa POMP.PfilterdPompObject
 
 end
