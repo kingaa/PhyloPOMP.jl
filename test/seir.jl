@@ -1,5 +1,4 @@
 using PhyloPOMP
-using PartiallyObservedMarkovProcesses
 import PartiallyObservedMarkovProcesses as POMP
 using Test
 
