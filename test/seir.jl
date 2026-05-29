@@ -187,14 +187,6 @@ seir(
                 linI = copy(linI)
                 ll = zero(Float64)
                 @assert (I ≥ length(linI) && E ≥ length(linE))
-                if E < length(linE)
-                    ll += Float64(-Inf)
-                    E = length(linE)
-                end
-                if I < length(linI)
-                    ll += Float64(-Inf)
-                    I = length(linI)
-                end
                 S,E,I,linE,linI,ll = seir_singular(
                     geneal,node;
                     S=S,E=E,I=I,linE=linE,linI=linI,ll=ll,args...,
