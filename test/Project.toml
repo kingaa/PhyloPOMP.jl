@@ -1,4 +1,5 @@
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Crayons = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 PartiallyObservedMarkovProcesses = "32433216-4d85-4b2d-94ed-a614743ba12b"
 PhyloPOMP = "d3093253-1426-44ff-8fa8-1ab5fe440962"
