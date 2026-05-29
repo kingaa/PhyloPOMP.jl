@@ -1,4 +1,5 @@
 import Base: eachindex, length, getindex, eachindex, show
+import PartiallyObservedMarkovProcesses: times, timezero
 
 """
     NodeType
@@ -59,7 +60,8 @@ roots(g::Genealogy) = findall(i->(g[i].type==Root),eachindex(g))
 tips(g::Genealogy) = findall(i->isempty(g[i].children),eachindex(g))
 samples(g::Genealogy) = findall(i->(g[i].type==Sample),eachindex(g))
 nodes(g::Genealogy) = findall(i->(g[i].type==Node),eachindex(g))
-
+timezero(g::Genealogy) = g.t0
+times(g::Genealogy) = [map(n->n.slate,g.nodes[2:end])...,g.time]
 nsample(g::Genealogy) = g.nsample
 
 """

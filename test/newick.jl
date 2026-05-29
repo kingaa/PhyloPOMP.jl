@@ -1,7 +1,7 @@
 using PhyloPOMP
 using Test
 
-@info "testing Newick formatter"
+@info h1("testing Newick formatter")
 @testset verbose=true "Newick formatter" begin
 
     x = [

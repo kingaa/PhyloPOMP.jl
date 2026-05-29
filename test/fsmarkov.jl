@@ -1,7 +1,7 @@
 using PhyloPOMP
 using Test
 
-@info "testing finite-state Markov processes"
+@info h1("testing finite-state Markov processes")
 @testset verbose=true "finite-state Markov" begin
 
     @demes SI3R I1 I2 I3

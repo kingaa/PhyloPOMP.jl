@@ -7,8 +7,6 @@ Documentation for **PhyloPOMP.jl** v$(pkgversion(@__MODULE__)).
 """
 module PhyloPOMP
 
-import PartiallyObservedMarkovProcesses as POMP
-
 const Name = UInt64
 const Size = UInt64
 const Time = Float64
@@ -17,10 +15,13 @@ const Prob = Float64
 using Reexport: @reexport
 @reexport using EnumX: @enumx
 
+import PartiallyObservedMarkovProcesses as POMP
+@reexport using PartiallyObservedMarkovProcesses
+
 export @demes
 include("demes.jl")
 
-export GenealNode, Genealogy
+export GenealNode, Genealogy, times, timezero
 include("genealogy.jl")
 
 export parse_newick
@@ -37,5 +38,8 @@ include("guide.jl")
 
 export @marks, rcateg
 include("rcateg.jl")
+
+export indic
+indic(P::Bool) = Int(P)
 
 end # module PhyloPOMP
