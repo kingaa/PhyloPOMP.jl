@@ -42,7 +42,7 @@ include("rcateg.jl")
 export @indicator
 include("indicator.jl")
 
-export Coloring
+export Coloring, ell
 include("coloring.jl")
 
 end # module PhyloPOMP

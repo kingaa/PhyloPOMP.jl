@@ -14,64 +14,72 @@ seir_singular(
     _...,
 ) = begin
     n = geneal[node]
-    @assert I ≥ length(cols[Infec]) && E ≥ length(cols[Expos])
+    (ellE,ellI) = ell(cols)
+    @assert I ≥ ellI && E ≥ ellE
     if n.type==PhyloPOMP.Root
-        if E-length(cols[Expos])+I-length(cols[Infec]) > 0
-            k, _, p = rcateg([E-length(cols[Expos]), I-length(cols[Infec])], true)
-            ll -= log(p)
-            if k==1
-                push!(cols[Expos], n.lineage)
+        if length(n.children) == 1
+            if E-ellE+I-ellI > 0
+                k, _, p = rcateg([E-ellE, I-ellI], true)
+                ll -= log(p)
+                if k==1
+                    push!(cols[Expos], n.lineage)
+                else
+                    push!(cols[Infec], n.lineage)
+                end
             else
+                ll += Float64(-Inf)
                 push!(cols[Infec], n.lineage)
+                I += 1
+            end
+        else
+            error("incompatible $(length(n.children)) > 1 at root $(n.name), t=$(n.time)")
+        end
+    elseif n.type==PhyloPOMP.Sample
+        if n.lineage ∈ cols[Infec]
+            ll += log(ψ*I)
+            delete!(cols[Infec], n.lineage)
+            if length(n.children) == 0
+                ll += log(1-ell(cols,Infec)/I)
+            elseif length(n.children) == 1
+                push!(cols[Infec], geneal[n.children[1]].lineage)
+                ll -= log(I)
+            else
+                error("incompatible $(length(n.children)) > 1 at sample $(n.name), t=$(n.time)")
             end
         else
             ll += Float64(-Inf)
-            push!(cols[Infec], n.lineage)
-            I += 1
-        end
-    elseif n.type==PhyloPOMP.Sample
-        if n.lineage ∉ cols[Infec]
-            ll += Float64(-Inf)
             delete!(cols[Expos], n.lineage)
             push!(cols[Infec], n.lineage)
             E -= 1
             I += 1
-        end
-        ll += log(ψ*I)
-        delete!(cols[Infec], n.lineage)
-        if length(n.children) > 1
-            error("incompatible $(length(n.children)) > 1 at sample $(n.name), t=$(n.time)")
-        elseif length(n.children) == 1
-            push!(cols[Infec], geneal[n.children[1]].lineage)
-            ll -= log(I)
-        else
-            ll += log(1-length(cols[Infec])/I)
         end
     elseif n.type==PhyloPOMP.Node
-        if n.lineage ∉ cols[Infec]
+        if n.lineage ∈ cols[Infec]
+            if length(n.children) == 2
+                ll += log(β*S*I/pop)
+                delete!(cols[Infec], n.lineage)
+                k, _, p = rcateg([1, 1], true)
+                ll -= log(p)
+                if k==1
+                    push!(cols[Expos], geneal[n.children[1]].lineage)
+                    push!(cols[Infec], geneal[n.children[2]].lineage)
+                else
+                    push!(cols[Infec], geneal[n.children[1]].lineage)
+                    push!(cols[Expos], geneal[n.children[2]].lineage)
+                end
+                S -= 1
+                E += 1
+                ll -= log(E*I)
+            else
+                error("incompatible $(length(n.children)) ≠ 2 at node $(n.name), t=$(n.time)")
+            end
+        else
             ll += Float64(-Inf)
             delete!(cols[Expos], n.lineage)
             push!(cols[Infec], n.lineage)
             E -= 1
             I += 1
         end
-        if length(n.children) ≠ 2
-            "incompatible $(length(n.children)) ≠ 2 at node $(n.name), t=$(n.time)"
-        end
-        ll += log(β*S*I/pop)
-        delete!(cols[Infec], n.lineage)
-        k, _, p = rcateg([1, 1], true)
-        ll -= log(p)
-        if k==1
-            push!(cols[Expos], geneal[n.children[1]].lineage)
-            push!(cols[Infec], geneal[n.children[2]].lineage)
-        else
-            push!(cols[Infec], geneal[n.children[1]].lineage)
-            push!(cols[Expos], geneal[n.children[2]].lineage)
-        end
-        S -= 1;
-        E += 1;
-        ll -= log(E*I)
     else
         @assert false "impossible node type"
     end
@@ -84,8 +92,7 @@ event_rates!(
     β, σ, γ, ω, ψ, pop,
     _...,
 ) = begin
-    ellE = length(cols[Expos])
-    ellI = length(cols[Infec])
+    (ellE,ellI) = ell(cols)
     @assert I ≥ ellI && E ≥ ellE
     alpha[2] = alpha[1] = β*S*I/pop
     alpha[4] = alpha[3] = σ*E
@@ -108,8 +115,7 @@ seir_regular(
 ) = begin
     alpha = similar(Vector{Float64}, 6)
     pi = similar(Vector{Float64}, 6)
-    ellE = length(cols[Expos])
-    ellI = length(cols[Infec])
+    (ellE,ellI) = ell(cols)
     @assert I ≥ ellI && E ≥ ellE
     tf = t+dt
     if t < tf
@@ -131,8 +137,7 @@ seir_regular(
                 b = rand(cols[Infec])
                 delete!(cols[Infec], b)
                 push!(cols[Expos], b)
-                ellE += 1
-                ellI -= 1
+                ellI = ell(cols,Infec)
                 S -= 1
                 E += 1
                 ll += log(1-ellI/I)-log(E)
@@ -145,8 +150,6 @@ seir_regular(
                 b = rand(cols[Expos])
                 delete!(cols[Expos], b)
                 push!(cols[Infec], b)
-                ellE -= 1
-                ellI += 1
                 E -= 1
                 I += 1
                 ll -= log(I)
@@ -159,8 +162,7 @@ seir_regular(
             else
                 @assert false "impossible error!"
             end
-            ellE = length(cols[Expos])
-            ellI = length(cols[Infec])
+            (ellE,ellI) = ell(cols)
             @assert I ≥ ellI && E ≥ ellE
             t += step
             penalty = event_rates!(
@@ -213,7 +215,7 @@ seir(
                 S, E, I, R,
                 args...,
                 )
-                cols = deepcopy(cols)
+                cols = copy(cols)
                 ll = zero(Float64)
                 ll, cols, S, E, I, R = seir_singular(
                     geneal, node, ll, cols;
