@@ -5,146 +5,177 @@ using BenchmarkTools
 
 @info h1("SEIR model tests")
 
+@demes SEIR Expos Infec
+using .SEIR: Expos, Infec
+
 seir_singular(
-    geneal,node;
-    S,E,I,pop,β,ψ,linE,linI,ll,_...,
+    geneal, node, ll, cols;
+    S, E, I, R, pop, β, ψ,
+    _...,
 ) = begin
     n = geneal[node]
+    @assert I ≥ length(cols[Infec]) && E ≥ length(cols[Expos])
     if n.type==PhyloPOMP.Root
-        if E-length(linE)+I-length(linI) > 0
-            k,_,p = rcateg([E-length(linE),I-length(linI)],true)
+        if E-length(cols[Expos])+I-length(cols[Infec]) > 0
+            k, _, p = rcateg([E-length(cols[Expos]), I-length(cols[Infec])], true)
             ll -= log(p)
             if k==1
-                push!(linE,n.lineage)
+                push!(cols[Expos], n.lineage)
             else
-                push!(linI,n.lineage)
+                push!(cols[Infec], n.lineage)
             end
         else
             ll += Float64(-Inf)
-            push!(linI,n.lineage)
+            push!(cols[Infec], n.lineage)
             I += 1
         end
     elseif n.type==PhyloPOMP.Sample
-        if n.lineage ∉ linI
+        if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
-            delete!(linE,n.lineage)
-            push!(linI,n.lineage)
-            E -= 1; I += 1;
+            delete!(cols[Expos], n.lineage)
+            push!(cols[Infec], n.lineage)
+            E -= 1
+            I += 1
         end
         ll += log(ψ*I)
-        delete!(linI,n.lineage)
+        delete!(cols[Infec], n.lineage)
         if length(n.children) > 1
             error("incompatible $(length(n.children)) > 1 at sample $(n.name), t=$(n.time)")
         elseif length(n.children) == 1
-            push!(linI,geneal[n.children[1]].lineage)
+            push!(cols[Infec], geneal[n.children[1]].lineage)
             ll -= log(I)
         else
-            ll += log(1-length(linI)/I)
+            ll += log(1-length(cols[Infec])/I)
         end
     elseif n.type==PhyloPOMP.Node
-        if n.lineage ∉ linI
+        if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
-            delete!(linE,n.lineage)
-            push!(linI,n.lineage)
-            E -= 1; I += 1;
+            delete!(cols[Expos], n.lineage)
+            push!(cols[Infec], n.lineage)
+            E -= 1
+            I += 1
         end
         if length(n.children) ≠ 2
             "incompatible $(length(n.children)) ≠ 2 at node $(n.name), t=$(n.time)"
         end
         ll += log(β*S*I/pop)
-        delete!(linI,n.lineage)
-        k,_,p = rcateg([1,1],true)
+        delete!(cols[Infec], n.lineage)
+        k, _, p = rcateg([1, 1], true)
         ll -= log(p)
         if k==1
-            push!(linE,geneal[n.children[1]].lineage)
-            push!(linI,geneal[n.children[2]].lineage)
+            push!(cols[Expos], geneal[n.children[1]].lineage)
+            push!(cols[Infec], geneal[n.children[2]].lineage)
         else
-            push!(linI,geneal[n.children[1]].lineage)
-            push!(linE,geneal[n.children[2]].lineage)
+            push!(cols[Infec], geneal[n.children[1]].lineage)
+            push!(cols[Expos], geneal[n.children[2]].lineage)
         end
-        S -= 1; E += 1;
+        S -= 1;
+        E += 1;
         ll -= log(E*I)
+    else
+        @assert false "impossible node type"
     end
-    @assert (I ≥ length(linI) && E ≥ length(linE))
-    (S=S,E=E,I=I,linE=linE,linI=linI,ll=ll)
+    (; ll = ll, cols = cols, S = S, E = E, I = I, R = R)
 end
 
-event_rates(
-    ;β,σ,γ,ω,ψ,pop,S,E,I,R,linE,linI,_...,
+event_rates!(
+    alpha, pi, cols;
+    S, E, I, R,
+    β, σ, γ, ω, ψ, pop,
+    _...,
 ) = begin
-    @assert (I ≥ length(linI) && E ≥ length(linE))
-    alpha = [
-        β*S*I/pop,
-        β*S*I/pop,
-        σ*E,
-        σ*E,
-        γ*I*indic(I > length(linI)),
-        ω*R,
-    ]
-    pi = [
-        (I > 0) ? 1-length(linI)/I : 0,
-        (I > 0) ? length(linI)/I : 0,
-        (E > 0) ? 1-length(linE)/E : 0,
-        (E > 0) ? length(linE)/E : 0,
-        1,
-        1
-    ]
-    penalty = ψ*I + γ*I*indic(I ≤ length(linI))
-    alpha,pi,penalty
+    ellE = length(cols[Expos])
+    ellI = length(cols[Infec])
+    @assert I ≥ ellI && E ≥ ellE
+    alpha[2] = alpha[1] = β*S*I/pop
+    alpha[4] = alpha[3] = σ*E
+    alpha[5] = @indicator(I > ellI, γ*I)
+    alpha[6] = ω*R
+    pi[1] = @indicator(I > 0, 1-ellI/I)
+    pi[2] = @indicator(I > 0, ellI/I)
+    pi[3] = @indicator(E > 0, 1-ellE/E)
+    pi[4] = @indicator(E > 0, ellE/E)
+    pi[6] = pi[5] = 1.0
+    ψ*I + @indicator(I <= ellI, γ*I)
 end
 
 seir_regular(
-    ;t,dt,β,σ,γ,ω,ψ,pop,S,E,I,R,
-    ll,linE,linI,_...,
+    ll, cols;
+    t, dt,
+    S, E, I, R,
+    β, σ, γ, ω, ψ, pop,
+    _...,
 ) = begin
+    alpha = similar(Vector{Float64}, 6)
+    pi = similar(Vector{Float64}, 6)
+    ellE = length(cols[Expos])
+    ellI = length(cols[Infec])
+    @assert I ≥ ellI && E ≥ ellE
     tf = t+dt
     if t < tf
-        alpha,pi,penalty = event_rates(
-            ;β=β,σ=σ,γ=γ,ω=ω,ψ=ψ,pop=pop,
-            S=S,E=E,I=I,R=R,linE=linE,linI=linI,
+        penalty = event_rates!(
+            alpha, pi, cols;
+            S = S, E = E, I = I, R = R,
+            β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
         )
-        @assert (I ≥ length(linI) && E ≥ length(linE))
-        k,s = rcateg(alpha.*pi)
+        k, s = rcateg(alpha .* pi)
         step::PhyloPOMP.Time = -log(rand())/s
         while (t+step < tf)
             ll -= penalty*step+log(pi[k])
             if k==1
-                S -= 1; E += 1;
-                ll += log(1-length(linE)/E)
+                S -= 1
+                E += 1
+                ll += log(1-ellE/E)
             elseif k==2
-                ll += log(length(linI))
-                b = rand(linI); delete!(linI,b); push!(linE,b)
-                S -= 1; E += 1;
-                ll += log(1-length(linI)/I)-log(E)
+                ll += log(ellI)
+                b = rand(cols[Infec])
+                delete!(cols[Infec], b)
+                push!(cols[Expos], b)
+                ellE += 1
+                ellI -= 1
+                S -= 1
+                E += 1
+                ll += log(1-ellI/I)-log(E)
             elseif k==3
-                E -= 1; I += 1;
-                ll += log(1-length(linI)/I)
+                E -= 1
+                I += 1
+                ll += log(1-ellI/I)
             elseif k==4
-                ll += log(length(linE))
-                b = rand(linE); delete!(linE,b); push!(linI,b)
-                E -= 1; I += 1;
+                ll += log(ellE)
+                b = rand(cols[Expos])
+                delete!(cols[Expos], b)
+                push!(cols[Infec], b)
+                ellE -= 1
+                ellI += 1
+                E -= 1
+                I += 1
                 ll -= log(I)
             elseif k==5
-                I -= 1; R += 1;
+                I -= 1
+                R += 1
             elseif k==6
-                R -= 1; S += 1;
+                R -= 1
+                S += 1
             else
                 @assert false "impossible error!"
             end
-            @assert (I ≥ length(linI) && E ≥ length(linE))
+            ellE = length(cols[Expos])
+            ellI = length(cols[Infec])
+            @assert I ≥ ellI && E ≥ ellE
             t += step
-            alpha,pi,penalty = event_rates(
-                ;β=β,σ=σ,γ=γ,ω=ω,ψ=ψ,pop=pop,
-                S=S,E=E,I=I,R=R,linE=linE,linI=linI,
+            penalty = event_rates!(
+                alpha, pi, cols;
+                S = S, E = E, I = I, R = R,
+                β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
             )
-            k,s = rcateg(alpha.*pi)
+            k, s = rcateg(alpha .* pi)
             step = -log(rand())/s
         end
         step = tf - t
-        ll -= penalty*step;
+        ll -= penalty*step
     end
-    @assert (I ≥ length(linI) && E ≥ length(linE))
-    (S=S,E=E,I=I,R=R,linE=linE,linI=linI,ll=ll)
+    @assert I ≥ ellI && E ≥ ellE
+    (; ll = ll, cols = cols, S = S, E = E, I = I, R = R)
 end
 
 seir(
@@ -154,74 +185,77 @@ seir(
     S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
 ) = begin
     pomp(
-        fill((;),length(gen)),
+        fill((;), length(gen)),
         params = (
-            β=Float64(β),σ=Float64(σ),γ=Float64(γ),
-            ω=Float64(ω), ψ=Float64(ψ),
-            pop=Float64(pop),
-            S0=Float64(S0),E0=Float64(E0),
-            I0=Float64(I0),R0=Float64(R0),
+            β = Float64(β), σ = Float64(σ), γ = Float64(γ),
+            ω = Float64(ω), ψ = Float64(ψ),
+            pop = Float64(pop),
+            S0 = Float64(S0), E0 = Float64(E0),
+            I0 = Float64(I0), R0 = Float64(R0),
         ),
         t0 = timezero(gen),
         times = times(gen),
-        rinit = function (;S0,E0,I0,R0,pop,_...,)
+        rinit = function (; S0, E0, I0, R0, pop, _...)
             m = pop/(S0+E0+I0+R0)
             (
-                S=round(Int64,m*Float64(S0)),
-                E=round(Int64,m*Float64(E0)),
-                I=round(Int64,m*Float64(I0)),
-                R=round(Int64,m*Float64(R0)),
-                node=one(PhyloPOMP.Name),
-                ll=zero(Float64),
-                linE=Set{PhyloPOMP.Name}(),
-                linI=Set{PhyloPOMP.Name}(),
+                node = one(PhyloPOMP.Name),
+                ll = zero(Float64),
+                cols = Coloring(SEIR),
+                S = round(Int64, m*Float64(S0)),
+                E = round(Int64, m*Float64(E0)),
+                I = round(Int64, m*Float64(I0)),
+                R = round(Int64, m*Float64(R0)),
             )
         end,
         rprocess = onestep(
-            function(
-                ;S,E,I,R,
-                node,ll,linE,linI,geneal,
+            function (
+                ; node, ll, cols, geneal,
+                S, E, I, R,
                 args...,
                 )
-                linE = copy(linE)
-                linI = copy(linI)
+                cols = deepcopy(cols)
                 ll = zero(Float64)
-                @assert (I ≥ length(linI) && E ≥ length(linE))
-                S,E,I,linE,linI,ll = seir_singular(
-                    geneal,node;
-                    S=S,E=E,I=I,linE=linE,linI=linI,ll=ll,args...,
+                ll, cols, S, E, I, R = seir_singular(
+                    geneal, node, ll, cols;
+                    S = S, E = E, I = I, R = R,
+                    args...,
                 )
-                S,E,I,R,linE,linI,ll = seir_regular(
-                    ;S=S,E=E,I=I,R=R,ll=ll,linE=linE,linI=linI,args...,
+                ll, cols, S, E, I, R = seir_regular(
+                    ll, cols;
+                    S = S, E = E, I = I, R = R,
+                    args...,
                 )
-                (S=S,E=E,I=I,R=R,node=node+1,ll=ll,linE=linE,linI=linI)
-            end
+                (; node = node+1, ll = ll, cols = cols,
+                 S = S, E = E, I = I, R = R)
+            end,
         ),
-        logdmeasure = function (;ll,_...)
+        logdmeasure = function (; ll, _...)
             ll
         end,
-        userdata=(geneal=gen,),
+        userdata = (geneal = gen,),
     )
 end
 
 @testset verbose=true "SEIR model" begin
 
-    g = parse_newick(readlines("seir1.nwk"),time=50.0)
+    g = parse_newick(readlines("seir1.nwk"), time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured.T}
 
     p = seir(g)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")
-    @time sm = simulate(p,nsim=3)
+    sm = simulate(p, nsim = 3)
+    @time sm = simulate(p, nsim = 3)
     @test sm isa Matrix{<:POMP.PompObject}
 
     @info h2("pfilter test")
-    @time pf = pfilter(p,Np=100)
+    pf = pfilter(p, Np = 100)
+    @time pf = pfilter(p, Np = 100)
     @test pf isa POMP.PfilterdPompObject
     @test isfinite(pf.logLik)
 
     @info h2("pfilter benchmark")
-    @btime pfilter($p,Np=100)
+    @btime pfilter($p, Np = 1000)
 
 end

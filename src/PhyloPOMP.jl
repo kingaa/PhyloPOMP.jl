@@ -39,7 +39,10 @@ include("guide.jl")
 export @marks, rcateg
 include("rcateg.jl")
 
-export indic
-indic(P::Bool) = Int(P)
+export @indicator
+include("indicator.jl")
+
+export Coloring
+include("coloring.jl")
 
 end # module PhyloPOMP
