@@ -2,6 +2,8 @@ library(pomp)
 library(phylopomp)
 stopifnot(packageVersion("phylopomp") >= "0.19.1")
 
+set.seed(955710829)
+
 simulate(
   "SEIR",
   Beta=4,gamma=1,sigma=1,omega=1,psi=0.02,time=50,

@@ -1,12 +1,16 @@
+module NaiveSEIRTest
+
+import ..Main: h1, h2
+
+@info h1("SEIR model with naïve proposals")
+
 using PhyloPOMP
 import PartiallyObservedMarkovProcesses as POMP
 using Test
 using BenchmarkTools
 
-@info h1("SEIR model tests")
-
 @demes SEIR Expos Infec
-using .SEIR: Expos, Infec
+using .SEIR: Expos, Infec, T as DemeType
 
 seir_singular(
     geneal, node, ll, cols;
@@ -35,50 +39,48 @@ seir_singular(
             error("incompatible $(length(n.children)) > 1 at root $(n.name), t=$(n.time)")
         end
     elseif n.type==PhyloPOMP.Sample
-        if n.lineage ∈ cols[Infec]
-            ll += log(ψ*I)
-            delete!(cols[Infec], n.lineage)
-            if length(n.children) == 0
-                ll += log(1-ell(cols,Infec)/I)
-            elseif length(n.children) == 1
-                push!(cols[Infec], geneal[n.children[1]].lineage)
-                ll -= log(I)
-            else
-                error("incompatible $(length(n.children)) > 1 at sample $(n.name), t=$(n.time)")
-            end
-        else
+        if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
             delete!(cols[Expos], n.lineage)
             push!(cols[Infec], n.lineage)
             E -= 1
             I += 1
         end
-    elseif n.type==PhyloPOMP.Node
-        if n.lineage ∈ cols[Infec]
-            if length(n.children) == 2
-                ll += log(β*S*I/pop)
-                delete!(cols[Infec], n.lineage)
-                k, _, p = rcateg([1, 1], true)
-                ll -= log(p)
-                if k==1
-                    push!(cols[Expos], geneal[n.children[1]].lineage)
-                    push!(cols[Infec], geneal[n.children[2]].lineage)
-                else
-                    push!(cols[Infec], geneal[n.children[1]].lineage)
-                    push!(cols[Expos], geneal[n.children[2]].lineage)
-                end
-                S -= 1
-                E += 1
-                ll -= log(E*I)
-            else
-                error("incompatible $(length(n.children)) ≠ 2 at node $(n.name), t=$(n.time)")
-            end
+        ll += log(ψ*I)
+        delete!(cols[Infec], n.lineage)
+        if length(n.children) == 0
+            ll += log(1-ell(cols,Infec)/I)
+        elseif length(n.children) == 1
+            push!(cols[Infec], geneal[n.children[1]].lineage)
+            ll -= log(I)
         else
+            error("incompatible $(length(n.children)) > 1 at sample $(n.name), t=$(n.time)")
+        end
+    elseif n.type==PhyloPOMP.Node
+        if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
             delete!(cols[Expos], n.lineage)
             push!(cols[Infec], n.lineage)
             E -= 1
             I += 1
+        end
+        if length(n.children) == 2
+            ll += log(β*S*I/pop)
+            delete!(cols[Infec], n.lineage)
+            k, _, p = rcateg([1, 1], true)
+            ll -= log(p)
+            if k==1
+                push!(cols[Expos], geneal[n.children[1]].lineage)
+                push!(cols[Infec], geneal[n.children[2]].lineage)
+            else
+                push!(cols[Infec], geneal[n.children[1]].lineage)
+                push!(cols[Expos], geneal[n.children[2]].lineage)
+            end
+            S -= 1
+            E += 1
+            ll -= log(E*I)
+        else
+            error("incompatible $(length(n.children)) ≠ 2 at node $(n.name), t=$(n.time)")
         end
     else
         @assert false "impossible node type"
@@ -103,7 +105,7 @@ event_rates!(
     pi[3] = @indicator(E > 0, 1-ellE/E)
     pi[4] = @indicator(E > 0, ellE/E)
     pi[6] = pi[5] = 1.0
-    ψ*I + @indicator(I <= ellI, γ*I)
+    ψ*I + @indicator(I ≤ ellI, γ*I)
 end
 
 seir_regular(
@@ -187,7 +189,6 @@ seir(
     S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
 ) = begin
     pomp(
-        fill((;), length(gen)),
         params = (
             β = Float64(β), σ = Float64(σ), γ = Float64(γ),
             ω = Float64(ω), ψ = Float64(ψ),
@@ -238,7 +239,7 @@ seir(
     )
 end
 
-@testset verbose=true "SEIR model" begin
+@testset verbose=true "SEIR model with naïve proposals" begin
 
     g = parse_newick(readlines("seir1.nwk"), time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured.T}
@@ -259,5 +260,16 @@ end
 
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np = 1000)
+
+    logmeanexp(x) = begin
+        xmax = maximum(x)
+        xmax + log(sum(exp.(x .- xmax))) - log(length(x))
+    end
+
+    using Statistics: std
+    x = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
+    @info "logLik = $(round(logmeanexp(x),digits=2)) ± $(round(std(x),sigdigits=3))"
+
+end
 
 end

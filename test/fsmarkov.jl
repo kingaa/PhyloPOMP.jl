@@ -1,7 +1,12 @@
+module FSMarkovTest
+
+import ..Main: h1, h2
+
+@info h1("testing finite-state Markov processes")
+
 using PhyloPOMP
 using Test
 
-@info h1("testing finite-state Markov processes")
 @testset verbose=true "finite-state Markov" begin
 
     @demes SI3R I1 I2 I3
@@ -32,5 +37,7 @@ using Test
     @test_throws r"negative conductance" fsmarkov(I1=>1,I3=>2,(I1,I2)=>3,I2=>1,(I2,I3)=>-1)
     @test_throws r"double specification of conductance" fsmarkov(I2=>1,I3=>2,(I1,I2)=>3,I1=>1,(I2,I1)=>3)
     @test_throws r"cannot specify conductance of a deme to itself" fsmarkov(I1=>1,I2=>1,I3=>2,(I1,I2)=>3,(I2,I2)=>3)
+
+end
 
 end

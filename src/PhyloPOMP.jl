@@ -33,7 +33,7 @@ include("newick.jl")
 export fsmarkov, generator, forward_action, statdist
 include("fsmarkov.jl")
 
-export guide, relhaz
+export Guide, guide, relhaz
 include("guide.jl")
 
 export @marks, rcateg

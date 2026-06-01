@@ -46,8 +46,8 @@ mutable struct Genealogy{D <: Enum}
     time::Time
     nsample::Size
     nodes::Vector{GenealNode{D}}
-    Genealogy{D}(t0::Real) where {D <: Enum} = begin
-        new{D}(Time(t0),Time(t0),zero(Size),GenealNode{D}[])
+    Genealogy{D}(t0::Real, time::Real = t0) where {D <: Enum} = begin
+        new{D}(Time(t0),Time(time),zero(Size),GenealNode{D}[])
     end
 end
 

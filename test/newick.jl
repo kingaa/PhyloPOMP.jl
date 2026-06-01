@@ -1,7 +1,12 @@
+module NewickTest
+
+import ..Main: h1, h2
+
+@info h1("testing Newick formatter")
+
 using PhyloPOMP
 using Test
 
-@info h1("testing Newick formatter")
 @testset verbose=true "Newick formatter" begin
 
     x = [
@@ -15,6 +20,7 @@ using Test
         "(((([&&PhyloPOMP type=sample deme=I]39:0.011566)[&&PhyloPOMP type=sample deme=I]38:0.111957)[&&PhyloPOMP type=sample deme=I]32:0.089940)[&&PhyloPOMP type=node deme=E]28:0.759231)[&&PhyloPOMP type=root]4:0.000000;"
     ];
 
+    @demes SEIR E I
     g = parse_newick(x,demes=SEIR,t0=0.0);
     n = newick(g);
     @test length(n)==length(x)
@@ -24,5 +30,7 @@ using Test
     @test nn==reverse(nx)
     n = newick(g,extended=false,sigdigits=4);
     @test all(isa.(n,Ref(String)))
+
+end
 
 end
