@@ -1,7 +1,12 @@
+module ParseTest
+
+import ..Main: h1, h2
+
+@info h1("testing Newick parser")
+
 using PhyloPOMP
 using Test
 
-@info h1("testing Newick parser")
 @testset verbose=true "Newick parser" begin
 
     x = [
@@ -69,5 +74,7 @@ using Test
     @test_throws "negative branch length" parse_newick("():-32.5;")
     @test_warn "zero branch-length" parse_newick("():;")
     @test_throws r"cannot parse .* as Float64" parse_newick("():A;")
+
+end
 
 end

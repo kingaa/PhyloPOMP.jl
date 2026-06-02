@@ -1,7 +1,12 @@
+module FilterGuideTest
+
+import ..Main: h1, h2
+
+@info h1("testing filter guides")
+
 using PhyloPOMP
 using Test
 
-@info h1("testing filter guides")
 @testset verbose=true "filter guides" begin
 
     x = [
@@ -22,14 +27,17 @@ using Test
         end
     )
     t = z[7].tend
-    h1 = relhaz(z,t-0.1,E,7)
-    h2 = relhaz(z,t-0.01,E,7)
-    h3 = relhaz(z,t-0.001,E,7)
+    h1 = relhaz(z,t-0.1,7)
+    h2 = relhaz(z,t-0.01,7)
+    h3 = relhaz(z,t-0.001,7)
     @test all(keys(h1).===keys(h2))
-    @test h1[(2,I)]>4.0
-    @test h2[(2,I)]>40.0
-    @test h3[(2,I)]>400.0
-    @test isempty(relhaz(z,0.1,I,length(z)))
-    @test_throws r"cannot evaluate at t" relhaz(z,t+0.1,I,7)
+    @test h1[(E,I)][z[7].linmap[2]]>4.0
+    @test h2[(E,I)][z[7].linmap[2]]>40.0
+    @test h3[(E,I)][z[7].linmap[2]]>400.0
+    @test isempty(relhaz(z,0.1,length(z))[(I,E)])
+    @test isempty(relhaz(z,0.1,length(z))[(E,I)])
+    @test_throws r"cannot evaluate at t" relhaz(z,t+0.1,7)
+
+end
 
 end

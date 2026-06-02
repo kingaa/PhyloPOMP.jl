@@ -22,6 +22,7 @@ struct GuideNode{F<:AbstractFloat,D<:Enum}
     parlin::Name
     chillins::Vector{Name}
     alllins::Vector{Name}
+    linmap::Dict{Name,Name}
     present::Matrix{F}
     target::Matrix{F}
 end
@@ -52,10 +53,11 @@ struct Guide{F<:AbstractFloat,D<:Enum}
             target = probs[:,ells]
             probs[:,ells] = forward_action(m,tend-g[n].slate,probs[:,ells])
             present = probs[:,chillins]
+            linmap = Dict(zip(ells,eachindex(ells)))
             nodes[n] = GuideNode{F,D}(
                 g[n].type,
                 g[n].slate,tend,
-                parlin,chillins,ells,
+                parlin,chillins,ells,linmap,
                 present,target,
             )
             if ismissing(g[n].deme)
@@ -96,20 +98,19 @@ end
     relhaz(g, t, n)
 
 Compute the relative reverse-time hazards associated with filter guide `g` at time `t` relative to the target at guide-node `n`.
+This returns a dictionaries. If `D1` and `D2` are distinct demes, then the value of this dictionary, for key `(D1,D2)`, is the vector of relative hazards of the `D1 ⟶ D2` transition.
 """
 relhaz(
     g::Guide{F,D},
     t::Real,
-    d::D,
     n::Integer,
 ) where {F,D} = begin
     if (t > g[n].tend)
         error("improper `relhaz` call: cannot evaluate at t > $(g[n].tend)")
     end
-    j = Int(d)
     p = forward_action(g.process,g[n].tend-t,g[n].target) ./ statdist(g.process)
-    Dict((g[n].alllins[k],D(i)) => p[i,k]/p[j,k]
-         for k ∈ eachindex(g[n].alllins), i ∈ axes(p,1) if i != j)
+    Dict((D(j),D(i)) => p[i,:]./p[j,:]
+         for j ∈ axes(p,1), i ∈ axes(p,1) if i != j)
 end
 
 assimil!(
@@ -142,6 +143,9 @@ Base.getindex(g::Guide, i::Integer) = g.nodes[i]
 Base.getindex(g::Guide, i::AbstractVector{<:Integer}) = g.nodes[i]
 Base.length(g::Guide) = length(g.nodes)
 Base.eachindex(g::Guide) = eachindex(g.nodes)
+
+timezero(g::Guide) = g.nodes[1].tbeg
+times(g::Guide) = map(n->n.tend,g.nodes)
 
 Base.show(
     io::IO,

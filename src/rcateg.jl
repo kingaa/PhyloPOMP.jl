@@ -8,12 +8,25 @@ macro marks(name, first, rest...)
     esc(:@eval $expr)
 end
 
+"""
+    rcateg(p, prob = false)
+
+If `p` is a vector of weights, `rcateg(p)` returns a draw from the
+categorical distribution on `1:length(p)` with these weights.
+It also returns the sum of the weights.
+
+If `prob=true`, the normalized weight of the selected category is returned as a third value.
+
+It is not necessary for the weights to be normalized:
+this is accomplished internally.
+"""
 rcateg(
-    p::AbstractVector{<:AbstractFloat},
+    p::AbstractVector{<:Real},
+    prob::Bool = false,
 ) = begin
     s = zero(Float64)
     for i ∈ eachindex(p)
-        @assert p[i]>=0 "negative p detected"
+        @assert p[i] ≥ 0 "invalid p[$i]=$(p[i]) detected"
         s += p[i]
     end
     r = s*rand()
@@ -22,13 +35,23 @@ rcateg(
         r -= p[k]
         k += 1
     end
-    k, s
+    if (prob)
+        k, s, p[k]/s
+    else
+        k, s
+    end
 end
 
+"""
+    rcateg(p, e, prob = false)
+
+This call returns a draw from the categorical distribution on the enumeration `e`.  `e` should be an enumeration created by `@enumx`.
+"""
 rcateg(
-    p::AbstractVector{<:AbstractFloat},
+    p::AbstractVector{<:Real},
     types::Module,
+    prob::Bool = false
 ) = begin
-    k,s = rcateg(p)
+    k,s = rcateg(p,prob)
     types.T(k), s
 end
