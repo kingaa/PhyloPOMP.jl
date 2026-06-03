@@ -6,8 +6,8 @@ import PartiallyObservedMarkovProcesses as POMP
 @demes SEIR Expos Infec
 using .SEIR: Expos, Infec, T as DemeType
 
-seir_singular(
-    geneal, node, ll, cols;
+seir_singular!(
+    cols, ll, geneal, node;
     S, E, I, R, pop, β, ψ,
     _...,
 ) = begin
@@ -38,7 +38,7 @@ seir_singular(
         ll += log(ψ*I)
         if length(n.children) == 0
             (ellE,ellI) = chop!(cols,Infec,n.lineage)
-            ll += log(1-ell(cols,Infec)/I)
+            ll += log(1-ellI/I)
         elseif length(n.children) == 1
             (ellE,ellI) = chop!(cols,Infec,n.lineage,Infec,geneal[n.children[1]].lineage)
             ll -= log(I)
@@ -82,7 +82,7 @@ seir_singular(
     else
         @assert false "impossible node type"
     end
-    (; ll = ll, cols = cols, S = S, E = E, I = I, R = R)
+    (; ll = ll, S = S, E = E, I = I, R = R)
 end
 
 event_rates!(
@@ -105,20 +105,20 @@ event_rates!(
     ψ*I + @indicator(I ≤ ellI, γ*I)
 end
 
-seir_regular(
-    ll, cols;
+seir_regular!(
+    cols, ll;
     t, dt,
     S, E, I, R,
     β, σ, γ, ω, ψ, pop,
     _...,
 ) = begin
-    alpha = similar(Vector{Float64}, 6)
-    pi = similar(Vector{Float64}, 6)
-    (ellE,ellI) = ell(cols)
-    @assert I ≥ ellI && E ≥ ellE
     tf = t+dt
     if t < tf
-        penalty = event_rates!(
+        alpha = similar(Vector{Float64}, 6)
+        pi = similar(Vector{Float64}, 6)
+        (ellE,ellI) = ell(cols)
+        @assert I ≥ ellI && E ≥ ellE
+        decay = event_rates!(
             alpha, pi, cols;
             S = S, E = E, I = I, R = R,
             β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
@@ -126,7 +126,7 @@ seir_regular(
         k, s = rcateg(alpha .* pi)
         step::PhyloPOMP.Time = -log(rand())/s
         while (t+step < tf)
-            ll -= penalty*step+log(pi[k])
+            ll -= decay*step+log(pi[k])
             if k==1
                 S -= 1
                 E += 1
@@ -160,7 +160,7 @@ seir_regular(
             end
             @assert I ≥ ellI && E ≥ ellE
             t += step
-            penalty = event_rates!(
+            decay = event_rates!(
                 alpha, pi, cols;
                 S = S, E = E, I = I, R = R,
                 β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
@@ -169,10 +169,10 @@ seir_regular(
             step = -log(rand())/s
         end
         step = tf - t
-        ll -= penalty*step
+        ll -= decay*step
     end
     @assert I ≥ ellI && E ≥ ellE
-    (; ll = ll, cols = cols, S = S, E = E, I = I, R = R)
+    (; ll = ll, S = S, E = E, I = I, R = R)
 end
 
 seir(
@@ -211,13 +211,13 @@ seir(
                 )
                 cols = copy(cols)
                 ll = zero(Float64)
-                ll, cols, S, E, I, R = seir_singular(
-                    geneal, node, ll, cols;
+                ll, S, E, I, R = seir_singular!(
+                    cols, ll, geneal, node;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )
-                ll, cols, S, E, I, R = seir_regular(
-                    ll, cols;
+                ll, S, E, I, R = seir_regular!(
+                    cols, ll;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )

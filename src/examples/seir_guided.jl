@@ -1,21 +1,11 @@
 module GuidedSEIR
 
 using ..PhyloPOMP
-using ..PhyloPOMP: NodeType, Root, Node, Sample, Name, Time, repair!
+using ..PhyloPOMP: Root, Node, Sample, Name, Time
 import PartiallyObservedMarkovProcesses as POMP
 
 @demes SEIR Expos Infec
 using .SEIR: Expos, Infec, T as DemeType
-
-seir_convert(type::NodeType, time::Time, deme::E) where E = begin
-    if type==Root
-        missing
-    elseif type==Node
-        Infec
-    elseif type==Sample
-        Infec
-    end
-end
 
 seir_singular!(
     cols, g, ll;
@@ -123,16 +113,16 @@ seir_regular!(
     β, σ, γ, ω, ψ, pop,
     _...,
 ) = begin
-    alpha = similar(Vector{Float64}, 6)
-    pi = similar(Vector{Float64}, 6)
-    (ellE,ellI) = ell(cols)
-    @assert I ≥ ellI && E ≥ ellE
     n = guide[node]
     t = n.tbeg
     tf = n.tend
-    rh = relhaz(guide,t,node)
     if t < tf
-        penalty = event_rates!(
+        alpha = similar(Vector{Float64}, 6)
+        pi = similar(Vector{Float64}, 6)
+        (ellE,ellI) = ell(cols)
+        @assert I ≥ ellI && E ≥ ellE
+        rh = relhaz(guide,t,node)
+        decay = event_rates!(
             alpha, pi, cols, n, rh;
             S = S, E = E, I = I, R = R,
             β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
@@ -140,7 +130,7 @@ seir_regular!(
         k, s = rcateg(alpha .* pi)
         step::Time = -log(rand())/s
         while (t+step < tf)
-            ll -= penalty*step+log(pi[k])
+            ll -= decay*step+log(pi[k])
             if k==1
                 S -= 1
                 E += 1
@@ -174,7 +164,7 @@ seir_regular!(
             end
             @assert I ≥ ellI && E ≥ ellE
             t += step
-            penalty = event_rates!(
+            decay = event_rates!(
                 alpha, pi, cols, n, rh;
                 S = S, E = E, I = I, R = R,
                 β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
@@ -183,7 +173,7 @@ seir_regular!(
             step = -log(rand())/s
         end
         step = tf - t
-        ll -= penalty*step
+        ll -= decay*step
     end
     @assert I ≥ ellI && E ≥ ellE
     (; ll = ll, S = S, E = E, I = I, R = R)
