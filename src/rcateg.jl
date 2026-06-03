@@ -45,13 +45,13 @@ end
 """
     rcateg(p, e, prob = false)
 
-This call returns a draw from the categorical distribution on the enumeration `e`.  `e` should be an enumeration created by `@enumx`.
+This call returns a draw from the categorical distribution on the enumeration `e`.  `e` should be an enumeration-type created, e.g., by `@demes`.
 """
 rcateg(
     p::AbstractVector{<:Real},
-    types::Module,
-    prob::Bool = false
-) = begin
-    k,s = rcateg(p,prob)
-    types.T(k), s
+    demes::Type{D},
+    prob::Bool = false,
+) where {D <: Enum} = begin
+    k,s... = rcateg(p,prob)
+    demes(k), s...
 end

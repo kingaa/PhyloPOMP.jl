@@ -33,7 +33,7 @@ include("newick.jl")
 export fsmarkov, generator, forward_action, statdist
 include("fsmarkov.jl")
 
-export Guide, guide, relhaz
+export Guide, guide, relhaz, demekron!
 include("guide.jl")
 
 export @marks, rcateg
@@ -42,7 +42,7 @@ include("rcateg.jl")
 export @indicator
 include("indicator.jl")
 
-export Coloring, ell
+export Coloring, ell, swap!, chop!, fork!, plant!
 include("coloring.jl")
 
 end # module PhyloPOMP

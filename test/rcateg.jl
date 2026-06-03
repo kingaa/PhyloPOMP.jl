@@ -17,13 +17,15 @@ using Test
     t=tally(x)
     @test 1.9 < t[2]/t[1] < 2.1
     @test 2.9 < t[3]/t[1] < 3.1
-    
+
     @marks U trans recov wane
-    x = [rcateg([1.0, 2.0, 3.0],U)[1] for _ in 1:10000]
+    using .U: trans, recov, wane, T as UType
+
+    x = [rcateg([1.0, 2.0, 3.0],UType)[1] for _ in 1:10000]
     t = tally(x)
-    @test 1.9 < t[U.recov]/t[U.trans] < 2.1
-    @test 2.9 < t[U.wane]/t[U.trans] < 3.1
-    
+    @test 1.9 < t[recov]/t[trans] < 2.1
+    @test 2.9 < t[wane]/t[trans] < 3.1
+
 end
 
 end
