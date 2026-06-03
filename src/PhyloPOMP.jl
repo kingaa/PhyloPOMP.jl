@@ -45,4 +45,6 @@ include("indicator.jl")
 export Coloring, ell
 include("coloring.jl")
 
+include("examples/Examples.jl")
+
 end # module PhyloPOMP
