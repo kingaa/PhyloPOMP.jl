@@ -39,9 +39,10 @@ struct Guide{F<:AbstractFloat,D<:Enum}
     process::FSMarkovProc{F,D}
     nodes::Vector{GuideNode{F,D}}
     Guide(
-        g::Genealogy{D},
+        g::Genealogy{E},
         m::FSMarkovProc{F,D},
-    ) where {F<:AbstractFloat,D<:Enum} = begin
+        knowledge!::Function = known_deme!,
+    ) where {F<:AbstractFloat,D<:Enum,E<:Enum} = begin
         probs = zeros(F,length(instances(D)),g.nsample)
         nodes = Vector{GuideNode{F,D}}(undef,length(g))
         tend::Time = g.time
@@ -60,19 +61,37 @@ struct Guide{F<:AbstractFloat,D<:Enum}
                 parlin,chillins,ells,linmap,
                 present,target,
             )
-            if ismissing(g[n].deme)
+            known = knowledge!(
+                @view(probs[:,parlin]);
+                deme=g[n].deme,
+                type=g[n].type,
+                time=g[n].slate,
+            )
+            if known
+                @inbounds probs[:,parlin] = probs[:,parlin]./sum(probs[:,parlin])
+            else
                 @inbounds assimil!(
                     @view(probs[:,parlin]),
                     @view(probs[:,chillins]),
                     statdist(m)
                 )
-            else
-                probs[:,parlin] = demekron(F,g[n].deme)
             end
             tend = g[n].slate
             union!(setdiff!(lins,chillins),parlin)
         end
         new{F,D}(m,nodes)
+    end
+end
+
+known_deme!(
+    v::AbstractVector{F};
+    deme, type, time,
+) where F = begin
+    if (ismissing(deme))
+        false
+    else
+        demekron!(v,deme)
+        true
     end
 end
 
@@ -88,17 +107,33 @@ guide(args...) = Guide(args...)
 """
     demekron([F::Type], d)
 
-Kronecker delta for deme `d`.
+Kronecker delta for deme `d`. By default, `F = Float64`.
 """
 demekron(F::Type, d::D,) where {D <: Enum} = begin
     [i == d ? one(F) : zero(F) for i ∈ instances(D)]
+end
+
+demekron(d::D,) where {D <: Enum} = demekron(Float64,d)
+
+"""
+    demekron!(v, d)
+
+Kronecker delta for deme `d`.  Replaces the entries of `v` with zeros in all places except the one corresponding to deme `d`.
+"""
+demekron!(v::AbstractVector{F}, d::D,) where {F,D <: Enum} = begin
+    @assert length(v)==length(instances(D))
+    for k ∈ eachindex(v)
+        v[k] = k == Int(d) ? one(F) : zero(F)
+    end
+    nothing
 end
 
 """
     relhaz(g, t, n)
 
 Compute the relative reverse-time hazards associated with filter guide `g` at time `t` relative to the target at guide-node `n`.
-This returns a dictionaries. If `D1` and `D2` are distinct demes, then the value of this dictionary, for key `(D1,D2)`, is the vector of relative hazards of the `D1 ⟶ D2` transition.
+This returns a dictionaries. If `D1` and `D2` are distinct demes, then the value of this dictionary, for key `(D1,D2)`, is the
+vector of relative hazards of the `D1 ⟶ D2` transition.
 """
 relhaz(
     g::Guide{F,D},

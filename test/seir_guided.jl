@@ -10,7 +10,8 @@ using Test
 using BenchmarkTools
 using Statistics: std
 
-using PhyloPOMP.GuidedSEIR: seir, seir_convert
+using PhyloPOMP: Sample, Node, Root
+using PhyloPOMP.GuidedSEIR: seir
 using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec, T as DemeType
 
 @testset verbose=true "SEIR model with guided proposals" begin
@@ -18,12 +19,28 @@ using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec, T as DemeType
     g1 = parse_newick(readlines("seir1.nwk"), time = 50.0)
     @test g1 isa Genealogy{PhyloPOMP.Unstructured.T}
 
-    g2 = geneal_convert(g1,seir_convert,DemeType)
-    @test g2 isa Genealogy{DemeType}
+    ## This function should return true if the guide probabilities
+    ## will be fixed at this node and false otherwise. If the former,
+    ## it should fill the vector `v` with an appropriate probability
+    ## vector.
+    seir_convert(
+        v; deme, type, time,
+    ) = begin
+        if type==Sample || type==Node
+            demekron!(v,Infec)
+            true
+        else
+            false
+        end
+    end
 
-    g3 = guide(g2,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
+    g2 = guide(
+        g1,
+        fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),
+        seir_convert
+    )
 
-    p = seir(g3)
+    p = seir(g2)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")

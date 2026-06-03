@@ -21,7 +21,7 @@ import PartiallyObservedMarkovProcesses as POMP
 export @demes
 include("demes.jl")
 
-export GenealNode, Genealogy, times, timezero, geneal_convert
+export GenealNode, Genealogy, times, timezero
 include("genealogy.jl")
 
 export parse_newick
@@ -33,7 +33,7 @@ include("newick.jl")
 export fsmarkov, generator, forward_action, statdist
 include("fsmarkov.jl")
 
-export Guide, guide, relhaz
+export Guide, guide, relhaz, demekron!
 include("guide.jl")
 
 export @marks, rcateg
