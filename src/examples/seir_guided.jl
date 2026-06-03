@@ -1,37 +1,24 @@
 module GuidedSEIR
 
-export seir_convert, seir_guided
-
 using ..PhyloPOMP
-using ..PhyloPOMP: Root, Node, Sample, Name, Time, repair!
+using ..PhyloPOMP: NodeType, Root, Node, Sample, Name, Time, repair!
 import PartiallyObservedMarkovProcesses as POMP
 
 @demes SEIR Expos Infec
 using .SEIR: Expos, Infec, T as DemeType
 
-seir_convert(n::GenealNode) = begin
-    if n.type==Root
-        n1 = GenealNode{DemeType}(n.name,n.slate,missing,n.type)
-    elseif n.type==Node
-        n1 = GenealNode{DemeType}(n.name,n.slate,Infec,n.type,n.parent)
-    elseif n.type==Sample
-        n1 = GenealNode{DemeType}(n.name,n.slate,Infec,n.type,n.parent)
+seir_convert(type::NodeType, time::Time, deme::E) where E = begin
+    if type==Root
+        missing
+    elseif type==Node
+        Infec
+    elseif type==Sample
+        Infec
     end
-    n1.children = copy(n.children)
-    n1
 end
 
-seir_convert(g::Genealogy) = begin
-    h = Genealogy{DemeType}(g.t0,g.time)
-    for n in g.nodes
-        push!(h.nodes,seir_convert(n))
-    end
-    repair!(h)
-    h
-end
-
-seir_singular(
-    g, ll, cols;
+seir_singular!(
+    cols, g, ll;
     S, E, I, R, pop, β, ψ,
     _...,
 ) = begin
@@ -40,69 +27,60 @@ seir_singular(
     if g.type==Root
         if length(g.chillins) == 1
             if E-ellE+I-ellI > 0
-                k, _, p = rcateg([E-ellE, I-ellI], true)
+                i, _, p = rcateg(g.present[:,1].*[E-ellE, I-ellI], DemeType, true)
                 ll -= log(p)
-                if k==1
-                    push!(cols[Expos], g.chillins[1])
-                else
-                    push!(cols[Infec], g.chillins[1])
-                end
+                (ellE,ellI) = plant!(cols,i,g.chillins[1])
             else
                 ll += Float64(-Inf)
-                push!(cols[Infec], g.chillins[1])
+                (ellE,ellI) = plant!(cols,Infec,g.chillins[1])
                 I += 1
             end
         else
-            error("incompatible $(length(g.chillins)) > 1 at root $(g.name), t=$(g.time)")
+            error("too many children ($(length(g.chillins)) > 1) at root $(g.name), t=$(g.time)")
         end
     elseif g.type==Sample
         if g.parlin ∉ cols[Infec]
             ll += Float64(-Inf)
-            delete!(cols[Expos], g.parlin)
-            push!(cols[Infec], g.parlin)
+            (ellE,ellI) = swap!(cols,Expos,Infec,g.parlin)
             E -= 1
             I += 1
         end
         ll += log(ψ*I)
-        delete!(cols[Infec], g.parlin)
         if length(g.chillins) == 0
-            ll += log(1-ell(cols,Infec)/I)
+            (ellE,ellI) = chop!(cols,Infec,g.parlin)
+            ll += log(1-ellI/I)
         elseif length(g.chillins) == 1
-            push!(cols[Infec], g.chillins[1])
+            (ellE,ellI) = chop!(cols,Infec,g.parlin,Infec,g.chillins[1])
             ll -= log(I)
         else
-            error("incompatible $(length(g.chillins)) > 1 at sample $(g.name), t=$(g.time)")
+            error("too many children ($(length(g.chillins)) > 1) at sample $(g.name), t=$(g.time)")
         end
     elseif g.type==Node
         if g.parlin ∉ cols[Infec]
             ll += Float64(-Inf)
-            delete!(cols[Expos], g.parlin)
-            push!(cols[Infec], g.parlin)
+            (ellE,ellI) = swap!(cols,Expos,Infec,g.parlin)
             E -= 1
             I += 1
         end
         if length(g.chillins) == 2
             ll += log(β*S*I/pop)
-            delete!(cols[Infec], g.parlin)
             k, _, p = rcateg([g.present[1,1]*g.present[2,2], g.present[1,2]*g.present[2,1]], true)
             ll -= log(p)
             if k==1
-                push!(cols[Expos], g.chillins[1])
-                push!(cols[Infec], g.chillins[2])
+                (ellE,ellI) = fork!(cols,Infec,Expos,Infec,g.parlin,g.chillins[1],g.chillins[2])
             else
-                push!(cols[Infec], g.chillins[1])
-                push!(cols[Expos], g.chillins[2])
+                (ellE,ellI) = fork!(cols,Infec,Infec,Expos,g.parlin,g.chillins[1],g.chillins[2])
             end
             S -= 1
             E += 1
             ll -= log(E*I)
         else
-            error("incompatible $(length(g.chillins)) ≠ 2 at node $(g.name), t=$(g.time)")
+            error("too many children ($(length(g.chillins)) ≠ 2) at node $(g.name), t=$(g.time)")
         end
     else
         @assert false "impossible node type"
     end
-    (; ll = ll, cols = cols, S = S, E = E, I = I, R = R)
+    (; ll = ll, S = S, E = E, I = I, R = R)
 end
 
 choice1(g, x, cols, rh) = begin
@@ -139,8 +117,8 @@ event_rates!(
     ψ*I + @indicator(I ≤ ellI, γ*I)
 end
 
-seir_regular(
-    guide, node, ll, cols;
+seir_regular!(
+    cols, guide, node, ll;
     S, E, I, R,
     β, σ, γ, ω, ψ, pop,
     _...,
@@ -170,10 +148,7 @@ seir_regular(
             elseif k==2
                 b,p = choice2(n,cols[Infec],rh[(Infec,Expos)])
                 ll -= log(p)
-                @assert b ∈ cols[Infec]
-                delete!(cols[Infec], b)
-                push!(cols[Expos], b)
-                (ellE,ellI) = ell(cols)
+                (ellE,ellI) = swap!(cols,Infec,Expos,b)
                 S -= 1
                 E += 1
                 ll += log(1-ellI/I)-log(E)
@@ -184,10 +159,7 @@ seir_regular(
             elseif k==4
                 b,p = choice2(n,cols[Expos],rh[(Expos,Infec)])
                 ll -= log(p)
-                @assert b ∈ cols[Expos]
-                delete!(cols[Expos], b)
-                push!(cols[Infec], b)
-                (ellE,ellI) = ell(cols)
+                (ellE,ellI) = swap!(cols,Expos,Infec,b)
                 E -= 1
                 I += 1
                 ll -= log(I)
@@ -214,10 +186,10 @@ seir_regular(
         ll -= penalty*step
     end
     @assert I ≥ ellI && E ≥ ellE
-    (; ll = ll, cols = cols, S = S, E = E, I = I, R = R)
+    (; ll = ll, S = S, E = E, I = I, R = R)
 end
 
-seir_guided(
+seir(
     guide::Guide;
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
     pop = 100,
@@ -253,13 +225,13 @@ seir_guided(
                 )
                 cols = copy(cols)
                 ll = zero(Float64)
-                ll, cols, S, E, I, R = seir_singular(
-                    guide[node], ll, cols;
+                ll, S, E, I, R = seir_singular!(
+                    cols, guide[node], ll;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )
-                ll, cols, S, E, I, R = seir_regular(
-                    guide, node, ll, cols;
+                ll, S, E, I, R = seir_regular!(
+                    cols, guide, node, ll;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )

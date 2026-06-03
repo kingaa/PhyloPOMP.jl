@@ -5,12 +5,12 @@ import ..Main: h1, h2
 @info h1("SEIR model with guided proposals")
 
 using PhyloPOMP
-using PhyloPOMP.GuidedSEIR
 import PartiallyObservedMarkovProcesses as POMP
 using Test
 using BenchmarkTools
 using Statistics: std
 
+using PhyloPOMP.GuidedSEIR: seir, seir_convert
 using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec, T as DemeType
 
 @testset verbose=true "SEIR model with guided proposals" begin
@@ -18,12 +18,12 @@ using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec, T as DemeType
     g1 = parse_newick(readlines("seir1.nwk"), time = 50.0)
     @test g1 isa Genealogy{PhyloPOMP.Unstructured.T}
 
-    g2 = seir_convert(g1)
+    g2 = geneal_convert(g1,seir_convert,DemeType)
     @test g2 isa Genealogy{DemeType}
 
     g3 = guide(g2,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
 
-    p = seir_guided(g3)
+    p = seir(g3)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")

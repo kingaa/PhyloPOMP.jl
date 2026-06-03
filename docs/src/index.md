@@ -11,6 +11,10 @@ parse_newick
 newick
 guide
 fsmarkov
+rcateg
+swap!
+chop!
+fork!
 ```
 
 ## Reference

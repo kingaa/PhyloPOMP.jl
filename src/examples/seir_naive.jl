@@ -1,7 +1,5 @@
 module NaiveSEIR
 
-export seir_naive
-
 using ..PhyloPOMP
 import PartiallyObservedMarkovProcesses as POMP
 
@@ -19,64 +17,67 @@ seir_singular(
     if n.type==PhyloPOMP.Root
         if length(n.children) == 1
             if E-ellE+I-ellI > 0
-                k, _, p = rcateg([E-ellE, I-ellI], true)
+                i, _, p = rcateg([E-ellE, I-ellI], DemeType, true)
                 ll -= log(p)
-                if k==1
-                    push!(cols[Expos], n.lineage)
-                else
-                    push!(cols[Infec], n.lineage)
-                end
+                (ellE,ellI) = plant!(cols,i,n.lineage)
             else
                 ll += Float64(-Inf)
-                push!(cols[Infec], n.lineage)
+                (ellE,ellI) = plant!(cols,Infec,n.lineage)
                 I += 1
             end
         else
-            error("incompatible $(length(n.children)) > 1 at root $(n.name), t=$(n.time)")
+            error("too many children ($(length(n.children)) > 1) at root $(n.name), t=$(n.time)")
         end
     elseif n.type==PhyloPOMP.Sample
         if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
-            delete!(cols[Expos], n.lineage)
-            push!(cols[Infec], n.lineage)
+            (ellE,ellI) = swap!(cols,Expos,Infec,n.lineage)
             E -= 1
             I += 1
         end
         ll += log(ψ*I)
-        delete!(cols[Infec], n.lineage)
         if length(n.children) == 0
+            (ellE,ellI) = chop!(cols,Infec,n.lineage)
             ll += log(1-ell(cols,Infec)/I)
         elseif length(n.children) == 1
-            push!(cols[Infec], geneal[n.children[1]].lineage)
+            (ellE,ellI) = chop!(cols,Infec,n.lineage,Infec,geneal[n.children[1]].lineage)
             ll -= log(I)
         else
-            error("incompatible $(length(n.children)) > 1 at sample $(n.name), t=$(n.time)")
+            error("too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)")
         end
     elseif n.type==PhyloPOMP.Node
         if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
-            delete!(cols[Expos], n.lineage)
-            push!(cols[Infec], n.lineage)
+            (ellE,ellI) = swap!(cols,Expos,Infec,n.lineage)
             E -= 1
             I += 1
         end
         if length(n.children) == 2
             ll += log(β*S*I/pop)
-            delete!(cols[Infec], n.lineage)
             k, _, p = rcateg([1, 1], true)
             ll -= log(p)
             if k==1
-                push!(cols[Expos], geneal[n.children[1]].lineage)
-                push!(cols[Infec], geneal[n.children[2]].lineage)
+                (ellE,ellI) = fork!(
+                    cols,
+                    Infec,Expos,Infec,
+                    n.lineage,
+                    geneal[n.children[1]].lineage,
+                    geneal[n.children[2]].lineage,
+                )
             else
-                push!(cols[Infec], geneal[n.children[1]].lineage)
-                push!(cols[Expos], geneal[n.children[2]].lineage)
+                (ellE,ellI) = fork!(
+                    cols,
+                    Infec,Expos,Infec,
+                    n.lineage,
+                    geneal[n.children[2]].lineage,
+                    geneal[n.children[1]].lineage,
+                )
             end
             S -= 1
             E += 1
             ll -= log(E*I)
         else
-            error("incompatible $(length(n.children)) ≠ 2 at node $(n.name), t=$(n.time)")
+            error("too many children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)")
         end
     else
         @assert false "impossible node type"
@@ -133,9 +134,7 @@ seir_regular(
             elseif k==2
                 ll += log(ellI)
                 b = rand(cols[Infec])
-                delete!(cols[Infec], b)
-                push!(cols[Expos], b)
-                ellI = ell(cols,Infec)
+                (ellE,ellI) = swap!(cols,Infec,Expos,b)
                 S -= 1
                 E += 1
                 ll += log(1-ellI/I)-log(E)
@@ -146,8 +145,7 @@ seir_regular(
             elseif k==4
                 ll += log(ellE)
                 b = rand(cols[Expos])
-                delete!(cols[Expos], b)
-                push!(cols[Infec], b)
+                (ellE,ellI) = swap!(cols,Expos,Infec,b)
                 E -= 1
                 I += 1
                 ll -= log(I)
@@ -160,7 +158,6 @@ seir_regular(
             else
                 @assert false "impossible error!"
             end
-            (ellE,ellI) = ell(cols)
             @assert I ≥ ellI && E ≥ ellE
             t += step
             penalty = event_rates!(
@@ -178,7 +175,7 @@ seir_regular(
     (; ll = ll, cols = cols, S = S, E = E, I = I, R = R)
 end
 
-seir_naive(
+seir(
     gen::Genealogy;
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
     pop = 100,

@@ -121,6 +121,28 @@ trace_lineages!(G::Genealogy) = begin
     nothing
 end
 
+
+"""
+    geneal_convert(g, f, D)
+
+Convert the genealogy `g` to a `Genealogy{D}` by applying the function `f` to each of its nodes.  `f` must have signature `f(type, time, deme)`, where `type` will be the node type, `time` its time, and `deme` its deme.  `f` must return a deme. i.e., an instance of `D`, or `missing`.
+"""
+geneal_convert(
+    g::Genealogy,
+    f::Function,
+    D::Type{E},
+) where {E <: Enum} = begin
+    h = Genealogy{D}(g.t0,g.time)
+    for m in g.nodes
+        d = f(m.type,m.slate,m.deme)::Union{D,Missing}
+        n = GenealNode{D}(m.name,m.slate,d,m.type,m.parent)
+        n.children = copy(m.children)
+        push!(h.nodes,n)
+    end
+    repair!(h)
+    h
+end
+
 Base.show(
     io::IO,
     g::Union{Genealogy,GenealNode};
