@@ -30,10 +30,13 @@ include("parse.jl")
 export newick
 include("newick.jl")
 
+export Coloring, ell, swap!, chop!, fork!, plant!
+include("coloring.jl")
+
 export fsmarkov, generator, forward_action, statdist
 include("fsmarkov.jl")
 
-export Guide, guide, relhaz, demekron!
+export Guide, guide, relhaz, demekron!, choose_branch
 include("guide.jl")
 
 export @marks, rcateg
@@ -41,9 +44,6 @@ include("rcateg.jl")
 
 export @indicator
 include("indicator.jl")
-
-export Coloring, ell, swap!, chop!, fork!, plant!
-include("coloring.jl")
 
 include("examples/Examples.jl")
 

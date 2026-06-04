@@ -12,6 +12,7 @@ struct FSMarkovProc{F<:AbstractFloat,D<:Enum}
     eigenvals::Vector{F}
     left_trans::Matrix{F}
     right_trans::Matrix{F}
+    A::Matrix{F}
     FSMarkovProc(
         args::Union{Pair{D,<:Real},Pair{Tuple{D,D},<:Real}}...,
     ) where {D <: Enum} = FSMarkovProc(Prob,args...)
@@ -25,7 +26,10 @@ struct FSMarkovProc{F<:AbstractFloat,D<:Enum}
         di = Diagonal(one(F)./s)
         Lambda,U = eigen(Symmetric(di*Q*d),sortby=-)
         Lambda[1] = zero(F)
-        new{F,D}(pi,Q,Lambda,d*U,Transpose(U)*di)
+        L = d*U
+        R = Transpose(U)*di
+        A = L ./ pi
+        new{F,D}(pi,Q,Lambda,L,R,A)
     end
 end
 
@@ -64,6 +68,19 @@ forward_action(
     end
     d = exp.(m.eigenvals.*F(s))
     m.left_trans*(Diagonal(d)*(m.right_trans*X))
+end
+
+relhaz_action(
+    m::FSMarkovProc{F},
+    s::Real,
+    X::AbstractArray{<:Real,N},
+) where {F,N} = begin
+    n = size(X,1)
+    if n != length(statdist(m))
+        error("size mismatch in 'forward_action'")
+    end
+    d = exp.(m.eigenvals.*F(s))
+    m.A*(Diagonal(d)*X)
 end
 
 make_generator(

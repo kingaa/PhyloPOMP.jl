@@ -27,16 +27,14 @@ using Test
         end
     )
     t = z[7].tend
-    h1 = relhaz(z,t-0.1,7)
-    h2 = relhaz(z,t-0.01,7)
-    h3 = relhaz(z,t-0.001,7)
-    @test all(keys(h1).===keys(h2))
-    @test h1[(E,I)][z[7].linmap[2]]>4.0
-    @test h2[(E,I)][z[7].linmap[2]]>40.0
-    @test h3[(E,I)][z[7].linmap[2]]>400.0
-    @test isempty(relhaz(z,0.1,length(z))[(I,E)])
-    @test isempty(relhaz(z,0.1,length(z))[(E,I)])
-    @test_throws r"cannot evaluate at t" relhaz(z,t+0.1,7)
+    h1 = relhaz(t-0.001,z,7,E,I,1:5)
+    h2 = relhaz(t-0.0001,z,7,E,I,1:5)
+    h3 = relhaz(t-0.00001,z,7,E,I,1:5)
+    @test h1[z[7].linmap[2]]>400.0
+    @test h2[z[7].linmap[2]]>4000.0
+    @test h3[z[7].linmap[2]]>40000.0
+    @test isempty(relhaz(0.5,z,8,I,E,Int[]))
+    @test_throws r"t ∉" relhaz(t+0.1,z,7,E,I,1:5)
 
 end
 

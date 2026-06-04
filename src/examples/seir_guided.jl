@@ -74,37 +74,16 @@ seir_singular!(
     (; ll = ll, S = S, E = E, I = I, R = R)
 end
 
-choice1(g, x, cols, rh) = begin
-    s = sum(rh[g.linmap[i]] for i ∈ cols; init = zero(Prob))
-    v = [x-ell(cols), s]
-    v./sum(v)
-end
-
-choice2(g, cols, rh) = begin
-    lins = map(i->g.linmap[i],collect(cols))
-    k,_,p = rcateg(rh[lins],true)
-    g.alllins[lins[k]], p
-end
-
 event_rates!(
-    alpha, pi, cols, node, rh;
+    alpha, ellI;
     S, E, I, R,
     β, σ, γ, ω, ψ, pop,
     _...,
 ) = begin
-    (ellE,ellI) = ell(cols)
-    @assert I ≥ ellI && E ≥ ellE
-    alpha[2] = alpha[1] = β*S*I/pop
-    alpha[4] = alpha[3] = σ*E
-    alpha[5] = @indicator(I > ellI, γ*I)
-    alpha[6] = ω*R
-    cI = choice1(node,I,cols[Infec],rh[(Infec,Expos)])
-    pi[1] = @indicator(I > 0, cI[1])
-    pi[2] = @indicator(I > 0, cI[2])
-    cE = choice1(node,E,cols[Expos],rh[(Expos,Infec)])
-    pi[3] = @indicator(E > 0, cE[1])
-    pi[4] = @indicator(E > 0, cE[2])
-    pi[6] = pi[5] = 1.0
+    alpha[1] = β*S*I/pop
+    alpha[2] = σ*E
+    alpha[3] = @indicator(I > ellI, γ*I)
+    alpha[4] = ω*R
     ψ*I + @indicator(I ≤ ellI, γ*I)
 end
 
@@ -118,46 +97,44 @@ seir_regular!(
     t = n.tbeg
     tf = n.tend
     if t < tf
-        alpha = similar(Vector{Float64}, 6)
-        pi = similar(Vector{Float64}, 6)
+        alpha = similar(Vector{Float64},4)
         (ellE,ellI) = ell(cols)
         @assert I ≥ ellI && E ≥ ellE
-        rh = relhaz(guide,t,node)
         decay = event_rates!(
-            alpha, pi, cols, n, rh;
+            alpha, ellI;
             S = S, E = E, I = I, R = R,
             β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
         )
-        k, s = rcateg(alpha .* pi)
+        k, s = rcateg(alpha)
         step::Time = -log(rand())/s
         while (t+step < tf)
-            ll -= decay*step+log(pi[k])
+            ll -= decay*step
             if k==1
+                b,p = choose_branch(t,guide,node,I,cols,Infec,Expos)
+                ll -= log(p)
                 S -= 1
                 E += 1
-                ll += log(1-ellE/E)
+                if b == 0
+                    ll += log(1-ellE/E)
+                else
+                    (ellE,ellI) = swap!(cols,Infec,Expos,b)
+                    ll += log(1-ellI/I)-log(E)
+                end
             elseif k==2
-                b,p = choice2(n,cols[Infec],rh[(Infec,Expos)])
+                b,p = choose_branch(t,guide,node,E,cols,Expos,Infec)
                 ll -= log(p)
-                (ellE,ellI) = swap!(cols,Infec,Expos,b)
-                S -= 1
-                E += 1
-                ll += log(1-ellI/I)-log(E)
+                E -= 1
+                I += 1
+                if b == 0
+                    ll += log(1-ellI/I)
+                else
+                    (ellE,ellI) = swap!(cols,Expos,Infec,b)
+                    ll -= log(I)
+                end
             elseif k==3
-                E -= 1
-                I += 1
-                ll += log(1-ellI/I)
-            elseif k==4
-                b,p = choice2(n,cols[Expos],rh[(Expos,Infec)])
-                ll -= log(p)
-                (ellE,ellI) = swap!(cols,Expos,Infec,b)
-                E -= 1
-                I += 1
-                ll -= log(I)
-            elseif k==5
                 I -= 1
                 R += 1
-            elseif k==6
+            elseif k==4
                 R -= 1
                 S += 1
             else
@@ -166,11 +143,11 @@ seir_regular!(
             @assert I ≥ ellI && E ≥ ellE
             t += step
             decay = event_rates!(
-                alpha, pi, cols, n, rh;
+                alpha, ellI;
                 S = S, E = E, I = I, R = R,
                 β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
             )
-            k, s = rcateg(alpha .* pi)
+            k, s = rcateg(alpha)
             step = -log(rand())/s
         end
         step = tf - t

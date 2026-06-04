@@ -25,6 +25,7 @@ struct GuideNode{F<:AbstractFloat,D<:Enum}
     linmap::Dict{Name,Name}
     present::Matrix{F}
     target::Matrix{F}
+    dtarget::Matrix{F} ## FIXME: inelegant to store redundant information
 end
 
 """
@@ -53,6 +54,7 @@ struct Guide{F<:AbstractFloat,D<:Enum}
             parlin = g[n].lineage
             chillins = map(x->g[x].lineage, g[n].children)
             target = probs[:,ells]
+            dtarget = m.right_trans * target
             probs[:,ells] = forward_action(m,tend-g[n].slate,probs[:,ells])
             present = probs[:,chillins]
             linmap = Dict(zip(ells,eachindex(ells)))
@@ -60,7 +62,7 @@ struct Guide{F<:AbstractFloat,D<:Enum}
                 g[n].type,
                 g[n].slate,tend,
                 parlin,chillins,ells,linmap,
-                present,target,
+                present,target,dtarget,
             )
             known = knowledge!(
                 @view(probs[:,parlin]);
@@ -130,23 +132,55 @@ demekron!(v::AbstractVector{F}, d::D,) where {F,D <: Enum} = begin
 end
 
 """
-    relhaz(g, t, n)
+    relhaz(t, g, n, i, j, lins)
 
-Compute the relative reverse-time hazards associated with filter guide `g` at time `t` relative to the target at guide-node `n`.
-This returns a dictionaries. If `D1` and `D2` are distinct demes, then the value of this dictionary, for key `(D1,D2)`, is the
-vector of relative hazards of the `D1 ⟶ D2` transition.
+Compute the relative reverse-time hazards associated with filter guide `g` at time `t` relative
+to the target at guide-node `n`.  Only columns denoted by the indices in `lins` are considered.
+
+This returns a vector of hazards for the `i ⟶ j` transition relative to the hazard at stationarity.
 """
 relhaz(
+    t::Time,
     g::Guide{F,D},
-    t::Real,
     n::Integer,
+    i::D,
+    j::D,
+    lins,
 ) where {F,D} = begin
-    if (t > g[n].tend)
-        error("improper `relhaz` call: cannot evaluate at t > $(g[n].tend)")
+    @assert g[n].tbeg ≤ t < g[n].tend "t ∉ [$(g[n].tbeg),$(g[n].tend))"
+    p = relhaz_action(
+        g.process,
+        g[n].tend-t,
+        @view(g[n].dtarget[:,lins]),
+    )
+    @views p[Int(j),:]./p[Int(i),:]
+end
+
+choose_branch(
+    t::Time,
+    guide::Guide{F,D},
+    node::Integer,
+    n,
+    cols::Coloring{D},
+    i::D, j::D,
+) where {F,D} = begin
+    lins = [guide[node].linmap[k] for k ∈ cols[i]]
+    p = relhaz(t,guide,node,i,j,lins)
+    s1 = F(n-ell(cols,i))
+    s2 = sum(p)
+    s = s1+s2
+    r = s*rand(F)
+    if r > s1
+        r -= s1
+        k::Name = 1
+        while r > p[k]
+            r -= p[k]
+            k += 1
+        end
+        guide[node].alllins[lins[k]], p[k]/s
+    else
+        zero(Name), s1/s
     end
-    p = forward_action(g.process,g[n].tend-t,g[n].target) ./ statdist(g.process)
-    Dict((D(j),D(i)) => p[i,:]./p[j,:]
-         for j ∈ axes(p,1), i ∈ axes(p,1) if i != j)
 end
 
 assimil!(

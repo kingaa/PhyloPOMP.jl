@@ -37,7 +37,7 @@ swap!(
     i::D, j::D,
     b::Integer,
 ) where D = begin
-    @assert Int(b) ∈ y[i]
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
     delete!(y[i],Int(b))
     push!(y[j],Int(b))
     ell(y)
@@ -53,7 +53,7 @@ chop!(
     i::D,
     b::Integer,
 ) where D = begin
-    @assert Int(b) ∈ y[i]
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
     delete!(y[i],Int(b))
     ell(y)
 end
@@ -70,7 +70,7 @@ chop!(
     j::D,
     c::Integer,
 ) where D = begin
-    @assert Int(b) ∈ y[i]
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
     chop!(y,i,Int(b))
     push!(y[j],Int(c))
     ell(y)
@@ -87,7 +87,7 @@ fork!(
     j::Union{NTuple{N,D},Vector{D}},
     c::Union{NTuple{N,I},Vector{I}},
 ) where {N,D,I<:Integer} = begin
-    @assert Int(b) ∈ y[i]
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
     delete!(y[i],Int(b))
     for k ∈ eachindex(j)
         push!(y[j[k]],Int(c[k]))
