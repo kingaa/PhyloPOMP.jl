@@ -59,18 +59,18 @@ seir_singular!(
             if k==1
                 (ellE,ellI) = fork!(
                     cols,
-                    Infec,Expos,Infec,
-                    n.lineage,
-                    geneal[n.children[1]].lineage,
-                    geneal[n.children[2]].lineage,
+                    Infec,n.lineage,
+                    (Expos,Infec),
+                    (geneal[n.children[1]].lineage,
+                     geneal[n.children[2]].lineage)
                 )
             else
                 (ellE,ellI) = fork!(
                     cols,
-                    Infec,Expos,Infec,
-                    n.lineage,
-                    geneal[n.children[2]].lineage,
-                    geneal[n.children[1]].lineage,
+                    Infec,n.lineage,
+                    (Expos,Infec),
+                    (geneal[n.children[2]].lineage,
+                     geneal[n.children[1]].lineage)
                 )
             end
             S -= 1
@@ -216,11 +216,13 @@ seir(
                     S = S, E = E, I = I, R = R,
                     args...,
                 )
-                ll, S, E, I, R = seir_regular!(
-                    cols, ll;
-                    S = S, E = E, I = I, R = R,
-                    args...,
-                )
+                if isfinite(ll)
+                    ll, S, E, I, R = seir_regular!(
+                        cols, ll;
+                        S = S, E = E, I = I, R = R,
+                        args...,
+                    )
+                end
                 (; node = node+1, ll = ll, cols = cols,
                  S = S, E = E, I = I, R = R)
             end,

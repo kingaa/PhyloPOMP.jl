@@ -1,71 +1,72 @@
 module GuidedSEIR
 
 using ..PhyloPOMP
-using ..PhyloPOMP: Root, Node, Sample, Name, Time
+using ..PhyloPOMP: Root, Node, Sample, Name, Time, Prob
 import PartiallyObservedMarkovProcesses as POMP
 
 @demes SEIR Expos Infec
 using .SEIR: Expos, Infec, T as DemeType
 
 seir_singular!(
-    cols, g, ll;
+    cols, guide, node, ll;
     S, E, I, R, pop, β, ψ,
     _...,
 ) = begin
     (ellE,ellI) = ell(cols)
     @assert I ≥ ellI && E ≥ ellE
-    if g.type==Root
-        if length(g.chillins) == 1
+    n = guide[node]
+    if n.type==Root
+        if length(n.chillins) == 1
             if E-ellE+I-ellI > 0
-                i, _, p = rcateg(g.present[:,1].*[E-ellE, I-ellI], DemeType, true)
+                i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeType, true)
                 ll -= log(p)
-                (ellE,ellI) = plant!(cols,i,g.chillins[1])
+                (ellE,ellI) = plant!(cols,i,n.chillins[1])
             else
                 ll += Float64(-Inf)
-                (ellE,ellI) = plant!(cols,Infec,g.chillins[1])
+                (ellE,ellI) = plant!(cols,Infec,n.chillins[1])
                 I += 1
             end
         else
-            error("too many children ($(length(g.chillins)) > 1) at root $(g.name), t=$(g.time)")
+            error("too many children ($(length(n.chillins)) > 1) at root $(n.name), t=$(n.time)")
         end
-    elseif g.type==Sample
-        if g.parlin ∉ cols[Infec]
+    elseif n.type==Sample
+        if n.parlin ∉ cols[Infec]
             ll += Float64(-Inf)
-            (ellE,ellI) = swap!(cols,Expos,Infec,g.parlin)
+            (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
         end
         ll += log(ψ*I)
-        if length(g.chillins) == 0
-            (ellE,ellI) = chop!(cols,Infec,g.parlin)
+        if length(n.chillins) == 0
+            (ellE,ellI) = chop!(cols,Infec,n.parlin)
             ll += log(1-ellI/I)
-        elseif length(g.chillins) == 1
-            (ellE,ellI) = chop!(cols,Infec,g.parlin,Infec,g.chillins[1])
+        elseif length(n.chillins) == 1
+            (ellE,ellI) = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
             ll -= log(I)
         else
-            error("too many children ($(length(g.chillins)) > 1) at sample $(g.name), t=$(g.time)")
+            error("too many children ($(length(n.chillins)) > 1) at sample $(n.name), t=$(n.time)")
         end
-    elseif g.type==Node
-        if g.parlin ∉ cols[Infec]
+    elseif n.type==Node
+        if n.parlin ∉ cols[Infec]
             ll += Float64(-Inf)
-            (ellE,ellI) = swap!(cols,Expos,Infec,g.parlin)
+            (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
         end
-        if length(g.chillins) == 2
+        if length(n.chillins) == 2
             ll += log(β*S*I/pop)
-            k, _, p = rcateg([g.present[1,1]*g.present[2,2], g.present[1,2]*g.present[2,1]], true)
+            k, _, p = rcateg([n.present[1,1]*n.present[2,2], n.present[1,2]*n.present[2,1]], true)
             ll -= log(p)
             if k==1
-                (ellE,ellI) = fork!(cols,Infec,Expos,Infec,g.parlin,g.chillins[1],g.chillins[2])
+                (ellE,ellI) = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
             else
-                (ellE,ellI) = fork!(cols,Infec,Infec,Expos,g.parlin,g.chillins[1],g.chillins[2])
+                (ellE,ellI) = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
             end
             S -= 1
             E += 1
             ll -= log(E*I)
         else
-            error("too many children ($(length(g.chillins)) ≠ 2) at node $(g.name), t=$(g.time)")
+            error("too many children ($(length(n.chillins)) ≠ 2) at node $(n.name), t=$(n.time)")
         end
     else
         @assert false "impossible node type"
@@ -74,8 +75,8 @@ seir_singular!(
 end
 
 choice1(g, x, cols, rh) = begin
-    lins = map(i->g.linmap[i],collect(cols))
-    v = [x-ell(cols), sum(rh[lins])]
+    s = sum(rh[g.linmap[i]] for i ∈ cols; init = zero(Prob))
+    v = [x-ell(cols), s]
     v./sum(v)
 end
 
@@ -216,15 +217,17 @@ seir(
                 cols = copy(cols)
                 ll = zero(Float64)
                 ll, S, E, I, R = seir_singular!(
-                    cols, guide[node], ll;
-                    S = S, E = E, I = I, R = R,
-                    args...,
-                )
-                ll, S, E, I, R = seir_regular!(
                     cols, guide, node, ll;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )
+                if isfinite(ll)
+                    ll, S, E, I, R = seir_regular!(
+                        cols, guide, node, ll;
+                        S = S, E = E, I = I, R = R,
+                        args...,
+                    )
+                end
                 (; node = node+1, ll = ll, cols = cols,
                  S = S, E = E, I = I, R = R)
             end,

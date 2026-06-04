@@ -38,6 +38,7 @@ It contains the [`FSMarkovProc`](@ref) object encoding the Markov process and a 
 struct Guide{F<:AbstractFloat,D<:Enum}
     process::FSMarkovProc{F,D}
     nodes::Vector{GuideNode{F,D}}
+    nsample::Size
     Guide(
         g::Genealogy{E},
         m::FSMarkovProc{F,D},
@@ -79,7 +80,7 @@ struct Guide{F<:AbstractFloat,D<:Enum}
             tend = g[n].slate
             union!(setdiff!(lins,chillins),parlin)
         end
-        new{F,D}(m,nodes)
+        new{F,D}(m,nodes,g.nsample)
     end
 end
 
@@ -113,7 +114,7 @@ demekron(F::Type, d::D,) where {D <: Enum} = begin
     [i == d ? one(F) : zero(F) for i ∈ instances(D)]
 end
 
-demekron(d::D,) where {D <: Enum} = demekron(Float64,d)
+demekron(d::D,) where {D <: Enum} = demekron(Prob,d)
 
 """
     demekron!(v, d)
@@ -152,7 +153,7 @@ assimil!(
     parprob::AbstractVector{F},
     chilprobs::AbstractMatrix{F},
     pi::AbstractVector{F},
-) where {F<:AbstractFloat} = begin
+) where F = begin
     @assert size(parprob,1)==size(chilprobs,1)
     if isempty(chilprobs)
         parprob[:] = pi

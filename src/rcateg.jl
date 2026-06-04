@@ -24,21 +24,32 @@ rcateg(
     p::AbstractVector{<:Real},
     prob::Bool = false,
 ) = begin
-    s = zero(Float64)
+    s::Prob = zero(Prob)
     for i ∈ eachindex(p)
         @assert p[i] ≥ 0 "invalid p[$i]=$(p[i]) detected"
-        s += p[i]
+        s += Prob(p[i])
     end
-    r = s*rand()
-    k::Int = 1
-    while r > p[k]
-        r -= p[k]
-        k += 1
-    end
-    if (prob)
-        k, s, p[k]/s
+    ## NB: this is a non-destructive routine.
+    ## If it is permissible to destroy p, one could save the
+    ## extra round of subtractions.
+    if s > 0
+        r = s*rand(Prob)
+        k::Int = 1
+        while r > p[k]
+            r -= p[k]
+            k += 1
+        end
+        if prob
+            k, s, p[k]/s
+        else
+            k, s
+        end
     else
-        k, s
+        if prob
+            one(Int), zero(Prob), zero(Prob)
+        else
+            one(Int), zero(Prob)
+        end
     end
 end
 

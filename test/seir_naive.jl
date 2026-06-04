@@ -4,15 +4,17 @@ import ..Main: h1, h2
 
 @info h1("SEIR model with naïve proposals")
 
-using PhyloPOMP
-import PartiallyObservedMarkovProcesses as POMP
 using Test
 using BenchmarkTools
 using Statistics: std
-
+using Random: seed!
+using PhyloPOMP
+import PartiallyObservedMarkovProcesses as POMP
 using PhyloPOMP.NaiveSEIR: seir
 
 @testset verbose=true "SEIR model with naïve proposals" begin
+
+    seed!(2121916527)
 
     g = parse_newick(readlines("seir1.nwk"), time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured.T}
