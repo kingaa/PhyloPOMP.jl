@@ -17,7 +17,7 @@ using PhyloPOMP.NaiveSEIR: seir
     seed!(2121916527)
 
     g = parse_newick(readlines("seir1.nwk"), time = 50.0)
-    @test g isa Genealogy{PhyloPOMP.Unstructured.T}
+    @test g isa Genealogy{PhyloPOMP.Unstructured.DemeSet}
 
     p = seir(g)
     @test p isa POMP.PompObject

@@ -4,7 +4,7 @@ using ..PhyloPOMP
 import PartiallyObservedMarkovProcesses as POMP
 
 @demes SEIR Expos Infec
-using .SEIR: Expos, Infec, T as DemeType
+using .SEIR: Expos, Infec, DemeSet
 
 seir_singular!(
     cols, ll, geneal, node;
@@ -17,7 +17,7 @@ seir_singular!(
     if n.type==PhyloPOMP.Root
         if length(n.children) == 1
             if E-ellE+I-ellI > 0
-                i, _, p = rcateg([E-ellE, I-ellI], DemeType, true)
+                i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
                 ll -= log(p)
                 (ellE,ellI) = plant!(cols,i,n.lineage)
             else

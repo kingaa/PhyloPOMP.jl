@@ -31,6 +31,7 @@ using Test
     @test sum(abs.(generator(p)))==4.5
     @test all(sum(generator(p),dims=1).==0)
     @test_throws r"size mismatch" forward_action(p,10,[1,2])
+    @test_throws r"size mismatch" PhyloPOMP.relhaz_action(p,10,[1,2])
     @test maximum(abs.(forward_action(p,0,[1,2,3])-[1,2,3]))+100-100==0
     @test maximum(abs.(forward_action(p,1e5,[1,1,1])-[0.75,0.75,1.5]))+100-100==0
 

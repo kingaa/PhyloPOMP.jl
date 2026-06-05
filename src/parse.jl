@@ -23,7 +23,8 @@ parse_newick(
     t0::Real = zero(Time),
     time::Union{Missing,Real} = missing,
 ) = begin
-    D = demes.T
+    @isademeset demes
+    D = demes.DemeSet
     nnodes = count(')',input)+count(',',input)+2*count(';',input)
     dememapper = name2enum(D)
     t0 = Time(t0)

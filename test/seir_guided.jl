@@ -12,14 +12,14 @@ using PhyloPOMP
 import PartiallyObservedMarkovProcesses as POMP
 using PhyloPOMP: Sample, Node, Root
 using PhyloPOMP.GuidedSEIR: seir
-using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec, T as DemeType
+using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec
 
 @testset verbose=true "SEIR model with guided proposals" begin
 
     seed!(2121916527)
 
     g1 = parse_newick(readlines("seir1.nwk"), time = 50.0)
-    @test g1 isa Genealogy{PhyloPOMP.Unstructured.T}
+    @test g1 isa Genealogy{PhyloPOMP.Unstructured.DemeSet}
 
     ## This function should return true if the guide probabilities
     ## will be fixed at this node and false otherwise. If the former,

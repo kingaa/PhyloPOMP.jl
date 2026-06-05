@@ -54,6 +54,7 @@ struct Guide{F<:AbstractFloat,D<:Enum}
             parlin = g[n].lineage
             chillins = map(x->g[x].lineage, g[n].children)
             target = probs[:,ells]
+            ## FIXME: inelegant to store redundant information
             dtarget = m.right_trans * target
             probs[:,ells] = forward_action(m,tend-g[n].slate,probs[:,ells])
             present = probs[:,chillins]

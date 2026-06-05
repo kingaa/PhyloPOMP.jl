@@ -5,7 +5,7 @@ using ..PhyloPOMP: Root, Node, Sample, Name, Time, Prob
 import PartiallyObservedMarkovProcesses as POMP
 
 @demes SEIR Expos Infec
-using .SEIR: Expos, Infec, T as DemeType
+using .SEIR: Expos, Infec, DemeSet
 
 seir_singular!(
     cols, guide, node, ll;
@@ -18,7 +18,7 @@ seir_singular!(
     if n.type==Root
         if length(n.chillins) == 1
             if E-ellE+I-ellI > 0
-                i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeType, true)
+                i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
                 ll -= log(p)
                 (ellE,ellI) = plant!(cols,i,n.chillins[1])
             else

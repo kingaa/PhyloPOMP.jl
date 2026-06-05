@@ -10,8 +10,8 @@ a demeset (see [@demes](@ref)).
 mutable struct Coloring{D <: Enum, N}
     cols::NTuple{N,BitSet}
     Coloring(demeset::Module) = begin
-        demes = instances(demeset.T)
-        new{demeset.T,length(demes)}(
+        demes = instances(demeset.DemeSet)
+        new{demeset.DemeSet,length(demes)}(
             Tuple(BitSet() for _ ∈ Base.OneTo(length(demes)))
         )
     end

@@ -25,6 +25,11 @@ using Test
     t = tally(x)
     @test 1.9 < t[recov]/t[trans] < 2.1
     @test 2.9 < t[wane]/t[trans] < 3.1
+
+    k,s,p = rcateg([0,0,0],true)
+    @test k==1 && s==0 && p==0
+    k,s = rcateg([0,0,0])
+    @test k==1 && s==0 && p==0
     
 end
 

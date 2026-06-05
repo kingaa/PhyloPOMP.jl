@@ -1,17 +1,20 @@
+using EnumX: @enumx
+
 """
     @demes Name deme1 deme2 ...
 
-Creates a new demeset, `Name`, which contains an enumeration of the demes `deme1`, `deme2`, ....  A demeset is a `Module`, which contains the enumeration and the enumeration type.
+Creates a new demeset, `Name`, which contains an enumeration of the demes
+`deme1`, `deme2`, ....  A demeset is a `Module`, which contains the
+enumeration and the enumeration type.
 """
 macro demes(name, first, rest...)
-    expr = :(@enumx $name $first=1 $(rest...))
-    esc(:@eval $expr)
+    esc(:(@enumx T=DemeSet $name $first=1 $(rest...)))
 end
 
 @demes Unstructured default
 
 """
-    name2enum(demetype)
+    name2enum(demes)
 
 Returns a function that maps strings to demes.
 """
@@ -23,10 +26,14 @@ name2enum(demes::Type{D}) where {D <: Enum} = begin
 end
 
 """
-    enum2name(demetype)
+    enum2name(demes)
 
 Returns a `Dict` that maps demes to strings.
 """
 enum2name(::Val{D}) where {D <: Enum} = begin
     Dict(i=>String(Symbol(i)) for i ∈ instances(D))
+end
+
+macro isademeset(d)
+    esc(:(@assert $d isa Module && isdefined($d,:DemeSet) "construct `demes` with `@demes`"))
 end
