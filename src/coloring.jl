@@ -15,9 +15,12 @@ mutable struct Coloring{D <: Enum, N}
             Tuple(BitSet() for _ ∈ Base.OneTo(length(demes)))
         )
     end
+    Coloring(y::Coloring{D,N}) where {D,N} = new{D,N}(copy(y.cols))
 end
 
-copy(y::Coloring) = deepcopy(y)
+copy(c::NTuple{N,BitSet}) where N = Tuple(copy(i) for i in c)
+
+copy(y::Coloring) = Coloring(y)
 
 getindex(y::Coloring{D}, i::D) where D = getindex(y.cols, Int(i))
 
