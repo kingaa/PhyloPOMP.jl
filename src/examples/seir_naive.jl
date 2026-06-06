@@ -1,10 +1,14 @@
 module NaiveSEIR
 
-using ..PhyloPOMP
-import PartiallyObservedMarkovProcesses as POMP
+export seir, seir_trees
 
-@demes SEIR Expos Infec
-using .SEIR: Expos, Infec, DemeSet
+using ..PhyloPOMP
+using ..PhyloPOMP: Root, Node, Sample, Name, Time
+
+@demes Demes Expos Infec
+using .Demes: Expos, Infec, DemeSet
+
+include("seir_trees.jl")
 
 seir_singular!(
     cols, ll, geneal, node;
@@ -14,7 +18,7 @@ seir_singular!(
     n = geneal[node]
     (ellE,ellI) = ell(cols)
     @assert I ≥ ellI && E ≥ ellE
-    if n.type==PhyloPOMP.Root
+    if n.type==Root
         if length(n.children) == 1
             if E-ellE+I-ellI > 0
                 i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
@@ -28,7 +32,7 @@ seir_singular!(
         else
             error("too many children ($(length(n.children)) > 1) at root $(n.name), t=$(n.time)")
         end
-    elseif n.type==PhyloPOMP.Sample
+    elseif n.type==Sample
         if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
             (ellE,ellI) = swap!(cols,Expos,Infec,n.lineage)
@@ -45,7 +49,7 @@ seir_singular!(
         else
             error("too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)")
         end
-    elseif n.type==PhyloPOMP.Node
+    elseif n.type==Node
         if n.lineage ∉ cols[Infec]
             ll += Float64(-Inf)
             (ellE,ellI) = swap!(cols,Expos,Infec,n.lineage)
@@ -124,7 +128,7 @@ seir_regular!(
             β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
         )
         k, s = rcateg(alpha .* pi)
-        step::PhyloPOMP.Time = -log(rand())/s
+        step::Time = -log(rand())/s
         while (t+step < tf)
             ll -= decay*step+log(pi[k])
             if k==1
@@ -175,6 +179,13 @@ seir_regular!(
     (; ll = ll, S = S, E = E, I = I, R = R)
 end
 
+"""
+    seir(gen; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
+         pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
+
+Constructs a pomp object based on the genealogy `gen` and implementing
+the naïve genealogical filter.
+"""
 seir(
     gen::Genealogy;
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
@@ -194,9 +205,9 @@ seir(
         rinit = function (; S0, E0, I0, R0, pop, _...)
             m = pop/(S0+E0+I0+R0)
             (
-                node = one(PhyloPOMP.Name),
+                node = one(Name),
                 ll = zero(Float64),
-                cols = Coloring(SEIR),
+                cols = Coloring(Demes),
                 S = round(Int64, m*Float64(S0)),
                 E = round(Int64, m*Float64(E0)),
                 I = round(Int64, m*Float64(I0)),

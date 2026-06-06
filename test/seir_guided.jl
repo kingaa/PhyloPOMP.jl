@@ -9,32 +9,16 @@ using BenchmarkTools
 using Statistics: std
 using Random: seed!
 using PhyloPOMP
+using PhyloPOMP.GuidedSEIR
+using PhyloPOMP.GuidedSEIR.Demes: Expos, Infec
 import PartiallyObservedMarkovProcesses as POMP
-using PhyloPOMP: Sample, Node, Root
-using PhyloPOMP.GuidedSEIR: seir
-using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec
 
 @testset verbose=true "SEIR model with guided proposals" begin
 
     seed!(2121916527)
 
-    g1 = parse_newick(readlines("seir1.nwk"), time = 50.0)
+    g1 = parse_newick(seir_trees[1], time = 50.0)
     @test g1 isa Genealogy{PhyloPOMP.Unstructured.DemeSet}
-
-    ## This function should return true if the guide probabilities
-    ## will be fixed at this node and false otherwise. If the former,
-    ## it should fill the vector `v` with an appropriate probability
-    ## vector.
-    seir_convert!(
-        v; deme, type, time,
-    ) = begin
-        if type==Sample || type==Node
-            demekron!(v,Infec)
-            true
-        else
-            false
-        end
-    end
 
     g2 = guide(
         g1,
@@ -54,7 +38,7 @@ using PhyloPOMP.GuidedSEIR.SEIR: Expos, Infec
     pf = pfilter(p, Np = 100)
     @time pf = pfilter(p, Np = 100)
     @test pf isa POMP.PfilterdPompObject
-    @test isfinite(pf.logLik)
+    @test isfinite(logLik(pf))
 
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np = 1000)

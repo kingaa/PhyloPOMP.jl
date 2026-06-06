@@ -1,11 +1,32 @@
 module GuidedSEIR
 
-using ..PhyloPOMP
-using ..PhyloPOMP: Root, Node, Sample, Name, Time, Prob
-import PartiallyObservedMarkovProcesses as POMP
+export seir_convert!, seir, seir_trees
 
-@demes SEIR Expos Infec
-using .SEIR: Expos, Infec, DemeSet
+using ..PhyloPOMP
+using ..PhyloPOMP: Root, Node, Sample, Name, Time
+
+@demes Demes Expos Infec
+using .Demes: Expos, Infec, DemeSet
+
+include("seir_trees.jl")
+
+"""
+    seir_convert!(v; deme, type, time)
+
+This function should return true if the guide probabilities will be fixed
+at this node and false otherwise. If the former, it should fill the vector
+`v` with an appropriate probability vector.
+"""
+seir_convert!(
+    v; deme, type, time,
+) = begin
+    if type==Sample || type==Node
+        demekron!(v,Infec)
+        true
+    else
+        false
+    end
+end
 
 seir_singular!(
     cols, guide, node, ll;
@@ -157,11 +178,16 @@ seir_regular!(
     (; ll = ll, S = S, E = E, I = I, R = R)
 end
 
+"""
+    seir(g; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
+         pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
+
+Constructs a pomp object based on the filter guide `g`.
+"""
 seir(
     guide::Guide;
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
-    pop = 100,
-    S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
+    pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
 ) = begin
     pomp(
         params = (
@@ -178,7 +204,7 @@ seir(
             (
                 node = one(Name),
                 ll = zero(Float64),
-                cols = Coloring(SEIR),
+                cols = Coloring(Demes),
                 S = round(Int64, m*Float64(S0)),
                 E = round(Int64, m*Float64(E0)),
                 I = round(Int64, m*Float64(I0)),

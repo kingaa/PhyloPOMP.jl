@@ -61,10 +61,6 @@ mutable struct Genealogy{D <: Enum}
     Genealogy{D}(t0::Real, time::Real = t0,) where {D <: Enum} = begin
         new{D}(Time(t0),Time(time),zero(Size),GenealNode{D}[])
     end
-    Genealogy(demes::Module, t0::Real, time::Real = t0,) = begin
-        @isademeset demes
-        Genealogy{demes.DemeSet}(t0,time)
-    end
 end
 
 Base.getindex(g::Genealogy, i::Integer) = g.nodes[i]

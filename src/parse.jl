@@ -118,7 +118,7 @@ parse_newick(
     end
     if !ismissing(time)
         if G.time > Time(time)
-            error("final time from data ($tf) exceeds specified final time ($time)")
+            error("final time from data ($(G.time)) exceeds specified final time ($time)")
         else
             G.time = Time(time)
         end

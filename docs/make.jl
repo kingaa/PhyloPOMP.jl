@@ -8,12 +8,13 @@ makedocs(
     format = Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true", # easier local build
         size_threshold = 600 * 2^10,
-        size_threshold_warn = 500 * 2^10, # 600 KiB
-        canonical="https://github.com/kingaa/PhyloPOMP.jl/",
-        edit_link="master",
+        size_threshold_warn = 500 * 2^10,
+        canonical="https://kingaa.github.io/PhyloPOMP.jl/stable/",
+        edit_link=nothing,
     ),
     pages=[
         "Home" => "index.md",
+        "Examples" => ["seir.md"],
     ]
 )
 

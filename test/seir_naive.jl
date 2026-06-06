@@ -9,14 +9,14 @@ using BenchmarkTools
 using Statistics: std
 using Random: seed!
 using PhyloPOMP
+using PhyloPOMP.NaiveSEIR
 import PartiallyObservedMarkovProcesses as POMP
-using PhyloPOMP.NaiveSEIR: seir
 
 @testset verbose=true "SEIR model with naïve proposals" begin
 
     seed!(2121916527)
 
-    g = parse_newick(readlines("seir1.nwk"), time = 50.0)
+    g = parse_newick(seir_trees[1], time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured.DemeSet}
 
     p = seir(g)
@@ -31,7 +31,7 @@ using PhyloPOMP.NaiveSEIR: seir
     pf = pfilter(p, Np = 100)
     @time pf = pfilter(p, Np = 100)
     @test pf isa POMP.PfilterdPompObject
-    @test isfinite(pf.logLik)
+    @test isfinite(logLik(pf))
 
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np = 1000)
