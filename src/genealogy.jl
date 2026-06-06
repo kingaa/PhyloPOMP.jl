@@ -16,12 +16,19 @@ Implements a *genealogical node*.
 The module `D` enumerates the demes (see [`@demes`](@ref)).
 """
 mutable struct GenealNode{D<:Enum}
+    "Type of node: Root, Sample, or Node."
     type::NodeType
+    "Unique node name."
     name::Name
+    "Node-time."
     slate::Time
+    "Deme of the branch ascendant from the node."
     deme::Union{Missing,D}
+    "Lineage name."
     lineage::Union{Missing,Name}
+    "Name of the parent node."
     parent::Union{Nothing,Name}
+    "Names of child nodes."
     children::Vector{Name}
     GenealNode{D}(
         name::Integer,
@@ -42,12 +49,21 @@ The module `D` enumerates the demes (see [`@demes`](@ref)).
 Internally, this is represented as a time-ordered sequence of *genealogical nodes* (represented by [`GenealNode`](@ref) objects).
 """
 mutable struct Genealogy{D <: Enum}
+    "Root-time of genealogy."
     t0::Time
+    "Time of genealogy, i.e., right endpoint of the interval."
     time::Time
+    "Number of samples."
     nsample::Size
+    "Vector of genealogical nodes."
     nodes::Vector{GenealNode{D}}
-    Genealogy{D}(t0::Real, time::Real = t0) where {D <: Enum} = begin
+    "Constructor of an empty genealogy on the interval [t0,time]."
+    Genealogy{D}(t0::Real, time::Real = t0,) where {D <: Enum} = begin
         new{D}(Time(t0),Time(time),zero(Size),GenealNode{D}[])
+    end
+    Genealogy(demes::Module, t0::Real, time::Real = t0,) = begin
+        @isademeset demes
+        Genealogy{demes.DemeSet}(t0,time)
     end
 end
 

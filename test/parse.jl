@@ -17,7 +17,7 @@ using Test
     @demes SEIR E I
     @test_throws r"final time from data \(.+\) exceeds" parse_newick(x,demes=SEIR,t0=5.0,time=6);
     g = parse_newick(x,demes=SEIR,t0=5.0,time=7.0);
-    @test g isa Genealogy{SEIR.T}
+    @test g isa Genealogy{SEIR.DemeSet}
     @test ismissing(g.nodes[3].deme)
     @test sum(map(x->ismissing(x.deme),g.nodes))==20
     @test sum(map(x->!ismissing(x.deme),g.nodes))==65

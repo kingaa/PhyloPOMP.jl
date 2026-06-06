@@ -10,14 +10,17 @@ a demeset (see [@demes](@ref)).
 mutable struct Coloring{D <: Enum, N}
     cols::NTuple{N,BitSet}
     Coloring(demeset::Module) = begin
-        demes = instances(demeset.T)
-        new{demeset.T,length(demes)}(
+        demes = instances(demeset.DemeSet)
+        new{demeset.DemeSet,length(demes)}(
             Tuple(BitSet() for _ ∈ Base.OneTo(length(demes)))
         )
     end
+    Coloring(y::Coloring{D,N}) where {D,N} = new{D,N}(copy(y.cols))
 end
 
-copy(y::Coloring) = deepcopy(y)
+copy(c::NTuple{N,BitSet}) where N = Tuple(copy(i) for i in c)
+
+copy(y::Coloring) = Coloring(y)
 
 getindex(y::Coloring{D}, i::D) where D = getindex(y.cols, Int(i))
 
@@ -37,9 +40,9 @@ swap!(
     i::D, j::D,
     b::Integer,
 ) where D = begin
-    @assert b ∈ y[i]
-    delete!(y[i],b)
-    push!(y[j],b)
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
+    delete!(y[i],Int(b))
+    push!(y[j],Int(b))
     ell(y)
 end
 
@@ -53,8 +56,8 @@ chop!(
     i::D,
     b::Integer,
 ) where D = begin
-    @assert b ∈ y[i]
-    delete!(y[i],b)
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
+    delete!(y[i],Int(b))
     ell(y)
 end
 
@@ -70,25 +73,9 @@ chop!(
     j::D,
     c::Integer,
 ) where D = begin
-    chop!(y,i,b)
-    push!(y[j],c)
-    ell(y)
-end
-
-"""
-    fork!(y, i0, i1, i2, b0, b1, b2)
-
-Fork lineage `b0` in deme `i0` to lineages `b1`, `b2` in demes `i1`, `i2`, respectively.
-"""
-fork!(
-    y::Coloring{D},
-    i0::D, i1::D, i2::D,
-    b0::Integer, b1::Integer, b2::Integer,
-) where D = begin
-    @assert b0 ∈ y[i0]
-    delete!(y[i0],b0)
-    push!(y[i1],b1)
-    push!(y[i2],b2)
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
+    chop!(y,i,Int(b))
+    push!(y[j],Int(c))
     ell(y)
 end
 
@@ -99,13 +86,14 @@ Fork lineage `b` in deme `i` to lineages given in the vector `c` in demes given 
 """
 fork!(
     y::Coloring{D},
-    i::D, j::Vector{D},
-    b::Integer, c::Vector{<:Integer},
-) where D = begin
-    @assert b ∈ y[i]
-    delete!(y[i],b)
+    i::D, b::Integer,
+    j::Union{NTuple{N,D},Vector{D}},
+    c::Union{NTuple{N,I},Vector{I}},
+) where {N,D,I<:Integer} = begin
+    @assert Int(b) ∈ y[i] "lineage $b is not in '$i' deme"
+    delete!(y[i],Int(b))
     for k ∈ eachindex(j)
-        push!(y[j[k]],c[k])
+        push!(y[j[k]],Int(c[k]))
     end
     ell(y)
 end
@@ -120,7 +108,6 @@ plant!(
     i::D,
     b::Integer,
 ) where D = begin
-    push!(y[i],b)
+    push!(y[i],Int(b))
     ell(y)
 end
-
