@@ -6,7 +6,6 @@ import ..Main: h1, h2
 
 using Test
 using BenchmarkTools
-using Statistics: std
 using Random: seed!
 using PhyloPOMP
 using PhyloPOMP.NaiveSEIR
@@ -36,13 +35,9 @@ import PartiallyObservedMarkovProcesses as POMP
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np = 1000)
 
-    logmeanexp(x) = begin
-        xmax = maximum(x)
-        xmax + log(sum(exp.(x .- xmax))) - log(length(x))
-    end
-
-    x = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
-    @info "logLik = $(round(logmeanexp(x),digits=2)) ± $(round(std(x),sigdigits=3))"
+    ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
+    llest,llse = logmeanexp(ll,se=true)
+    @info "logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
 
 end
 
