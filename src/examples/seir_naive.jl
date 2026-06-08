@@ -99,14 +99,14 @@ event_rates!(
     @assert I ≥ ellI && E ≥ ellE
     alpha[2] = alpha[1] = β*S*I/pop
     alpha[4] = alpha[3] = σ*E
-    alpha[5] = @indicator(I > ellI, γ*I)
+    alpha[5] = @indicator(I > ellI, γ*(I-ellI))
     alpha[6] = ω*R
     pi[1] = @indicator(I > 0, 1-ellI/I)
     pi[2] = @indicator(I > 0, ellI/I)
     pi[3] = @indicator(E > 0, 1-ellE/E)
     pi[4] = @indicator(E > 0, ellE/E)
     pi[6] = pi[5] = 1.0
-    ψ*I + @indicator(I ≤ ellI, γ*I)
+    ψ*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
 end
 
 seir_regular!(
@@ -154,6 +154,7 @@ seir_regular!(
                 I += 1
                 ll -= log(I)
             elseif k==5
+                ll -= log(1-ellI/I)
                 I -= 1
                 R += 1
             elseif k==6

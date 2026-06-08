@@ -103,9 +103,9 @@ event_rates!(
 ) = begin
     alpha[1] = β*S*I/pop
     alpha[2] = σ*E
-    alpha[3] = @indicator(I > ellI, γ*I)
+    alpha[3] = @indicator(I > ellI, γ*(I-ellI))
     alpha[4] = ω*R
-    ψ*I + @indicator(I ≤ ellI, γ*I)
+    ψ*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
 end
 
 seir_regular!(
@@ -153,6 +153,7 @@ seir_regular!(
                     ll -= log(I)
                 end
             elseif k==3
+                ll -= log(1-ellI/I)
                 I -= 1
                 R += 1
             elseif k==4
