@@ -45,5 +45,6 @@ include("rcateg.jl")
 export @indicator
 include("indicator.jl")
 
+include("examples/Examples.jl")
 
 end # module PhyloPOMP
