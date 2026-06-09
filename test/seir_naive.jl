@@ -18,6 +18,10 @@ import PartiallyObservedMarkovProcesses as POMP
     g = parse_newick(seir_trees[1], time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured.DemeSet}
 
+    p = seir(g,E0=0,I0=0)
+    @test p isa POMP.PompObject
+    @test logLik(pfilter(p,Np=100))==-Inf
+
     p = seir(g)
     @test p isa POMP.PompObject
 

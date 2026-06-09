@@ -25,6 +25,10 @@ import PartiallyObservedMarkovProcesses as POMP
         seir_convert!
     )
 
+    p = seir(g2,E0=0,I0=0)
+    @test p isa POMP.PompObject
+    @test logLik(pfilter(p,Np=100))==-Inf
+
     p = seir(g2)
     @test p isa POMP.PompObject
 
