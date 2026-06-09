@@ -17,7 +17,7 @@ import PartiallyObservedMarkovProcesses as POMP
     seed!(2121916527)
 
     g1 = parse_newick(seir_trees[1], time = 50.0)
-    @test g1 isa Genealogy{PhyloPOMP.Unstructured.DemeSet}
+    @test g1 isa Genealogy{PhyloPOMP.Unstructured}
 
     g2 = guide(
         g1,

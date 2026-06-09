@@ -16,7 +16,7 @@ import PartiallyObservedMarkovProcesses as POMP
     seed!(2121916527)
 
     g = parse_newick(seir_trees[1], time = 50.0)
-    @test g isa Genealogy{PhyloPOMP.Unstructured.DemeSet}
+    @test g isa Genealogy{PhyloPOMP.Unstructured}
 
     p = seir(g,E0=0,I0=0)
     @test p isa POMP.PompObject

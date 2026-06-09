@@ -28,7 +28,7 @@ parse_newick(
     nnodes = count(')',input)+count(',',input)+2*count(';',input)
     dememapper = name2enum(D)
     t0 = Time(t0)
-    G = Genealogy{D}(t0)
+    G = Genealogy{demes}(t0)
     sizehint!(G.nodes,nnodes)
     p::Union{Nothing,Name} = nothing
     tf = t0
@@ -180,7 +180,7 @@ insert_zlb!(G::Genealogy{D}) where D = begin
     for n ∈ G.nodes
         if n.type==Sample && !isempty(n.children)
             q = length(G)+1
-            node = GenealNode{D}(q,n.slate,n.deme,Sample,n.name)
+            node = GenealNode{D.DemeSet}(q,n.slate,n.deme,Sample,n.name)
             push!(G.nodes,node)
             push!(n.children,q)
             n.type = Node
@@ -205,7 +205,7 @@ scan_branch!(
     p::Name,
     dememapper::Function,
     bl::Time,
-) where {D <: Enum} = begin
+) where D = begin
     m = match(r"^.*\[&&PhyloPOMP.*deme=(\w+).*\].*$"i, input)
     if isnothing(m)
         deme = missing
@@ -226,7 +226,7 @@ scan_branch!(
     end
     q = length(G.nodes)+1
     slate = G[p].slate + bl
-    n = GenealNode{D}(q,slate,deme,type)
+    n = GenealNode{D.DemeSet}(q,slate,deme,type)
     n.parent = p
     push!(G[p].children,q)
     push!(G.nodes,n)

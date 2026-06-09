@@ -10,12 +10,12 @@ Genealogical nodes (see [`GenealNode`](@ref)) can be one of three types: Root, N
 ## FIXME: inclusion of Root in NodeType introduces some inelegant redundancy
 
 """
-    GenealNode{D}
+    GenealNode{E}
 
 Implements a *genealogical node*.
-The module `D` enumerates the demes (see [`@demes`](@ref)).
+The type `E` is an enumeration of the demes (see [`@demes`](@ref)).
 """
-mutable struct GenealNode{D<:Enum}
+mutable struct GenealNode{E<:Enum}
     "Type of node: Root, Sample, or Node."
     type::NodeType
     "Unique node name."
@@ -23,21 +23,21 @@ mutable struct GenealNode{D<:Enum}
     "Node-time."
     slate::Time
     "Deme of the branch ascendant from the node."
-    deme::Union{Missing,D}
+    deme::Union{Missing,E}
     "Lineage name."
     lineage::Union{Missing,Name}
     "Name of the parent node."
     parent::Union{Nothing,Name}
     "Names of child nodes."
     children::Vector{Name}
-    GenealNode{D}(
+    GenealNode{E}(
         name::Integer,
         slate::Time,
         deme = missing,
         type::NodeType = Node,
         parent::Union{Nothing,Name} = nothing,
-    ) where {D <: Enum} = begin
-        new{D}(type,Name(name),slate,deme,missing,parent,Name[])
+    ) where {E <: Enum} = begin
+        new{E}(type,Name(name),slate,deme,missing,parent,Name[])
     end
 end
 
@@ -45,10 +45,12 @@ end
     Genealogy{D}
 
 Implements a genealogy over a time interval `[t0,t]`.
-The module `D` enumerates the demes (see [`@demes`](@ref)).
-Internally, this is represented as a time-ordered sequence of *genealogical nodes* (represented by [`GenealNode`](@ref) objects).
+The module `D` enumerates the demes and should be constructed
+via a call to [`@demes`](@ref).
+Internally, a genealogy is represented as a time-ordered sequence
+of *genealogical nodes* (represented by [`GenealNode`](@ref) objects).
 """
-mutable struct Genealogy{D <: Enum}
+mutable struct Genealogy{D}
     "Root-time of genealogy."
     t0::Time
     "Time of genealogy, i.e., right endpoint of the interval."
@@ -56,10 +58,11 @@ mutable struct Genealogy{D <: Enum}
     "Number of samples."
     nsample::Size
     "Vector of genealogical nodes."
-    nodes::Vector{GenealNode{D}}
+    nodes::Vector{GenealNode}
     "Constructor of an empty genealogy on the interval [t0,time]."
-    Genealogy{D}(t0::Real, time::Real = t0,) where {D <: Enum} = begin
-        new{D}(Time(t0),Time(time),zero(Size),GenealNode{D}[])
+    Genealogy{D}(t0::Real, time::Real = t0,) where D = begin
+        @isademeset D
+        new{D}(Time(t0),Time(time),zero(Size),GenealNode{D.DemeSet}[])
     end
 end
 
