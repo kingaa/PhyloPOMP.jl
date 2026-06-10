@@ -19,7 +19,7 @@ using Test
 
     @test_throws UndefVarError fsmarkov()
     @test_throws r"unspecified stationary probability" fsmarkov(I1=>1,I3=>1)
-    @test_throws r"unspecified stationary probability" fsmarkov(I1=>1,I3=>1,I3=>1)
+    @test_throws r"unspecified stationary probability" fsmarkov(I1=>1,I3=>1)
     @test_throws r"non-positive stationary probability" fsmarkov(I1=>1,I3=>1,I2=>-1)
 
     p = fsmarkov(Float32,I1=>1,I3=>2,(I1,I2)=>3,(I2,I3)=>1,I2=>1);
@@ -36,6 +36,7 @@ using Test
     @test maximum(abs.(forward_action(p,1e5,[1,1,1])-[0.75,0.75,1.5]))+100-100==0
 
     @test_throws r"negative conductance" fsmarkov(I1=>1,I3=>2,(I1,I2)=>3,I2=>1,(I2,I3)=>-1)
+    @test_throws r"double specification of stationary" fsmarkov(I2=>1,I2=>2,I3=>2,(I1,I2)=>3,I1=>1)
     @test_throws r"double specification of conductance" fsmarkov(I2=>1,I3=>2,(I1,I2)=>3,I1=>1,(I2,I1)=>3)
     @test_throws r"cannot specify conductance of a deme to itself" fsmarkov(I1=>1,I2=>1,I3=>2,(I1,I2)=>3,(I2,I2)=>3)
 
