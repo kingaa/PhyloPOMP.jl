@@ -175,7 +175,7 @@ relhaz(
     n::Integer,
     i::D,
     j::D,
-    lins,
+    lins::Union{Integer,AbstractVector{<:Integer}},
 ) where {F,D} = begin
     @assert g[n].tbeg ≤ t < g[n].tend "t ∉ [$(g[n].tbeg),$(g[n].tend))"
     p = relhaz_action(
@@ -184,6 +184,23 @@ relhaz(
         @view(g[n].dtarget[:,lins]),
     )
     @views p[Int(j),:]./p[Int(i),:]
+end
+
+"""
+    relhaz(t, g, n, i, j, cols)
+
+In this form, `cols` is a `Coloring`.
+"""
+relhaz(
+    t::Time,
+    g::Guide{F,D},
+    n::Integer,
+    i::D,
+    j::D,
+    cols::Coloring{D}
+) where {F,D} = begin
+    lins = [g[n].linmap[k] for k ∈ cols[i]]
+    relhaz(t,g,n,i,j,lins)
 end
 
 choose_branch(
