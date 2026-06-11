@@ -1,3 +1,13 @@
+"""
+    NaiveSEIR
+
+A module containing an implementation of the phylodynamic filter for
+an SEIR model, using so-called naïve proposals. These proposals are
+non-anticipatory. In particular, population events occurring at any
+time result in color changes with a probability proportional to the
+fraction of appropriate lineages represented in the genealogy at that
+time.
+"""
 module NaiveSEIR
 
 export seir, seir_trees

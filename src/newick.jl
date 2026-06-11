@@ -47,7 +47,7 @@ extnewick(
 ) where D = begin
     typenodemap = Dict(Node=>"node",Sample=>"sample",Root=>"root")
     nstr = similar(Array{String},length(g))
-    dememap = enum2name(Val(D.DemeSet))
+    dememap = enum2name(D.DemeSet)
     for i ∈ reverse(eachindex(g))
         t = typenodemap[g[i].type]
         d = get(dememap,g[i].deme,missing)

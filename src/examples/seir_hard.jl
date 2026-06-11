@@ -1,3 +1,11 @@
+"""
+    HardSEIR
+
+A module containing an implementation of the phylodynamic filter for
+an SEIR model, using a filter guide and "hard" proposals.  That is, color
+changes can be proposed on branches at rates that exceed the event rates
+in the underlying population process.
+"""
 module HardSEIR
 
 export seir_convert!, seir, seir_trees

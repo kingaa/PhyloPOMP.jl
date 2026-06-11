@@ -16,15 +16,3 @@ swap!
 chop!
 fork!
 ```
-
-## Reference
-
-```@autodocs
-Modules = [PhyloPOMP]
-Order   = [:module, :function, :macro, :type, :constant]
-```
-
-## Index
-
-```@index
-```

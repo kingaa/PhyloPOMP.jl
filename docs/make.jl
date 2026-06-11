@@ -15,6 +15,8 @@ makedocs(
     pages=[
         "Home" => "index.md",
         "Examples" => ["seir.md"],
+        "Reference" => "reference.md",
+        "Index" => "indexsection.md",
     ]
 )
 
