@@ -1,9 +1,18 @@
+"""
+    GuidedSEIR
+
+A module containing an implementation of the phylodynamic filter for
+an SEIR model, using a filter guide and "soft" proposals.  That is, when
+population-process events occur, the guide can steer those events
+preferentially onto (or away from) particular branches, but the overall
+event rate remains equal to that of the underlying population process.
+"""
 module GuidedSEIR
 
 export seir_convert!, seir, seir_trees
 
 using ..PhyloPOMP
-using ..PhyloPOMP: Root, Node, Sample, Name, Time
+using ..PhyloPOMP: Root, Node, Sample, Name, Prob, Time
 
 @demes Demes Expos Infec
 using .Demes: Expos, Infec, DemeSet
@@ -43,7 +52,7 @@ seir_singular!(
                 ll -= log(p)
                 (ellE,ellI) = plant!(cols,i,n.chillins[1])
             else
-                ll += Float64(-Inf)
+                ll += Prob(-Inf)
                 (ellE,ellI) = plant!(cols,Infec,n.chillins[1])
                 I += 1
             end
@@ -52,7 +61,7 @@ seir_singular!(
         end
     elseif n.type==Sample
         if n.parlin ∉ cols[Infec]
-            ll += Float64(-Inf)
+            ll += Prob(-Inf)
             (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
@@ -69,7 +78,7 @@ seir_singular!(
         end
     elseif n.type==Node
         if n.parlin ∉ cols[Infec]
-            ll += Float64(-Inf)
+            ll += Prob(-Inf)
             (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
@@ -118,7 +127,7 @@ seir_regular!(
     t = n.tbeg
     tf = n.tend
     if t < tf
-        alpha = similar(Vector{Float64},4)
+        alpha = similar(Vector{Prob},4)
         (ellE,ellI) = ell(cols)
         @assert I ≥ ellI && E ≥ ellE
         decay = event_rates!(
@@ -204,7 +213,7 @@ seir(
             m = pop/(S0+E0+I0+R0)
             (
                 node = one(Name),
-                ll = zero(Float64),
+                ll = zero(Prob),
                 cols = Coloring(Demes),
                 S = round(Int64, m*Float64(S0)),
                 E = round(Int64, m*Float64(E0)),
@@ -219,7 +228,7 @@ seir(
                 args...,
                 )
                 cols = copy(cols)
-                ll = zero(Float64)
+                ll = zero(Prob)
                 ll, S, E, I, R = seir_singular!(
                     cols, guide, node, ll;
                     S = S, E = E, I = I, R = R,

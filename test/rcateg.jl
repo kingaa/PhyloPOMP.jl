@@ -11,7 +11,7 @@ using Test
 
 @testset verbose=true "rcateg tests" begin
 
-    seed!(263260083)
+    seed!(263261083)
 
     x = [rcateg([1.0, 2.0, 3.0])[1] for _ in 1:10000]
     t=tally(x)
@@ -26,11 +26,23 @@ using Test
     @test 1.9 < t[recov]/t[trans] < 2.1
     @test 2.9 < t[wane]/t[trans] < 3.1
 
+    b = BitSet([33, 45, 101])
+    x = [rcateg([1.0, 2.0, 3.0],b)[1] for _ in 1:10000]
+    t = tally(x)
+    @test 1.9 < t[45]/t[33] < 2.1
+    @test 2.9 < t[101]/t[33] < 3.1
+
+    v = [33, 45, 101]
+    x = [rcateg([1.0, 2.0, 3.0],v)[1] for _ in 1:10000]
+    t = tally(x)
+    @test 1.9 < t[45]/t[33] < 2.1
+    @test 2.9 < t[101]/t[33] < 3.1
+
     k,s,p = rcateg([0,0,0],true)
     @test k==1 && s==0 && p==0
     k,s = rcateg([0,0,0])
     @test k==1 && s==0 && p==0
-    
+
 end
 
 end

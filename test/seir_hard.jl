@@ -1,28 +1,35 @@
-module NaiveSEIRTest
+module HardSEIRTest
 
 import ..Main: h1, h2
 
-@info h1("SEIR model with naïve proposals")
+@info h1("SEIR model with hard-guided proposals")
 
 using Test
 using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
-using PhyloPOMP.NaiveSEIR
+using PhyloPOMP.HardSEIR
+using PhyloPOMP.HardSEIR.Demes: Expos, Infec
 import PartiallyObservedMarkovProcesses as POMP
 
-@testset verbose=true "SEIR model with naïve proposals" begin
+@testset verbose=true "SEIR model with guided proposals" begin
 
     seed!(2121916527)
 
-    g = parse_newick(seir_trees[1], time = 50.0)
-    @test g isa Genealogy{PhyloPOMP.Unstructured}
+    g1 = parse_newick(seir_trees[1], time = 50.0)
+    @test g1 isa Genealogy{PhyloPOMP.Unstructured}
 
-    p = seir(g,E0=0,I0=0)
+    g2 = guide(
+        g1,
+        fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),
+        seir_convert!
+    )
+
+    p = seir(g2,E0=0,I0=0)
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = seir(g)
+    p = seir(g2)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")

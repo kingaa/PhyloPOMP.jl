@@ -1,16 +1,14 @@
 """
-    NaiveSEIR
+    HardSEIR
 
 A module containing an implementation of the phylodynamic filter for
-an SEIR model, using so-called naïve proposals. These proposals are
-non-anticipatory. In particular, population events occurring at any
-time result in color changes with a probability proportional to the
-fraction of appropriate lineages represented in the genealogy at that
-time.
+an SEIR model, using a filter guide and "hard" proposals.  That is, color
+changes can be proposed on branches at rates that exceed the event rates
+in the underlying population process.
 """
-module NaiveSEIR
+module HardSEIR
 
-export seir, seir_trees
+export seir_convert!, seir, seir_trees
 
 using ..PhyloPOMP
 using ..PhyloPOMP: Root, Node, Sample, Name, Prob, Time
@@ -20,78 +18,84 @@ using .Demes: Expos, Infec, DemeSet
 
 include("seir_trees.jl")
 
+"""
+    seir_convert!(v; deme, type, time)
+
+This function should return true if the guide probabilities will be fixed
+at this node and false otherwise. If the former, it should fill the vector
+`v` with an appropriate probability vector.
+"""
+seir_convert!(
+    v; deme, type, time,
+) = begin
+    if type==Sample || type==Node
+        demekron!(v,Infec)
+        true
+    else
+        false
+    end
+end
+
 seir_singular!(
-    cols, ll, geneal, node;
+    cols, guide, node, ll;
     S, E, I, R, pop, β, ψ,
     _...,
 ) = begin
-    n = geneal[node]
     (ellE,ellI) = ell(cols)
     @assert I ≥ ellI && E ≥ ellE
+    n = guide[node]
     if n.type==Root
-        if length(n.children) == 1
+        if length(n.chillins) == 1
             if E-ellE+I-ellI > 0
-                i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
+                i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
                 ll -= log(p)
-                (ellE,ellI) = plant!(cols,i,n.lineage)
+                (ellE,ellI) = plant!(cols,i,n.chillins[1])
             else
                 ll += Prob(-Inf)
-                (ellE,ellI) = plant!(cols,Infec,n.lineage)
+                (ellE,ellI) = plant!(cols,Infec,n.chillins[1])
                 I += 1
             end
         else
-            error("too many children ($(length(n.children)) > 1) at root $(n.name), t=$(n.time)")
+            error("too many children ($(length(n.chillins)) > 1) at root $(n.name), t=$(n.time)")
         end
     elseif n.type==Sample
-        if n.lineage ∉ cols[Infec]
+        if n.parlin ∉ cols[Infec]
             ll += Prob(-Inf)
-            (ellE,ellI) = swap!(cols,Expos,Infec,n.lineage)
+            (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
         end
         ll += log(ψ*I)
-        if length(n.children) == 0
-            (ellE,ellI) = chop!(cols,Infec,n.lineage)
+        if length(n.chillins) == 0
+            (ellE,ellI) = chop!(cols,Infec,n.parlin)
             ll += log(1-ellI/I)
-        elseif length(n.children) == 1
-            (ellE,ellI) = chop!(cols,Infec,n.lineage,Infec,geneal[n.children[1]].lineage)
+        elseif length(n.chillins) == 1
+            (ellE,ellI) = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
             ll -= log(I)
         else
-            error("too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)")
+            error("too many children ($(length(n.chillins)) > 1) at sample $(n.name), t=$(n.time)")
         end
     elseif n.type==Node
-        if n.lineage ∉ cols[Infec]
+        if n.parlin ∉ cols[Infec]
             ll += Prob(-Inf)
-            (ellE,ellI) = swap!(cols,Expos,Infec,n.lineage)
+            (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
         end
-        if length(n.children) == 2
+        if length(n.chillins) == 2
             ll += log(β*S*I/pop)
-            k, _, p = rcateg([1, 1], true)
+            k, _, p = rcateg([n.present[1,1]*n.present[2,2], n.present[1,2]*n.present[2,1]], true)
             ll -= log(p)
             if k==1
-                (ellE,ellI) = fork!(
-                    cols,
-                    Infec,n.lineage,
-                    (Expos,Infec),
-                    (geneal[n.children[1]].lineage,
-                     geneal[n.children[2]].lineage)
-                )
+                (ellE,ellI) = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
             else
-                (ellE,ellI) = fork!(
-                    cols,
-                    Infec,n.lineage,
-                    (Expos,Infec),
-                    (geneal[n.children[2]].lineage,
-                     geneal[n.children[1]].lineage)
-                )
+                (ellE,ellI) = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
             end
             S -= 1
             E += 1
             ll -= log(E*I)
         else
-            error("too many children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)")
+            error("too many children ($(length(n.chillins)) ≠ 2) at node $(n.name), t=$(n.time)")
         end
     else
         @assert false "impossible node type"
@@ -100,71 +104,83 @@ seir_singular!(
 end
 
 event_rates!(
-    alpha, pi, cols;
+    alpha, preboost, t, guide, node,
+    cols, ellE, ellI;
     S, E, I, R,
     β, σ, γ, ω, ψ, pop,
     _...,
 ) = begin
-    (ellE,ellI) = ell(cols)
-    @assert I ≥ ellI && E ≥ ellE
-    alpha[2] = alpha[1] = β*S*I/pop
-    alpha[4] = alpha[3] = σ*E
-    alpha[5] = @indicator(I > ellI, γ*(I-ellI))
+    rhEI = relhaz(t,guide,node,Expos,Infec,cols)
+    rhIE = relhaz(t,guide,node,Infec,Expos,cols)
+    a = β*S*I/pop
+    preboost[1] = I > 0 ? 1-ellI/I : 0
+    alpha[1] = a*preboost[1]
+    preboost[2] = I > 0 ? sum(rhIE)/I : 1
+    alpha[2] = a*preboost[2]
+    b = σ*E
+    preboost[3] = E > 0 ? 1-ellE/E : 0
+    alpha[3] = b*preboost[3]
+    preboost[4] = E > 0 ? sum(rhEI)/E : 1
+    alpha[4] = b*preboost[4]
+    c = γ*I
+    preboost[5] = 1-ellI/I
+    alpha[5] = @indicator(I > ellI, c*preboost[5])
+    preboost[6] = 1.0
     alpha[6] = ω*R
-    pi[1] = @indicator(I > 0, 1-ellI/I)
-    pi[2] = @indicator(I > 0, ellI/I)
-    pi[3] = @indicator(E > 0, 1-ellE/E)
-    pi[4] = @indicator(E > 0, ellE/E)
-    pi[6] = pi[5] = 1.0
-    ψ*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
+    decay = ψ*I +
+        a - alpha[1] - alpha[2] +
+        b - alpha[3] - alpha[4] +
+        c - alpha[5]
+    decay, rhEI, rhIE
 end
 
 seir_regular!(
-    cols, ll;
-    t, dt,
+    cols, guide, node, ll;
     S, E, I, R,
     β, σ, γ, ω, ψ, pop,
     _...,
 ) = begin
-    tf = t+dt
+    n = guide[node]
+    t = n.tbeg
+    tf = n.tend
     if t < tf
-        alpha = similar(Vector{Prob}, 6)
-        pi = similar(Vector{Prob}, 6)
+        alpha = similar(Vector{Prob},6)
+        preboost = similar(Vector{Prob},6)
         (ellE,ellI) = ell(cols)
         @assert I ≥ ellI && E ≥ ellE
-        decay = event_rates!(
-            alpha, pi, cols;
+        decay,rhEI,rhIE = event_rates!(
+            alpha, preboost, t, guide, node,
+            cols, ellE, ellI;
             S = S, E = E, I = I, R = R,
             β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
         )
-        k, s = rcateg(alpha .* pi)
+        k, s = rcateg(alpha)
         step::Time = -log(rand())/s
         while (t+step < tf)
-            ll -= decay*step+log(pi[k])
+            ll -= decay*step + log(preboost[k])
             if k==1
                 S -= 1
                 E += 1
                 ll += log(1-ellE/E)
             elseif k==2
-                ll += log(ellI)
-                b = rand(cols[Infec])
-                (ellE,ellI) = swap!(cols,Infec,Expos,b)
+                b,_,p = rcateg(rhIE,cols[Infec],true)
+                ll -= log(p)
                 S -= 1
                 E += 1
+                (ellE,ellI) = swap!(cols,Infec,Expos,b)
                 ll += log(1-ellI/I)-log(E)
             elseif k==3
                 E -= 1
                 I += 1
                 ll += log(1-ellI/I)
             elseif k==4
-                ll += log(ellE)
-                b = rand(cols[Expos])
-                (ellE,ellI) = swap!(cols,Expos,Infec,b)
+                b,_,p = rcateg(rhEI,cols[Expos],true)
+                ll -= log(p)
                 E -= 1
                 I += 1
+                (ellE,ellI) = swap!(cols,Expos,Infec,b)
                 ll -= log(I)
             elseif k==5
-                ll -= log(1-ellI/I)
                 I -= 1
                 R += 1
             elseif k==6
@@ -175,12 +191,13 @@ seir_regular!(
             end
             @assert I ≥ ellI && E ≥ ellE
             t += step
-            decay = event_rates!(
-                alpha, pi, cols;
+            decay,rhEI,rhIE = event_rates!(
+                alpha, preboost, t, guide, node,
+                cols, ellE, ellI;
                 S = S, E = E, I = I, R = R,
                 β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
             )
-            k, s = rcateg(alpha .* pi)
+            k, s = rcateg(alpha)
             step = -log(rand())/s
         end
         step = tf - t
@@ -191,17 +208,15 @@ seir_regular!(
 end
 
 """
-    seir(gen; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
+    seir(g; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
          pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
 
-Constructs a pomp object based on the genealogy `gen` and implementing
-the naïve genealogical filter.
+Constructs a pomp object based on the filter guide `g`.
 """
 seir(
-    gen::Genealogy;
+    guide::Guide;
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
-    pop = 100,
-    S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
+    pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
 ) = begin
     pomp(
         params = (
@@ -211,8 +226,8 @@ seir(
             S0 = Float64(S0), E0 = Float64(E0),
             I0 = Float64(I0), R0 = Float64(R0),
         ),
-        t0 = timezero(gen),
-        times = times(gen),
+        t0 = timezero(guide),
+        times = times(guide),
         rinit = function (; S0, E0, I0, R0, pop, _...)
             m = pop/(S0+E0+I0+R0)
             (
@@ -227,20 +242,20 @@ seir(
         end,
         rprocess = onestep(
             function (
-                ; node, ll, cols, geneal,
+                ; node, ll, cols, guide,
                 S, E, I, R,
                 args...,
                 )
                 cols = copy(cols)
                 ll = zero(Prob)
                 ll, S, E, I, R = seir_singular!(
-                    cols, ll, geneal, node;
+                    cols, guide, node, ll;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )
                 if isfinite(ll)
                     ll, S, E, I, R = seir_regular!(
-                        cols, ll;
+                        cols, guide, node, ll;
                         S = S, E = E, I = I, R = R,
                         args...,
                     )
@@ -252,7 +267,7 @@ seir(
         logdmeasure = function (; ll, _...)
             ll
         end,
-        userdata = (geneal = gen,),
+        userdata = (guide = guide,),
     )
 end
 

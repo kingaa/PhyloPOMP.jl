@@ -67,3 +67,33 @@ rcateg(
     k,s... = rcateg(p,prob)
     demes(k), s...
 end
+
+"""
+    rcateg(p, s, prob = false)
+
+This call returns a draw from the categorical distribution on the set `s`.
+The latter may be a `Set` or a `BitSet`.
+"""
+rcateg(
+    p::AbstractVector{<:Real},
+    set::Union{BitSet,Set},
+    prob::Bool = false,
+) = begin
+    k,s... = rcateg(p,prob)
+    v = collect(set)
+    v[k], s...
+end
+
+"""
+    rcateg(p, v, prob = false)
+
+This call returns a draw from the categorical distribution on the vector `v`.
+"""
+rcateg(
+    p::AbstractVector{<:Real},
+    v::AbstractVector,
+    prob::Bool = false,
+) = begin
+    k,s... = rcateg(p,prob)
+    v[k], s...
+end

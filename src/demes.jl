@@ -11,6 +11,11 @@ macro demes(name, first, rest...)
     esc(:(@enumx T=DemeSet $name $first=1 $(rest...)))
 end
 
+"""
+    Unstructured
+
+A demeset for the unstructured (1-deme) case.
+"""
 @demes Unstructured default
 
 """
@@ -26,14 +31,14 @@ name2enum(demes::Type{D}) where {D <: Enum} = begin
 end
 
 """
-    enum2name(demes)
+    enum2name(demeset)
 
 Returns a `Dict` that maps demes to strings.
 """
-enum2name(::Val{D}) where {D <: Enum} = begin
-    Dict(i=>String(Symbol(i)) for i ∈ instances(D))
+enum2name(demes::Type{D}) where {D <: Enum} = begin
+    Dict(i=>String(Symbol(i)) for i ∈ instances(demes))
 end
 
 macro isademeset(d)
-    esc(:(@assert $d isa Module && isdefined($d,:DemeSet) "construct `demes` with `@demes`"))
+    esc(:(@assert $d isa Module && isdefined($d,:DemeSet) "construct a demeset using `@demes`"))
 end

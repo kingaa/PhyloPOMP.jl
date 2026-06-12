@@ -93,23 +93,29 @@ make_generator(
     Q = zeros(F,n,n)
     for arg ∈ args
         if arg isa Pair{D,<:Real}
+            i = Int(arg.first)
             s = F(arg.second)
             if s ≤ 0.0
                 error("non-positive stationary probability $arg")
+            elseif pi[i] ≠ zero(F)
+                error("double specification of stationary probability ($(arg.first))")
+            else
+                pi[i] = s
             end
-            pi[Int(arg.first)] = s
         else
-            if arg.first[1] == arg.first[2]
+            i = Int(arg.first[1])
+            j = Int(arg.first[2])
+            if i == j
                 error("cannot specify conductance of a deme to itself (here, $(arg.first[1]) to $(arg.first[2]))")
-            elseif Q[Int(arg.first[2]),Int(arg.first[1])] ≠ zero(F)
+            elseif !(Q[i,j] == zero(F) && Q[j,i] == zero(F))
                 error("double specification of conductance ($(arg.first[1]) to $(arg.first[2]))")
             else
                 s = F(arg.second)
                 if (s < zero(F))
                     error("negative conductance for $(arg.first[1]) to $(arg.first[2])")
                 end
-                Q[Int(arg.first[1]),Int(arg.first[2])] = s
-                Q[Int(arg.first[2]),Int(arg.first[1])] = s
+                Q[i,j] = s
+                Q[j,i] = s
             end
         end
     end

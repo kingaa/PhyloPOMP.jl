@@ -17,7 +17,7 @@ using Test
     @demes SEIR E I
     @test_throws r"final time from data \(.+\) exceeds" parse_newick(x,demes=SEIR,t0=5.0,time=6);
     g = parse_newick(x,demes=SEIR,t0=5.0,time=7.0);
-    @test g isa Genealogy{SEIR.DemeSet}
+    @test g isa Genealogy{SEIR}
     @test ismissing(g.nodes[3].deme)
     @test sum(map(x->ismissing(x.deme),g.nodes))==20
     @test sum(map(x->!ismissing(x.deme),g.nodes))==65
@@ -37,6 +37,7 @@ using Test
     @test PhyloPOMP.nsample(g)==24
 
     g=parse_newick("():0.1;",t0=0.0);
+    @test g isa Genealogy{PhyloPOMP.Unstructured}
     @test length(g.nodes)==2
     @test g.nodes[2].type==PhyloPOMP.Sample
     g = parse_newick("A():3.2;",t0=0.0);

@@ -3,8 +3,10 @@ import Base: eachindex, length, getindex, eachindex, show
 """
     GuideNode{F,D}
 
-A `GuideNode` contains the information needed to guide a phylodynamic Monte Carlo filter on a particular interval between genealogical events.
-`F` is an `AbstractFloat` type and `D` is the enumeration of the demes (see [`@demes`](@ref)).
+A `GuideNode` contains the information needed to guide a phylodynamic
+Monte Carlo filter on a particular interval between genealogical events.
+`F` is an `AbstractFloat` type and `D` is the enumeration of the demes
+(see [`@demes`](@ref)).
 
 A `GuideNode` contains:
 - the time interval to which it pertains
@@ -16,15 +18,28 @@ A `GuideNode` contains:
 - the target probabilities for all lineages at the right interval endpoint.
 """
 struct GuideNode{F<:AbstractFloat,D<:Enum}
+    "type of node at left endpoint of the interval"
     type::NodeType
+    "left end of the time interval"
     tbeg::Time
+    "right end of the time interval"
     tend::Time
+    "identity of the parent lineage"
     parlin::Name
+    "identities of child lineage(s)"
     chillins::Vector{Name}
+    "identities of all lineages present on the interval"
     alllins::Vector{Name}
+    "Dict that maps lineages to indices of the various matrices"
     linmap::Dict{Name,Name}
+    "Matrix giving the probabilities of finding a lineage in a deme"
     present::Matrix{F}
+    """
+    Matrix giving the target probabilities (of finding a lineage in
+    a given deme at the end of the interval).
+    """
     target::Matrix{F}
+    "`target` rexpressed in the eigenbasis of the guide process"
     dtarget::Matrix{F} ## FIXME: inelegant to store redundant information
 end
 
@@ -37,14 +52,17 @@ Construct it with a call to [`guide`](@ref).
 It contains the [`FSMarkovProc`](@ref) object encoding the Markov process and a sequence of [`GuideNode`](@ref) objects.
 """
 struct Guide{F<:AbstractFloat,D<:Enum}
+    "finite-state Markov process"
     process::FSMarkovProc{F,D}
+    "vector of nodes, one for each interval"
     nodes::Vector{GuideNode{F,D}}
+    "total number of sample lineages"
     nsample::Size
     Guide(
         g::Genealogy{E},
         m::FSMarkovProc{F,D},
         knowledge!::Function = known_deme!,
-    ) where {F<:AbstractFloat,D<:Enum,E<:Enum} = begin
+    ) where {F<:AbstractFloat,D<:Enum,E} = begin
         probs = zeros(F,length(instances(D)),g.nsample)
         nodes = Vector{GuideNode{F,D}}(undef,length(g))
         tend::Time = g.time
@@ -87,6 +105,13 @@ struct Guide{F<:AbstractFloat,D<:Enum}
     end
 end
 
+"""
+    known_deme!(v; deme, type, time)
+
+The default behavior of [`guide`](@ref) is to assume the deme is known
+if and only if it is fixed in the genealogy.  This function implements
+that default.
+"""
 known_deme!(
     v::AbstractVector{F};
     deme, type, time,
@@ -100,11 +125,15 @@ known_deme!(
 end
 
 """
-    guide(g, m)
+    guide(g, m, knowledge!)
 
 - `g` is a [`Genealogy`](@ref).
 - `m`: is an [`FSMarkovProc`](@ref) encoding the guiding finite-state Markov process.
   Construct it with a call to [`fsmarkov`](@ref).
+- `knowledge!` is a function with signature `knowledge!(v; deme, type, time)`.
+  It should overwrite the vector `v` with probabilities of being in each
+  possible deme, according to the given `deme`, `type`, and `time`.
+  By default, `knowledge! = known_deme!` (see [`known_deme!`](@ref)).
 """
 guide(args...) = Guide(args...)
 
@@ -146,7 +175,7 @@ relhaz(
     n::Integer,
     i::D,
     j::D,
-    lins,
+    lins::Union{Integer,AbstractVector{<:Integer}},
 ) where {F,D} = begin
     @assert g[n].tbeg ≤ t < g[n].tend "t ∉ [$(g[n].tbeg),$(g[n].tend))"
     p = relhaz_action(
@@ -155,6 +184,23 @@ relhaz(
         @view(g[n].dtarget[:,lins]),
     )
     @views p[Int(j),:]./p[Int(i),:]
+end
+
+"""
+    relhaz(t, g, n, i, j, cols)
+
+In this form, `cols` is a `Coloring`.
+"""
+relhaz(
+    t::Time,
+    g::Guide{F,D},
+    n::Integer,
+    i::D,
+    j::D,
+    cols::Coloring{D}
+) where {F,D} = begin
+    lins = [g[n].linmap[k] for k ∈ cols[i]]
+    relhaz(t,g,n,i,j,lins)
 end
 
 choose_branch(
