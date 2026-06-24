@@ -21,13 +21,13 @@ using .Demes: Expos, Infec, DemeSet
 include("seir_trees.jl")
 
 seir_singular!(
-    cols, ll, geneal, node;
+    cols, geneal, node, ll;
     S, E, I, R, pop, β, ψ,
     _...,
 ) = begin
-    n = geneal[node]
     (ellE,ellI) = ell(cols)
     @assert I ≥ ellI && E ≥ ellE
+    n = geneal[node]
     if n.type==Root
         if length(n.children) == 1
             if E-ellE+I-ellI > 0
@@ -234,7 +234,7 @@ seir(
                 cols = copy(cols)
                 ll = zero(Prob)
                 ll, S, E, I, R = seir_singular!(
-                    cols, ll, geneal, node;
+                    cols, geneal, node, ll;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )
