@@ -43,9 +43,8 @@ seir_singular!(
 ) = begin
     ellE, ellI = ell(cols)
     n = guide[node]
-    if I < ellI || E < ellE
-        ll += Prob(-Inf)
-    elseif n.type==Root
+    @assert I ≥ ellI && E ≥ ellE
+    if n.type==Root
         if length(n.chillins) == 1
             if E-ellE+I-ellI > 0
                 i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
