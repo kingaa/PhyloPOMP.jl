@@ -22,7 +22,7 @@ import PartiallyObservedMarkovProcesses as POMP
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = seir(g)
+    p = seir(g,χ=0.01)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")

@@ -38,21 +38,24 @@ end
 
 seir_singular!(
     cols, guide, node, ll;
-    S, E, I, R, pop, β, ψ,
+    S, E, I, R, pop, β, ψ, χ,
     _...,
 ) = begin
-    (ellE,ellI) = ell(cols)
-    @assert I ≥ ellI && E ≥ ellE
+    ellE, ellI = ell(cols)
     n = guide[node]
-    if n.type==Root
+    if I < ellI || E < ellE
+        ll += Prob(-Inf)
+    elseif n.type==Root
         if length(n.chillins) == 1
             if E-ellE+I-ellI > 0
                 i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
                 ll -= log(p)
-                (ellE,ellI) = plant!(cols,i,n.chillins[1])
+                ellE, ellI = plant!(cols,i,n.chillins[1])
             else
+                ## even though this realization is incompatible with the data,
+                ## it is necessary to correct the coloring to avoid downstream errors.
                 ll += Prob(-Inf)
-                (ellE,ellI) = plant!(cols,Infec,n.chillins[1])
+                ellE, ellI = plant!(cols,Infec,n.chillins[1])
                 I += 1
             end
         else
@@ -60,25 +63,36 @@ seir_singular!(
         end
     elseif n.type==Sample
         if n.parlin ∉ cols[Infec]
+            ## even though this realization is incompatible with the data,
+            ## it is necessary to correct the coloring to avoid downstream errors.
             ll += Prob(-Inf)
-            (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
+            ellE, ellI = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
         end
-        ll += log(ψ*I)
         if length(n.chillins) == 0
-            (ellE,ellI) = chop!(cols,Infec,n.parlin)
-            ll += log(1-ellI/I)
+            ll += log((ψ+χ)*I)
+            ellE, ellI = chop!(cols,Infec,n.parlin)
+            k,_ = rcateg([ψ, χ])
+            if k==1             # non-destructive sampling
+                ll += log(1-ellI/I)
+            elseif k==2     # destructive sampling
+                I -= 1
+            else
+                @assert false "impossible choice" # COV_EXCL_LINE
+            end
         elseif length(n.chillins) == 1
-            (ellE,ellI) = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
-            ll -= log(I)
+            ellE, ellI = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
+            ll += log(ψ)
         else
             error("too many children ($(length(n.chillins)) > 1) at sample $(n.name), t=$(n.time)")
         end
     elseif n.type==Node
         if n.parlin ∉ cols[Infec]
+            ## even though this realization is incompatible with the data,
+            ## it is necessary to correct the coloring to avoid downstream errors.
             ll += Prob(-Inf)
-            (ellE,ellI) = swap!(cols,Expos,Infec,n.parlin)
+            ellE, ellI = swap!(cols,Expos,Infec,n.parlin)
             E -= 1
             I += 1
         end
@@ -87,9 +101,9 @@ seir_singular!(
             k, _, p = rcateg([n.present[1,1]*n.present[2,2], n.present[1,2]*n.present[2,1]], true)
             ll -= log(p)
             if k==1
-                (ellE,ellI) = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
+                ellE, ellI = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
             else
-                (ellE,ellI) = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
+                ellE, ellI = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
             end
             S -= 1
             E += 1
@@ -98,16 +112,16 @@ seir_singular!(
             error("too many children ($(length(n.chillins)) ≠ 2) at node $(n.name), t=$(n.time)")
         end
     else
-        @assert false "impossible node type"
+        @assert false "impossible node type" # COV_EXCL_LINE
     end
-    (; ll = ll, S = S, E = E, I = I, R = R)
+    ll, S, E, I, R
 end
 
 event_rates!(
     alpha, preboost, t, guide, node,
     cols, ellE, ellI;
     S, E, I, R,
-    β, σ, γ, ω, ψ, pop,
+    β, σ, γ, ω, ψ, χ, pop,
     _...,
 ) = begin
     rhEI = relhaz(t,guide,node,Expos,Infec,cols)
@@ -127,7 +141,7 @@ event_rates!(
     alpha[5] = @indicator(I > ellI, c*preboost[5])
     preboost[6] = 1.0
     alpha[6] = ω*R
-    decay = ψ*I +
+    decay = ψ*I + χ*I +
         a - alpha[1] - alpha[2] +
         b - alpha[3] - alpha[4] +
         c - alpha[5]
@@ -137,7 +151,7 @@ end
 seir_regular!(
     cols, guide, node, ll;
     S, E, I, R,
-    β, σ, γ, ω, ψ, pop,
+    β, σ, γ, ω, ψ, χ, pop,
     _...,
 ) = begin
     n = guide[node]
@@ -146,13 +160,13 @@ seir_regular!(
     if t < tf
         alpha = similar(Vector{Prob},6)
         preboost = similar(Vector{Prob},6)
-        (ellE,ellI) = ell(cols)
-        @assert I ≥ ellI && E ≥ ellE
+        ellE, ellI = ell(cols)
         decay,rhEI,rhIE = event_rates!(
             alpha, preboost, t, guide, node,
             cols, ellE, ellI;
             S = S, E = E, I = I, R = R,
-            β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
+            β = β, σ = σ, γ = γ, ω = ω,
+            ψ = ψ, χ = χ, pop = pop,
         )
         k, s = rcateg(alpha)
         step::Time = -log(rand())/s
@@ -167,7 +181,7 @@ seir_regular!(
                 ll -= log(p)
                 S -= 1
                 E += 1
-                (ellE,ellI) = swap!(cols,Infec,Expos,b)
+                ellE, ellI = swap!(cols,Infec,Expos,b)
                 ll += log(1-ellI/I)-log(E)
             elseif k==3
                 E -= 1
@@ -178,7 +192,7 @@ seir_regular!(
                 ll -= log(p)
                 E -= 1
                 I += 1
-                (ellE,ellI) = swap!(cols,Expos,Infec,b)
+                ellE, ellI = swap!(cols,Expos,Infec,b)
                 ll -= log(I)
             elseif k==5
                 I -= 1
@@ -187,15 +201,15 @@ seir_regular!(
                 R -= 1
                 S += 1
             else
-                @assert false "impossible error!"
+                @assert false "impossible error!" # COV_EXCL_LINE
             end
-            @assert I ≥ ellI && E ≥ ellE
             t += step
             decay,rhEI,rhIE = event_rates!(
                 alpha, preboost, t, guide, node,
                 cols, ellE, ellI;
                 S = S, E = E, I = I, R = R,
-                β = β, σ = σ, γ = γ, ω = ω, ψ = ψ, pop = pop,
+                β = β, σ = σ, γ = γ, ω = ω,
+                ψ = ψ, χ = χ, pop = pop,
             )
             k, s = rcateg(alpha)
             step = -log(rand())/s
@@ -204,24 +218,24 @@ seir_regular!(
         ll -= decay*step
     end
     @assert I ≥ ellI && E ≥ ellE
-    (; ll = ll, S = S, E = E, I = I, R = R)
+    ll, S, E, I, R
 end
 
 """
-    seir(g; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
+    seir(g; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
          pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
 
 Constructs a pomp object based on the filter guide `g`.
 """
 seir(
     guide::Guide;
-    β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
+    β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
     pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
 ) = begin
     pomp(
         params = (
             β = Float64(β), σ = Float64(σ), γ = Float64(γ),
-            ω = Float64(ω), ψ = Float64(ψ),
+            ω = Float64(ω), ψ = Float64(ψ), χ = Float64(χ),
             pop = Float64(pop),
             S0 = Float64(S0), E0 = Float64(E0),
             I0 = Float64(I0), R0 = Float64(R0),
