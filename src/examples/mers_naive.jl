@@ -1,7 +1,5 @@
 module NaiveMERS
 
-export mers
-
 using ..PhyloPOMP
 using ..PhyloPOMP: Root, Node, Sample, Name, Time
 
@@ -10,17 +8,14 @@ using .Demes: Camel, Human, DemeSet
 
 include("mers_tree.jl")
 
-## finite_log(x) = x > 0 ? log(x) : Float64(-Inf)
-## safe_rate(x) = isfinite(x) && x > 0 ? Float64(x) : 0.0
-
-function mers_singular!(
+singular_part!(
     cols, ll, geneal, node;
     Sc, Ic, Sh, Ih,
     Beta_cc, Beta_ch, Beta_hc, Beta_hh,
     chi_c, chi_h,
     Nc, Nh,
     _...,
-    )
+) = begin
     ellc, ellh = ell(cols)
     n = geneal[node]
     if Ic < ellc || Ih < ellh
@@ -136,13 +131,13 @@ function mers_singular!(
     ll, Sc, Ic, Sh, Ih
 end
 
-function mers_event_rates!(
+event_rates!(
     rate, logpi, ellc, ellh;
     Sc, Ic, Sh, Ih,
     Beta_cc, Beta_ch, Beta_hc, Beta_hh,
     gamma_c, gamma_h, chi_c, chi_h, Bc, Bh, Nc, Nh,
     _...,
-    )
+) = begin
     fill!(rate, 0.0)
     fill!(logpi, Float64(-Inf))
     penalty = 0.0
@@ -194,19 +189,19 @@ function mers_event_rates!(
     penalty, sum(rate)
 end
 
-function mers_regular!(
+regular_part!(
     cols, ll;
     t, dt,
     Sc, Ic, Sh, Ih,
     args...,
-    )
+) = begin
     tf = t + dt
     rate = zeros(Float64, 12)
     logpi = zeros(Float64, 12)
     ellc, ellh = ell(cols)
 
     while t < tf
-        penalty, event_rate = mers_event_rates!(
+        penalty, event_rate = event_rates!(
             rate, logpi, ellc, ellh;
             Sc, Ic, Sh, Ih,
             args...,
@@ -269,12 +264,12 @@ function mers_regular!(
 end
 
 """
-    mers(gen; ...)
+    filter_pomp(gen; ...)
 
 Construct a Julia POMP object for the phylopomp MERS genealogy-conditioned
 filter. Parameter names and event order follow R phylopomp's MERS model.
 """
-function mers(
+filter_pomp(
     Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 0.0, Beta_hh = 4.0,
     gamma_c = 1.0, gamma_h = 1.0,
     chi_c = 1.0, chi_h = 0.0,
@@ -282,7 +277,8 @@ function mers(
     Sc0 = 1.0, Sh0 = 1.0,
     Ic0 = 0.01, Ih0 = 0.0,
     Nc = 10000, Nh = 10000,
-    )
+) = begin
+    gen = parse_newick(mers_tree,Demes)
     pomp(
         params = (
             Beta_cc = Float64(Beta_cc), Beta_ch = Float64(Beta_ch),
@@ -316,13 +312,13 @@ function mers(
                       )
                 cols = copy(cols)
                 ll = zero(Float64)
-                ll, Sc, Ic, Sh, Ih = mers_singular!(
+                ll, Sc, Ic, Sh, Ih = singular_part!(
                     cols, ll, geneal, node;
                     Sc, Ic, Sh, Ih,
                     args...,
                 )
                 if isfinite(ll)
-                    ll, Sc, Ic, Sh, Ih = mers_regular!(
+                    ll, Sc, Ic, Sh, Ih = regular_part!(
                         cols, ll;
                         t, dt,
                         Sc, Ic, Sh, Ih,
@@ -335,6 +331,6 @@ function mers(
         logdmeasure = function (; ll, _...)
             ll
         end,
-        userdata = (geneal = parse_newick(mers_tree),)
+        userdata = (geneal = gen,)
     )
 end
