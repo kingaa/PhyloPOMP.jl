@@ -15,12 +15,7 @@ import PartiallyObservedMarkovProcesses as POMP
 
     seed!(2121916527)
 
-    @demes Demes Camel Human
-
-    g = parse_newick(mers_tree,Demes)
-    @test g isa Genealogy{PhyloPOMP.Unstructured}
-
-    p = mers(Ic0=0,Ih0=0)
+    p = NaiveMERS.filter_pomp(Ic0=0,Ih0=0)
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 

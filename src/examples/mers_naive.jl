@@ -8,6 +8,8 @@ using .Demes: Camel, Human, DemeSet
 
 include("mers_tree.jl")
 
+const mers_tree = parse_newick(mers_newick,t0=0,demes=Demes)
+
 singular_part!(
     cols, ll, geneal, node;
     Sc, Ic, Sh, Ih,
@@ -79,7 +81,7 @@ singular_part!(
         if n.lineage ∈ cols[Camel]
             lambda_cc = Nc > 0 ? Beta_cc * Sc * Ic / Nc : 0.0
             lambda_hc = Nc > 0 ? Beta_hc * Sh * Ic / Nc / 2.0 : 0.0
-            k,lambda,p = rcateg([lambda_cc, lambda_hc, lambda_hc], false)
+            k,lambda = rcateg([lambda_cc, lambda_hc, lambda_hc], false)
             if k == 1
                 @assert Sc > 0
                 ellc, ellh = fork!(cols, Camel, n.lineage, (Camel, Camel), children)
@@ -105,7 +107,7 @@ singular_part!(
             k,lambda,p = rcateg([lambda_hh, lambda_ch, lambda_ch], true)
             if k == 1
                 @assert Sh > 0
-                ellc, ellh = fork!(cols, Human, n.lineage, (Human, Humnan), children)
+                ellc, ellh = fork!(cols, Human, n.lineage, (Human, Human), children)
                 Sh -= 1
                 Ih += 1
                 ll += log(lambda) - log(Ih * (Ih - 1) / 2)
@@ -132,61 +134,32 @@ singular_part!(
 end
 
 event_rates!(
-    rate, logpi, ellc, ellh;
+    alpha, pi, cols;
     Sc, Ic, Sh, Ih,
     Beta_cc, Beta_ch, Beta_hc, Beta_hh,
     gamma_c, gamma_h, chi_c, chi_h, Bc, Bh, Nc, Nh,
     _...,
 ) = begin
-    fill!(rate, 0.0)
-    fill!(logpi, Float64(-Inf))
-    penalty = 0.0
+    ellc, ellh = ell(cols)
+    fill!(pi,one(Prob))
+    @assert Ic ≥ ellc && Ih ≥ ellh
+    alpha[1] = Beta_cc*Sc*Ic/Nc
+    alpha[2] = Beta_hh*Sh*Ih/Nh
+    alpha[3] = alpha[4] = Beta_hc*Sh*Ic/Nc
+    alpha[5] = alpha[6] = Beta_ch*Sc*Ih/Nh
+    alpha[7] = @indicator(Ic > ellc, gamma_c*(Ic-ellc))
+    alpha[8] = @indicator(Ih > ellh, gamma_h*(Ih-ellh))
+    alpha[10] = alpha[9] = Bc
+    alpha[12] = alpha[11] = Bh
 
-    alpha = Nc > 0 ? Beta_cc * Sc * Ic / Nc : 0.0
-    disc = Ic > 0 ? ellc * (ellc - 1) / Ic / (Ic + 1) : 1.0
-    penalty += alpha * disc
-    rate[1] = safe_rate(alpha * (1 - disc)); logpi[1] = 0.0
+    pi[3] = @indicator(Ic > 0, 1-ellc/Ic)
+    pi[4] = @indicator(Ic > 0, ellc/Ic)
+    pi[5] = @indicator(Ih > 0, 1-ellh/Ih)
+    pi[6] = @indicator(Ih > 0, ellh/Ih)
 
-    alpha = Nh > 0 ? Beta_hh * Sh * Ih / Nh : 0.0
-    disc = Ih > 0 ? ellh * (ellh - 1) / Ih / (Ih + 1) : 1.0
-    penalty += alpha * disc
-    rate[2] = safe_rate(alpha * (1 - disc)); logpi[2] = 0.0
-
-    alpha = Nh > 0 ? Beta_ch * Sc * Ih / Nh : 0.0
-    pi = Ih > 0 ? (Ih - 0.5 * ellh) / Ih : 1.0
-    rate[3] = safe_rate(alpha * pi); logpi[3] = log(pi)
-    pi = Ih > 0 ? 1 - pi : 0.0
-    rate[4] = safe_rate(alpha * pi); logpi[4] = (pi > 0 && ellh > 0) ? log(pi) - log(ellh) : Float64(-Inf)
-
-    alpha = Nc > 0 ? Beta_hc * Sh * Ic / Nc : 0.0
-    pi = Ic > 0 ? (Ic - 0.5 * ellc) / Ic : 1.0
-    rate[5] = safe_rate(alpha * pi); logpi[5] = log(pi)
-    pi = Ic > 0 ? 1 - pi : 0.0
-    rate[6] = safe_rate(alpha * pi); logpi[6] = (pi > 0 && ellc > 0) ? log(pi) - log(ellc) : Float64(-Inf)
-
-    alpha = gamma_c * Ic
-    if Ic > ellc
-        rate[7] = safe_rate(alpha)
-    else
-        penalty += alpha
-    end
-    logpi[7] = 0.0
-
-    alpha = gamma_h * Ih
-    if Ih > ellh
-        rate[8] = safe_rate(alpha)
-    else
-        penalty += alpha
-    end
-    logpi[8] = 0.0
-
-    penalty += chi_c * Ic + chi_h * Ih
-    rate[9] = safe_rate(Bc); logpi[9] = 0.0
-    rate[10] = safe_rate(Bh); logpi[10] = 0.0
-    rate[11] = safe_rate(Bc); logpi[11] = 0.0
-    rate[12] = Nh > 0 ? safe_rate(Bh / Nh * Sh) : 0.0; logpi[12] = 0.0
-
-    penalty, sum(rate)
+    chi_c * Ic + chi_h * Ih +
+        gamma_c*ellc + @indicator(Ic ≤ ellc, gamma_c*(Ic-ellc)) +
+        gamma_h*ellh + @indicator(Ih ≤ ellh, gamma_h*(Ih-ellh))
 end
 
 regular_part!(
@@ -196,81 +169,77 @@ regular_part!(
     args...,
 ) = begin
     tf = t + dt
-    rate = zeros(Float64, 12)
-    logpi = zeros(Float64, 12)
-    ellc, ellh = ell(cols)
-
-    while t < tf
-        penalty, event_rate = event_rates!(
-            rate, logpi, ellc, ellh;
-            Sc, Ic, Sh, Ih,
+    if t < tf
+        alpha = similar(Vector{Prob}, 12)
+        pi = similar(Vector{Prob}, 12)
+        ellE, ellI = ell(cols)
+        decay = event_rates!(
+            alpha, pi, cols;
+            Sc=Sc, Ic=Ic, Sh=Sh, Ih=Ih,
             args...,
         )
-
-        if event_rate <= 0
-            ll -= penalty * (tf - t)
-            break
+        k, s = rcateg(alpha .* pi)
+        step::Time = -log(rand())/s
+        while t+step < tf
+            ll -= decay*step+log(pi[k])
+            if k == 1
+                Sc -= 1
+                Ic += 1
+                ll += log(1-(ellc*(ellc-1)/Ic/(Ic-1)))
+            elseif k == 2
+                Sh -= 1
+                Ih += 1
+                ll += log(1-(ellh*(ellh-1)/Ih/(Ih-1)))
+            elseif k == 3
+                Sh -= 1
+                Ih += 1
+                ll += log(1 - ellh / Ih)
+            elseif k == 4
+                Sh -= 1
+                Ih += 1
+                b = rand(cols[Camel])
+                ellc, ellh = swap!(cols, Camel, Human, b)
+                ll += log((1 - ellc / Ic) / Ih)
+            elseif k == 5
+                Sc -= 1
+                Ic += 1
+                ll += log(1 - ellc / Ic)
+            elseif k == 6
+                Sc -= 1
+                Ic += 1
+                b = rand(cols[Human])
+                ellc, ellh = swap!(cols, Human, Camel, b)
+                ll += log((1 - ellh / Ih) / Ic)
+            elseif k == 7
+                Ic -= 1
+            elseif k == 8
+                Ih -= 1
+            elseif k == 9
+                Sc += 1
+            elseif k == 10
+                Sh += 1
+            elseif k == 11
+                Sc -= 1
+            elseif k == 12
+                Sh -= 1
+            else
+                @assert false "impossible event" # COV_EXCL_LINE
+            end
+            @assert Ic >= ellc && Ih >= ellh
+            t += step
         end
-
-        step = -log(rand()) / event_rate
-        if t + step >= tf
-            ll -= penalty * (tf - t)
-            break
-        end
-
-        k, _ = rcateg(rate)
-        ll -= penalty * step + logpi[k]
-
-        if k == 1
-            Sc -= 1; Ic += 1
-        elseif k == 2
-            Sh -= 1; Ih += 1
-        elseif k == 3
-            Sc -= 1; Ic += 1
-            ll += log(1 - ellc / Ic)
-        elseif k == 4
-            Sc -= 1; Ic += 1
-            b = rand(cols[Human])
-            ellc, ellh = swap!(cols, Human, Camel, b)
-            ll += log(1 - ellh / Ih) - log(Ic)
-        elseif k == 5
-            Sh -= 1; Ih += 1
-            ll += log(1 - ellh / Ih)
-        elseif k == 6
-            Sh -= 1; Ih += 1
-            b = rand(cols[Camel])
-            ellc, ellh = swap!(cols, Camel, Human, b)
-            ll += log(1 - ellc / Ic) - log(Ih)
-        elseif k == 7
-            Ic -= 1
-        elseif k == 8
-            Ih -= 1
-        elseif k == 9
-            Sc += 1
-        elseif k == 10
-            Sh += 1
-        elseif k == 11
-            Sc > 0 && (Sc -= 1)
-        elseif k == 12
-            Sh > 0 && (Sh -= 1)
-        else
-            @assert false "impossible event"
-        end
-
-        @assert Ic >= ellc && Ih >= ellh
-        t += step
     end
     ll, Sc, Ic, Sh, Ih
 end
 
 """
-    filter_pomp(gen; ...)
+    filter_pomp(; ...)
 
 Construct a Julia POMP object for the phylopomp MERS genealogy-conditioned
 filter. Parameter names and event order follow R phylopomp's MERS model.
 """
 filter_pomp(
-    Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 0.0, Beta_hh = 4.0,
+    ;Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 0.0, Beta_hh = 4.0,
     gamma_c = 1.0, gamma_h = 1.0,
     chi_c = 1.0, chi_h = 0.0,
     Bc = 0.0, Bh = 0.0,
@@ -278,7 +247,7 @@ filter_pomp(
     Ic0 = 0.01, Ih0 = 0.0,
     Nc = 10000, Nh = 10000,
 ) = begin
-    gen = parse_newick(mers_tree,Demes)
+    gen = mers_tree
     pomp(
         params = (
             Beta_cc = Float64(Beta_cc), Beta_ch = Float64(Beta_ch),
@@ -333,4 +302,6 @@ filter_pomp(
         end,
         userdata = (geneal = gen,)
     )
+end
+
 end

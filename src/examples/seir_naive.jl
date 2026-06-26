@@ -142,7 +142,7 @@ regular_part!(
         )
         k, s = rcateg(alpha .* pi)
         step::Time = -log(rand())/s
-        while (t+step < tf)
+        while t+step < tf
             ll -= decay*step+log(pi[k])
             if k==1
                 S -= 1
