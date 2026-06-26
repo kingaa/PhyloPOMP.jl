@@ -64,7 +64,7 @@ rcateg(
     demes::Type{D},
     prob::Bool = false,
 ) where {D <: Enum} = begin
-    k,s... = rcateg(p,prob)
+    k, s... = rcateg(p, prob)
     demes(k), s...
 end
 
@@ -76,11 +76,11 @@ The latter may be a `Set` or a `BitSet`.
 """
 rcateg(
     p::AbstractVector{<:Real},
-    set::Union{BitSet,Set},
+    set::Union{BitSet, Set},
     prob::Bool = false,
 ) = begin
-    k,s... = rcateg(p,prob)
-    v = collect(set)
+    k, s... = rcateg(p, prob)
+    v = collect(set)::Vector{Int}
     v[k], s...
 end
 
@@ -94,6 +94,6 @@ rcateg(
     v::AbstractVector,
     prob::Bool = false,
 ) = begin
-    k,s... = rcateg(p,prob)
+    k, s... = rcateg(p, prob)
     v[k], s...
 end
