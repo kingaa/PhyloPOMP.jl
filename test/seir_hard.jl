@@ -16,20 +16,14 @@ import PartiallyObservedMarkovProcesses as POMP
 
     seed!(2121916527)
 
-    g1 = parse_newick(seir_trees[1], time = 50.0)
-    @test g1 isa Genealogy{PhyloPOMP.Unstructured}
+    g = parse_newick(HardSEIR.seir_trees[1], time = 50.0)
+    @test g isa Genealogy{PhyloPOMP.Unstructured}
 
-    g2 = guide(
-        g1,
-        fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),
-        seir_convert!
-    )
-
-    p = seir(g2,E0=0,I0=0)
+    p = HardSEIR.filter_pomp(g,E0=0,I0=0,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = seir(g2,χ=0.01)
+    p = HardSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0.01)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")

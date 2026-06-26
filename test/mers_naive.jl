@@ -1,28 +1,30 @@
-module NaiveSEIRTest
+module NaiveMERSTest
 
 import ..Main: h1, h2
 
-@info h1("SEIR model with naïve proposals")
+@info h1("MERS model with naïve proposals")
 
 using Test
 using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
-using PhyloPOMP.NaiveSEIR
+using PhyloPOMP.NaiveMERS
 import PartiallyObservedMarkovProcesses as POMP
 
-@testset verbose=true "SEIR model with naïve proposals" begin
+@testset verbose=true "MERS model with naïve proposals" begin
 
     seed!(2121916527)
 
-    g = parse_newick(NaiveSEIR.seir_trees[1], time = 50.0)
+    @demes Demes Camel Human
+
+    g = parse_newick(mers_tree,Demes)
     @test g isa Genealogy{PhyloPOMP.Unstructured}
 
-    p = NaiveSEIR.filter_pomp(g,E0=0,I0=0)
+    p = mers(Ic0=0,Ih0=0)
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = NaiveSEIR.filter_pomp(g,χ=0.01)
+    p = mers(χ=0.01)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")
