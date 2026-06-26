@@ -15,14 +15,14 @@ import PartiallyObservedMarkovProcesses as POMP
 
     seed!(2121916527)
 
-    g = parse_newick(seir_trees[1], time = 50.0)
+    g = parse_newick(NaiveSEIR.seir_trees[1], time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured}
 
-    p = seir(g,E0=0,I0=0)
+    p = NaiveSEIR.filter_pomp(g,E0=0,I0=0)
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = seir(g,χ=0.01)
+    p = NaiveSEIR.filter_pomp(g,χ=0.01)
     @test p isa POMP.PompObject
 
     @info h2("simulate test")

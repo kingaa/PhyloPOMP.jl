@@ -10,8 +10,6 @@ time.
 """
 module NaiveSEIR
 
-export seir, seir_trees
-
 using ..PhyloPOMP
 using ..PhyloPOMP: Root, Node, Sample, Name, Prob, Time
 
@@ -20,7 +18,7 @@ using .Demes: Expos, Infec, DemeSet
 
 include("seir_trees.jl")
 
-seir_singular!(
+singular_part!(
     cols, geneal, node, ll;
     S, E, I, R, pop, β, ψ, χ,
     _...,
@@ -124,7 +122,7 @@ event_rates!(
     ψ*I + χ*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
 end
 
-seir_regular!(
+regular_part!(
     cols, ll;
     t, dt,
     S, E, I, R,
@@ -196,13 +194,13 @@ seir_regular!(
 end
 
 """
-    seir(gen; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
+    filter_pomp(gen; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
          pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
 
 Constructs a pomp object based on the genealogy `gen` and implementing
 the naïve genealogical filter.
 """
-seir(
+filter_pomp(
     gen::Genealogy;
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
     pop = 100,
@@ -238,13 +236,13 @@ seir(
                 )
                 cols = copy(cols)
                 ll = zero(Prob)
-                ll, S, E, I, R = seir_singular!(
+                ll, S, E, I, R = singular_part!(
                     cols, geneal, node, ll;
                     S = S, E = E, I = I, R = R,
                     args...,
                 )
                 if isfinite(ll)
-                    ll, S, E, I, R = seir_regular!(
+                    ll, S, E, I, R = regular_part!(
                         cols, ll;
                         S = S, E = E, I = I, R = R,
                         args...,

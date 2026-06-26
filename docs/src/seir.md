@@ -16,8 +16,8 @@ using PhyloPOMP.NaiveSEIR
 
 seed!(351956486)
 
-g = parse_newick(seir_trees[1], time = 50.0)
-p = seir(g)
+g = parse_newick(NaiveSEIR.seir_trees[1], time = 50.0)
+p = NaiveSEIR.filter_pomp(g)
 pf = pfilter(p, Np = 1000)
 round(logLik(pf),digits=1)
 ```
@@ -39,15 +39,8 @@ using PhyloPOMP.GuidedSEIR.Demes: Expos, Infec
 
 seed!(351956486)
 
-g1 = parse_newick(seir_trees[1], time = 50.0)
-
-g2 = guide(
-    g1,
-    fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),
-    seir_convert!
-)
-
-p = seir(g2)
+g = parse_newick(GuidedSEIR.seir_trees[1], time = 50.0)
+p = GuidedSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
 pf = pfilter(p, Np = 1000)
 round(logLik(pf),digits=1)
 ```
@@ -70,15 +63,8 @@ using PhyloPOMP.HardSEIR.Demes: Expos, Infec
 
 seed!(351956486)
 
-g1 = parse_newick(seir_trees[1], time = 50.0)
-
-g2 = guide(
-    g1,
-    fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),
-    seir_convert!
-)
-
-p = seir(g2)
+g = parse_newick(HardSEIR.seir_trees[1], time = 50.0)
+p = HardSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
 pf = pfilter(p, Np = 1000)
 round(logLik(pf),digits=1)
 ```
