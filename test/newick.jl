@@ -30,6 +30,8 @@ using Test
     @test nn==nx
     n = newick(g,extended=false,sigdigits=4);
     @test all(isa.(n,Ref(String)))
+    n = newick(g,extended=true,demenames=false,sigdigits=4);
+    @test all(isa.(n,Ref(String)))
 
     g1 = parse_newick(newick(g,sigdigits=20),demes=SEIR)
     g2 = parse_newick(newick(g1,sigdigits=20),demes=SEIR)

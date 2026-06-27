@@ -21,10 +21,14 @@ A demeset for the unstructured (1-deme) case.
 """
     name2enum(demes)
 
-Returns a function that maps strings to demes.
+Returns a function that maps strings to demes. It will also interpret a given
+integer according to the integer representation of the enumeration.
 """
 name2enum(demes::Type{D}) where {D <: Enum} = begin
-    d = Dict(lowercase(String(Symbol(i)))=>i for i ∈ instances(demes))
+    d = merge(
+        Dict(lowercase(String(Symbol(i))) => i for i ∈ instances(demes)),
+        Dict("$(Int(i))" => i for i ∈ instances(demes)),
+    )
     function (name::AbstractString)
         get(d,lowercase(name),missing)
     end
