@@ -44,7 +44,7 @@ using Test
     @test g.nodes[2].type==PhyloPOMP.Sample
     g = parse_newick("A([&&PhyloPOMP type=node]):3.2;",t0=0.0);
     @test g.nodes[2].type==PhyloPOMP.Sample
-    @test_warn "dropping zero-length branch" g = parse_newick("A()[&&PhyloPOMP type=sample]:3.2;",t0=0.0);
+    @test_throws "dropping zero-length branch" g = parse_newick("A()[&&PhyloPOMP type=sample]:3.2;",t0=0.0);
     @test g.nodes[2].type==PhyloPOMP.Sample
     g = parse_newick("A:4;()B:3;",t0=0.0,time=5.0);
     @test length(g.nodes)==4

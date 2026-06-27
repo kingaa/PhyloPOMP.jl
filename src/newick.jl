@@ -26,7 +26,7 @@ plainnewick(
     for i ∈ reverse(eachindex(g))
         n = g[i].name
         bstr = if isnothing(g[i].parent)
-            "$n:0;"
+            ";"
         else
             bl = round(g[i].slate-g[g[i].parent].slate,sigdigits=sigdigits)
             "$n:$bl"
@@ -56,12 +56,11 @@ extnewick(
         else
             " deme=$d"
         end
-        n = g[i].name
         bstr = if isnothing(g[i].parent)
-            "[&&PhyloPOMP type=root]$n:0;"
+            ";"
         else
             bl = round(g[i].slate-g[g[i].parent].slate,sigdigits=sigdigits)
-            "[&&PhyloPOMP type=$t$dstr]$n:$bl"
+            "[&&PhyloPOMP type=$t$dstr]:$bl"
         end
         nstr[i] = if isempty(g[i].children)
             bstr

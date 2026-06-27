@@ -1,4 +1,4 @@
-import Base: eachindex, length, getindex, eachindex, show
+import Base: eachindex, length, getindex, eachindex, show, ==
 import PartiallyObservedMarkovProcesses: times, timezero
 
 """
@@ -79,6 +79,25 @@ timezero(g::Genealogy) = g.t0
 times(g::Genealogy) = [map(n->n.slate,g.nodes[2:end])...,g.time]
 nsample(g::Genealogy) = g.nsample
 
+==(n1::GenealNode{E1}, n2::GenealNode{E2}) where {E1,E2} = begin
+    E1 == E2 &&
+        n1.type == n2.type &&
+        n1.name == n2.name &&
+        n1.slate == n2.slate &&
+        n1.deme === n2.deme &&
+        n1.lineage == n2.lineage &&
+        n1.parent == n2.parent &&
+        n1.children == n2.children
+end
+
+==(g1::Genealogy{D1}, g2::Genealogy{D2}) where {D1,D2} = begin
+    D1==D2 &&
+        length(g1)==length(g2) &&
+        g1.t0 == g2.t0 &&
+        g1.time == g2.time &&
+        all([g1[i]==g2[i] for i ∈ eachindex(g1)])
+end
+
 """
     repair!(G)
 
@@ -107,7 +126,7 @@ repair!(G::Genealogy) = begin
         else
             n.parent = namemap[n.parent]
         end
-        n.children = map(i->namemap[i],n.children)
+        n.children = sort(map(i->namemap[i],n.children))
         if n.type==Sample
             G.nsample += 1
         end
