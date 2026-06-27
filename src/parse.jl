@@ -15,7 +15,7 @@ parse_newick(
     input::AbstractVector{V};
     args...,
 ) where {V<:AbstractString} =
-    parse_newick(join(input);args...)
+    parse_newick(join(reverse(input));args...)
 
 parse_newick(
     input::AbstractString;
@@ -154,18 +154,21 @@ clip_zlb!(G::Genealogy) = begin
     for n ∈ G.nodes
         if !isnothing(n.parent)
             p = G[n.parent]
-            if n.slate == p.slate && n.deme === p.deme
-                for c ∈ n.children
-                    G[c].parent = p.name
+            if n.slate == p.slate
+                if (isnothing(p.parent) && length(n.children)==1) ||
+                    (!isnothing(p.parent) && n.deme===p.deme)
+                    for c ∈ n.children
+                        G[c].parent = p.name
+                    end
+                    setdiff!(p.children,n.name)
+                    append!(p.children,n.children)
+                    empty!(n.children)
+                    n.parent = nothing
+                    if (p.type != Node)
+                        error("dropping zero-length branch collapses multiple samples.")
+                    end
+                    p.type = n.type
                 end
-                setdiff!(p.children,n.name)
-                append!(p.children,n.children)
-                empty!(n.children)
-                n.parent = nothing
-                if (p.type != Node)
-                    @warn "dropping zero-length branch yields multiple samples at one node."
-                end
-                p.type = n.type
             end
         end
     end
