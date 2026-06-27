@@ -1,7 +1,7 @@
 module NaiveMERS
 
 using ..PhyloPOMP
-using ..PhyloPOMP: Root, Node, Sample, Name, Time
+using ..PhyloPOMP: Root, Node, Sample, Name, Prob, Time
 
 @demes Demes Camel Human
 using .Demes: Camel, Human, DemeSet
@@ -11,8 +11,8 @@ include("mers_tree.jl")
 const mers_tree = parse_newick(mers_newick,t0=0,demes=Demes)
 
 singular_part!(
-    cols, ll, geneal, node;
-    Sc, Ic, Sh, Ih,
+    cols, ll, geneal, node,
+    Sc, Ic, Sh, Ih;
     Beta_cc, Beta_ch, Beta_hc, Beta_hh,
     chi_c, chi_h,
     Nc, Nh,
@@ -130,18 +130,18 @@ singular_part!(
     else
         @assert false "impossible node type" # COV_EXCL_LINE
     end
+    @assert Ic ≥ ellc && Ih ≥ ellh
     ll, Sc, Ic, Sh, Ih
 end
 
 event_rates!(
-    alpha, pi, cols;
-    Sc, Ic, Sh, Ih,
+    alpha, pi, cols,
+    Sc, Ic, Sh, Ih;
     Beta_cc, Beta_ch, Beta_hc, Beta_hh,
     gamma_c, gamma_h, chi_c, chi_h, Bc, Bh, Nc, Nh,
     _...,
 ) = begin
     ellc, ellh = ell(cols)
-    fill!(pi,one(Prob))
     @assert Ic ≥ ellc && Ih ≥ ellh
     alpha[1] = Beta_cc*Sc*Ic/Nc
     alpha[2] = Beta_hh*Sh*Ih/Nh
@@ -152,10 +152,12 @@ event_rates!(
     alpha[10] = alpha[9] = Bc
     alpha[12] = alpha[11] = Bh
 
+    pi[1:2] .= one(Prob)
     pi[3] = @indicator(Ic > 0, 1-ellc/Ic)
     pi[4] = @indicator(Ic > 0, ellc/Ic)
     pi[5] = @indicator(Ih > 0, 1-ellh/Ih)
     pi[6] = @indicator(Ih > 0, ellh/Ih)
+    pi[7:12] .= one(Prob)
 
     chi_c * Ic + chi_h * Ih +
         gamma_c*ellc + @indicator(Ic ≤ ellc, gamma_c*(Ic-ellc)) +
@@ -163,23 +165,24 @@ event_rates!(
 end
 
 regular_part!(
-    cols, ll;
+    cols, ll,
     t, dt,
-    Sc, Ic, Sh, Ih,
+    Sc, Ic, Sh, Ih;
     args...,
 ) = begin
     tf = t + dt
     if t < tf
         alpha = similar(Vector{Prob}, 12)
         pi = similar(Vector{Prob}, 12)
-        ellE, ellI = ell(cols)
+        ellc, ellh = ell(cols)
         decay = event_rates!(
-            alpha, pi, cols;
-            Sc=Sc, Ic=Ic, Sh=Sh, Ih=Ih,
+            alpha, pi, cols,
+            Sc, Ic, Sh, Ih;
             args...,
         )
         k, s = rcateg(alpha .* pi)
         step::Time = -log(rand())/s
+        @assert Ic >= ellc && Ih >= ellh
         while t+step < tf
             ll -= decay*step+log(pi[k])
             if k == 1
@@ -211,8 +214,10 @@ regular_part!(
                 ellc, ellh = swap!(cols, Human, Camel, b)
                 ll += log((1 - ellh / Ih) / Ic)
             elseif k == 7
+                ll -= log(1-ellc/Ic)
                 Ic -= 1
             elseif k == 8
+                ll -= log(1-ellh/Ih)
                 Ih -= 1
             elseif k == 9
                 Sc += 1
@@ -225,9 +230,18 @@ regular_part!(
             else
                 @assert false "impossible event" # COV_EXCL_LINE
             end
-            @assert Ic >= ellc && Ih >= ellh
             t += step
+            decay = event_rates!(
+                alpha, pi, cols,
+                Sc, Ic, Sh, Ih;
+                args...,
+            )
+            k, s = rcateg(alpha .* pi)
+            step = -log(rand())/s
         end
+        step = tf - t
+        ll -= decay*step
+        @assert Ic >= ellc && Ih >= ellh
     end
     ll, Sc, Ic, Sh, Ih
 end
@@ -282,15 +296,14 @@ filter_pomp(
                 cols = copy(cols)
                 ll = zero(Float64)
                 ll, Sc, Ic, Sh, Ih = singular_part!(
-                    cols, ll, geneal, node;
-                    Sc, Ic, Sh, Ih,
+                    cols, ll, geneal, node,
+                    Sc, Ic, Sh, Ih;
                     args...,
                 )
                 if isfinite(ll)
                     ll, Sc, Ic, Sh, Ih = regular_part!(
-                        cols, ll;
-                        t, dt,
-                        Sc, Ic, Sh, Ih,
+                        cols, ll, t, dt,
+                        Sc, Ic, Sh, Ih;
                         args...,
                     )
                 end

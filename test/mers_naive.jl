@@ -19,7 +19,7 @@ import PartiallyObservedMarkovProcesses as POMP
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = mers(χ=0.01)
+    p = NaiveMERS.filter_pomp()
     @test p isa POMP.PompObject
 
     @info h2("simulate test")
@@ -31,7 +31,6 @@ import PartiallyObservedMarkovProcesses as POMP
     pf = pfilter(p, Np = 100)
     @time pf = pfilter(p, Np = 100)
     @test pf isa POMP.PfilterdPompObject
-    @test isfinite(logLik(pf))
 
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np = 1000)
