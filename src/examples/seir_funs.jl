@@ -20,8 +20,9 @@ knowledge!(
 end
 
 singular_part!(
-    cols, guide, node, ll;
-    S, E, I, R, pop, β, ψ, χ,
+    cols, guide, node, ll,
+    S, E, I, R;
+    pop, β, ψ, χ,
     _...,
 ) = begin
     ellE, ellI = ell(cols)
@@ -97,4 +98,70 @@ singular_part!(
         @assert false "impossible node type" # COV_EXCL_LINE
     end
     ll, S, E, I, R
+end
+
+"""
+    filter_pomp(g; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
+         pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
+
+Constructs a pomp object based on the filter guide `g`.
+"""
+filter_pomp(
+    gen::Genealogy,
+    m::FSMarkovProc;
+    β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
+    pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
+) = begin
+    guidegen = guide(gen,m,knowledge!)
+    pomp(
+        params = (
+            β = Float64(β), σ = Float64(σ), γ = Float64(γ),
+            ω = Float64(ω), ψ = Float64(ψ), χ = Float64(χ),
+            pop = Float64(pop),
+            S0 = Float64(S0), E0 = Float64(E0),
+            I0 = Float64(I0), R0 = Float64(R0),
+        ),
+        t0 = timezero(guidegen),
+        times = times(guidegen),
+        rinit = function (; S0, E0, I0, R0, pop, _...)
+            m = pop/(S0+E0+I0+R0)
+            (
+                node = one(Name),
+                ll = zero(Prob),
+                cols = Coloring(Demes),
+                S = round(Int64, m*Float64(S0)),
+                E = round(Int64, m*Float64(E0)),
+                I = round(Int64, m*Float64(I0)),
+                R = round(Int64, m*Float64(R0)),
+            )
+        end,
+        rprocess = onestep(
+            function (
+                ; node, ll, cols, guide,
+                S, E, I, R,
+                kwargs...,
+                )
+                cols = copy(cols)
+                ll = zero(Prob)
+                ll, S, E, I, R = singular_part!(
+                    cols, guide, node, ll,
+                    S, E, I, R;
+                    kwargs...,
+                )
+                if isfinite(ll)
+                    ll, S, E, I, R = regular_part!(
+                        cols, guide, node, ll,
+                        S, E, I, R;
+                        kwargs...,
+                    )
+                end
+                (; node = node+1, ll = ll, cols = cols,
+                 S = S, E = E, I = I, R = R)
+            end,
+        ),
+        logdmeasure = function (; ll, _...)
+            ll
+        end,
+        userdata = (guide = guidegen,),
+    )
 end

@@ -19,8 +19,9 @@ using .Demes: Expos, Infec, DemeSet
 include("seir_trees.jl")
 
 singular_part!(
-    cols, geneal, node, ll;
-    S, E, I, R, pop, β, ψ, χ,
+    cols, geneal, node, ll,
+    S, E, I, R;
+    pop, β, ψ, χ,
     _...,
 ) = begin
     ellE, ellI = ell(cols)
@@ -103,8 +104,8 @@ singular_part!(
 end
 
 event_rates!(
-    alpha, pi, cols;
-    S, E, I, R,
+    alpha, pi, cols,
+    S, E, I, R;
     β, σ, γ, ω, ψ, χ, pop,
     _...,
 ) = begin
@@ -123,73 +124,69 @@ event_rates!(
 end
 
 regular_part!(
-    cols, ll;
+    cols, ll,
     t, dt,
-    S, E, I, R,
-    β, σ, γ, ω, ψ, χ, pop,
-    _...,
+    S, E, I, R;
+    kwargs...,
 ) = begin
     tf = t+dt
     if t < tf
         alpha = similar(Vector{Prob}, 6)
         pi = similar(Vector{Prob}, 6)
+        step::Time = zero(Time)
+        decay::Prob = zero(Prob)
         ellE, ellI = ell(cols)
-        decay = event_rates!(
-            alpha, pi, cols;
-            S = S, E = E, I = I, R = R,
-            β = β, σ = σ, γ = γ, ω = ω,
-            ψ = ψ, χ = χ, pop = pop,
-        )
-        k, s = rcateg(alpha .* pi)
-        step::Time = -log(rand())/s
-        while t+step < tf
-            ll -= decay*step+log(pi[k])
-            if k==1
-                S -= 1
-                E += 1
-                ll += log(1-ellE/E)
-            elseif k==2
-                ll += log(ellI)
-                b = rand(cols[Infec])
-                ellE, ellI = swap!(cols,Infec,Expos,b)
-                S -= 1
-                E += 1
-                ll += log(1-ellI/I)-log(E)
-            elseif k==3
-                E -= 1
-                I += 1
-                ll += log(1-ellI/I)
-            elseif k==4
-                ll += log(ellE)
-                b = rand(cols[Expos])
-                ellE, ellI = swap!(cols,Expos,Infec,b)
-                E -= 1
-                I += 1
-                ll -= log(I)
-            elseif k==5
-                ll -= log(1-ellI/I)
-                I -= 1
-                R += 1
-            elseif k==6
-                R -= 1
-                S += 1
-            else
-                @assert false "impossible error!" # COV_EXCL_LINE
-            end
-            t += step
+        while t < tf
             decay = event_rates!(
-                alpha, pi, cols;
-                S = S, E = E, I = I, R = R,
-                β = β, σ = σ, γ = γ, ω = ω,
-                ψ = ψ, χ = χ, pop = pop,
+                alpha, pi, cols,
+                S, E, I, R;
+                kwargs...,
             )
             k, s = rcateg(alpha .* pi)
             step = -log(rand())/s
+            if t+step < tf
+                ll -= decay*step+log(pi[k])
+                if k==1
+                    S -= 1
+                    E += 1
+                    ll += log(1-ellE/E)
+                elseif k==2
+                    ll += log(ellI)
+                    b = rand(cols[Infec])
+                    ellE, ellI = swap!(cols,Infec,Expos,b)
+                    S -= 1
+                    E += 1
+                    ll += log(1-ellI/I)-log(E)
+                elseif k==3
+                    E -= 1
+                    I += 1
+                    ll += log(1-ellI/I)
+                elseif k==4
+                    ll += log(ellE)
+                    b = rand(cols[Expos])
+                    ellE, ellI = swap!(cols,Expos,Infec,b)
+                    E -= 1
+                    I += 1
+                    ll -= log(I)
+                elseif k==5
+                    ll -= log(1-ellI/I)
+                    I -= 1
+                    R += 1
+                elseif k==6
+                    R -= 1
+                    S += 1
+                else
+                    @assert false "impossible error!" # COV_EXCL_LINE
+                end
+                t += step
+            else
+                step = tf - t
+                ll -= decay*step
+                break
+            end
         end
-        step = tf - t
-        ll -= decay*step
+        @assert I ≥ ellI && E ≥ ellE
     end
-    @assert I ≥ ellI && E ≥ ellE
     ll, S, E, I, R
 end
 
@@ -231,20 +228,21 @@ filter_pomp(
         rprocess = onestep(
             function (
                 ; node, ll, cols, geneal,
+                t, dt,
                 S, E, I, R,
                 args...,
                 )
                 cols = copy(cols)
                 ll = zero(Prob)
                 ll, S, E, I, R = singular_part!(
-                    cols, geneal, node, ll;
-                    S = S, E = E, I = I, R = R,
+                    cols, geneal, node, ll,
+                    S, E, I, R;
                     args...,
                 )
                 if isfinite(ll)
                     ll, S, E, I, R = regular_part!(
-                        cols, ll;
-                        S = S, E = E, I = I, R = R,
+                        cols, ll, t, dt,
+                        S, E, I, R;
                         args...,
                     )
                 end
