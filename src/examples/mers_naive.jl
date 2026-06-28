@@ -174,63 +174,10 @@ regular_part!(
     if t < tf
         alpha = similar(Vector{Prob}, 12)
         pi = similar(Vector{Prob}, 12)
+        step::Time = zero(Time)
+        decay::Prob = zero(Prob)
         ellc, ellh = ell(cols)
-        decay = event_rates!(
-            alpha, pi, cols,
-            Sc, Ic, Sh, Ih;
-            args...,
-        )
-        k, s = rcateg(alpha .* pi)
-        step::Time = -log(rand())/s
-        @assert Ic >= ellc && Ih >= ellh
         while t+step < tf
-            ll -= decay*step+log(pi[k])
-            if k == 1
-                Sc -= 1
-                Ic += 1
-                ll += log(1-(ellc*(ellc-1)/Ic/(Ic-1)))
-            elseif k == 2
-                Sh -= 1
-                Ih += 1
-                ll += log(1-(ellh*(ellh-1)/Ih/(Ih-1)))
-            elseif k == 3
-                Sh -= 1
-                Ih += 1
-                ll += log(1 - ellh / Ih)
-            elseif k == 4
-                Sh -= 1
-                Ih += 1
-                b = rand(cols[Camel])
-                ellc, ellh = swap!(cols, Camel, Human, b)
-                ll += log((1 - ellc / Ic) / Ih)
-            elseif k == 5
-                Sc -= 1
-                Ic += 1
-                ll += log(1 - ellc / Ic)
-            elseif k == 6
-                Sc -= 1
-                Ic += 1
-                b = rand(cols[Human])
-                ellc, ellh = swap!(cols, Human, Camel, b)
-                ll += log((1 - ellh / Ih) / Ic)
-            elseif k == 7
-                ll -= log(1-ellc/Ic)
-                Ic -= 1
-            elseif k == 8
-                ll -= log(1-ellh/Ih)
-                Ih -= 1
-            elseif k == 9
-                Sc += 1
-            elseif k == 10
-                Sh += 1
-            elseif k == 11
-                Sc -= 1
-            elseif k == 12
-                Sh -= 1
-            else
-                @assert false "impossible event" # COV_EXCL_LINE
-            end
-            t += step
             decay = event_rates!(
                 alpha, pi, cols,
                 Sc, Ic, Sh, Ih;
@@ -238,9 +185,60 @@ regular_part!(
             )
             k, s = rcateg(alpha .* pi)
             step = -log(rand())/s
+            ll -= decay*step+log(pi[k])
+            if t+step < tf
+                if k == 1
+                    Sc -= 1
+                    Ic += 1
+                    ll += log(1-(ellc*(ellc-1)/Ic/(Ic-1)))
+                elseif k == 2
+                    Sh -= 1
+                    Ih += 1
+                    ll += log(1-(ellh*(ellh-1)/Ih/(Ih-1)))
+                elseif k == 3
+                    Sh -= 1
+                    Ih += 1
+                    ll += log(1 - ellh / Ih)
+                elseif k == 4
+                    Sh -= 1
+                    Ih += 1
+                    b = rand(cols[Camel])
+                    ellc, ellh = swap!(cols, Camel, Human, b)
+                    ll += log((1 - ellc / Ic) / Ih)
+                elseif k == 5
+                    Sc -= 1
+                    Ic += 1
+                    ll += log(1 - ellc / Ic)
+                elseif k == 6
+                    Sc -= 1
+                    Ic += 1
+                    b = rand(cols[Human])
+                    ellc, ellh = swap!(cols, Human, Camel, b)
+                    ll += log((1 - ellh / Ih) / Ic)
+                elseif k == 7
+                    ll -= log(1-ellc/Ic)
+                    Ic -= 1
+                elseif k == 8
+                    ll -= log(1-ellh/Ih)
+                    Ih -= 1
+                elseif k == 9
+                    Sc += 1
+                elseif k == 10
+                    Sh += 1
+                elseif k == 11
+                    Sc -= 1
+                elseif k == 12
+                    Sh -= 1
+                else
+                    @assert false "impossible event" # COV_EXCL_LINE
+                end
+                t += step
+            else
+                step = tf - t
+                ll -= decay*step
+                break
+            end
         end
-        step = tf - t
-        ll -= decay*step
         @assert Ic >= ellc && Ih >= ellh
     end
     ll, Sc, Ic, Sh, Ih
