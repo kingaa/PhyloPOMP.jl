@@ -1,0 +1,5 @@
+- iterated filtering
+- parallelization of filters (with explicit control of RNG)
+- general phylopomp filter construction
+- simple Euler multinomial filter
+- genealogical simulations

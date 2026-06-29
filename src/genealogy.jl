@@ -1,4 +1,4 @@
-import Base: eachindex, length, getindex, eachindex, show, ==
+import Base: eachindex, length, getindex, eachindex, ==, show
 import PartiallyObservedMarkovProcesses: times, timezero
 
 """
@@ -157,22 +157,33 @@ end
 
 Base.show(
     io::IO,
-    g::Union{Genealogy,GenealNode};
+    g::Union{Genealogy,GenealNode,AbstractVector{GenealNode}};
     kwargs...,
 ) = begin
-    print(io,pretty_string(g;kwargs...))
+    print(io, pretty_string(g; kwargs...))
 end
+
+Base.show(
+    g::Union{Genealogy,GenealNode,AbstractVector{GenealNode}};
+    kwargs...,
+) = show(stdout, g; kwargs...)
 
 pretty_string(g::Genealogy; sigdigits=4) = begin
     "<genealogy on ["*
         "$(round(g.t0,sigdigits=sigdigits)),"*
         "$(round(g.time,sigdigits=sigdigits))]:\n" *
-        join(
-            map(eachindex(g)) do i
-                "  $i: " * pretty_string(g[i],sigdigits=sigdigits)
-            end,
-            '\n'
-        ) * ">"
+        pretty_string(g.nodes; sigdigits=sigdigits) *
+        ">"
+end
+
+pretty_string(g::AbstractVector{GenealNode}; sigdigits=4) = begin
+    join(
+        map(eachindex(g)) do i
+            "  $(g[i].name): " *
+                pretty_string(g[i]; sigdigits=sigdigits)
+        end,
+        '\n'
+    )
 end
 
 pretty_string(p::GenealNode; sigdigits = 4) = begin
@@ -188,7 +199,7 @@ pretty_string(p::GenealNode; sigdigits = 4) = begin
     end
     "<$(lowercase(String(Symbol(p.type)))) " *
         "lineage=$(p.lineage) " *
-        "deme=$(p.deme) " *
+        (ismissing(p.deme) ? "" : "deme=$(p.deme) ") *
         "time=$(round(p.slate,sigdigits=sigdigits)) " *
         parent_string *
         "children=[$children_string]" * ">"
