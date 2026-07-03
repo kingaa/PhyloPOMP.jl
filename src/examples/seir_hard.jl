@@ -18,7 +18,7 @@ include("seir_trees.jl")
 include("seir_funs.jl")
 
 event_rates!(
-    alpha, preboost, t, guide, node,
+    alpha, pi, t, guide, node,
     cols, ellE, ellI,
     S, E, I, R;
     β, σ, γ, ω, ψ, χ, pop,
@@ -27,19 +27,19 @@ event_rates!(
     rhEI = relhaz(t,guide,node,Expos,Infec,cols)
     rhIE = relhaz(t,guide,node,Infec,Expos,cols)
     a = β*S*I/pop
-    preboost[1] = I > 0 ? 1-ellI/I : 0
-    alpha[1] = a*preboost[1]
-    preboost[2] = I > 0 ? sum(rhIE)/I : 1
-    alpha[2] = a*preboost[2]
+    pi[1] = @indicator(I > 0, 1-ellI/I)
+    alpha[1] = a*pi[1]
+    pi[2] = @indicator(I > 0, sum(rhIE)/I)
+    alpha[2] = a*pi[2]
     b = σ*E
-    preboost[3] = E > 0 ? 1-ellE/E : 0
-    alpha[3] = b*preboost[3]
-    preboost[4] = E > 0 ? sum(rhEI)/E : 1
-    alpha[4] = b*preboost[4]
+    pi[3] = @indicator(E > 0, 1-ellE/E)
+    alpha[3] = b*pi[3]
+    pi[4] = @indicator(E > 0, sum(rhEI)/E)
+    alpha[4] = b*pi[4]
     c = γ*I
-    preboost[5] = 1-ellI/I
-    alpha[5] = @indicator(I > ellI, c*preboost[5])
-    preboost[6] = 1.0
+    pi[5] = @indicator(I > ellI, 1-ellI/I)
+    alpha[5] = c*pi[5]
+    pi[6] = 1.0
     alpha[6] = ω*R
     decay = ψ*I + χ*I +
         a - alpha[1] - alpha[2] +
@@ -58,13 +58,13 @@ regular_part!(
     tf = n.tend
     if t < tf
         alpha = similar(Vector{Prob},6)
-        preboost = similar(Vector{Prob},6)
+        pi = similar(Vector{Prob},6)
         step::Time = zero(Time)
         decay::Prob = zero(Prob)
         ellE, ellI = ell(cols)
         while t < tf
             decay,rhEI,rhIE = event_rates!(
-                alpha, preboost, t, guide, node,
+                alpha, pi, t, guide, node,
                 cols, ellE, ellI,
                 S, E, I, R;
                 kwargs...
@@ -72,7 +72,7 @@ regular_part!(
             k, s = rcateg(alpha)
             step = -log(rand())/s
             if t+step < tf
-                ll -= decay*step + log(preboost[k])
+                ll -= decay*step + log(pi[k])
                 if k==1
                     S -= 1
                     E += 1
