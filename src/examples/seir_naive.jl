@@ -53,12 +53,13 @@ singular_part!(
             I += 1
         end
         if length(n.children) == 0
-            ll += log((ψ+χ)*I)
+            k,_,p = rcateg([ψ, χ],true)
+            ll -= log(p)
             ellE, ellI = chop!(cols,Infec,n.lineage)
-            k,_ = rcateg([ψ, χ])
             if k==1             # non-destructive sample
-                ll += log(1-ellI/I)
+                ll += log(ψ*I) + log(1-ellI/I)
             elseif k==2         # destructive sample
+                ll += log(χ*I)
                 I -= 1
             else
                 @assert false "impossible choice" # COV_EXCL_LINE

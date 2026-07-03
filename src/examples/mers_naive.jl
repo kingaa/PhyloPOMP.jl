@@ -80,14 +80,15 @@ singular_part!(
         end
         if n.lineage ∈ cols[Camel]
             lambda_cc = Nc > 0 ? Beta_cc * Sc * Ic / Nc : 0.0
-            lambda_hc = Nc > 0 ? Beta_hc * Sh * Ic / Nc / 2.0 : 0.0
-            k,lambda = rcateg([lambda_cc, lambda_hc, lambda_hc], false)
+            lambda_hc = Nc > 0 ? Beta_hc * Sh * Ic / Nc : 0.0
+            k,_,p = rcateg([lambda_cc, 0.5*lambda_hc, 0.5*lambda_hc], true)
+            ll -= log(p)
             if k == 1
                 @assert Sc > 0
                 ellc, ellh = fork!(cols, Camel, n.lineage, (Camel, Camel), children)
                 Sc -= 1
                 Ic += 1
-                ll += log(lambda) - log(Ic * (Ic - 1) / 2)
+                ll += log(lambda_cc) - log(Ic * (Ic - 1) / 2)
             else
                 @assert Sh > 0
                 if k == 2
@@ -99,18 +100,19 @@ singular_part!(
                 end
                 Sh -= 1
                 Ih += 1
-                ll += log(lambda) - log(Ic * Ih)
+                ll += log(lambda_hc) - log(Ic * Ih)
             end
         elseif n.lineage ∈ cols[Human]
             lambda_hh = Nh > 0 ? Beta_hh * Sh * Ih / Nh : 0.0
-            lambda_ch = Nh > 0 ? Beta_ch * Sc * Ih / Nh / 2.0 : 0.0
-            k,lambda,p = rcateg([lambda_hh, lambda_ch, lambda_ch], true)
+            lambda_ch = Nh > 0 ? Beta_ch * Sc * Ih / Nh : 0.0
+            k,_,p = rcateg([lambda_hh, 0.5*lambda_ch, 0.5*lambda_ch], true)
+            ll -= log(p)
             if k == 1
                 @assert Sh > 0
                 ellc, ellh = fork!(cols, Human, n.lineage, (Human, Human), children)
                 Sh -= 1
                 Ih += 1
-                ll += log(lambda) - log(Ih * (Ih - 1) / 2)
+                ll += log(lambda_hh) - log(Ih * (Ih - 1) / 2)
             else
                 @assert Sc > 0
                 if k == 2
@@ -122,7 +124,7 @@ singular_part!(
                 end
                 Sc -= 1
                 Ic += 1
-                ll += log(lambda) - log(Ic * Ih)
+                ll += log(lambda_ch) - log(Ic * Ih)
             end
         else
             @assert false "impossible node deme" # COV_EXCL_LINE
@@ -200,6 +202,7 @@ regular_part!(
                     Ih += 1
                     ll += log(1 - ellh / Ih)
                 elseif k == 4
+                    ll += log(ellc)
                     Sh -= 1
                     Ih += 1
                     b = rand(cols[Camel])
@@ -210,6 +213,7 @@ regular_part!(
                     Ic += 1
                     ll += log(1 - ellc / Ic)
                 elseif k == 6
+                    ll += log(ellh)
                     Sc -= 1
                     Ic += 1
                     b = rand(cols[Human])
