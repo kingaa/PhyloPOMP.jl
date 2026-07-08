@@ -138,17 +138,6 @@ end
 guide(args...) = Guide(args...)
 
 """
-    demekron([F::Type], d)
-
-Kronecker delta for deme `d`. By default, `F = Float64`.
-"""
-demekron(F::Type, d::D,) where {D <: Enum} = begin
-    [i == d ? one(F) : zero(F) for i ∈ instances(D)]
-end
-
-demekron(d::D,) where {D <: Enum} = demekron(Prob,d)
-
-"""
     demekron!(v, d)
 
 Kronecker delta for deme `d`.  Replaces the entries of `v` with zeros in all places except the one corresponding to deme `d`.

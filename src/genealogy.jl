@@ -163,11 +163,6 @@ Base.show(
     print(io, pretty_string(g; kwargs...))
 end
 
-Base.show(
-    g::Union{Genealogy,GenealNode,AbstractVector{GenealNode}};
-    kwargs...,
-) = show(stdout, g; kwargs...)
-
 pretty_string(g::Genealogy; sigdigits=4) = begin
     "<genealogy on ["*
         "$(round(g.t0,sigdigits=sigdigits)),"*

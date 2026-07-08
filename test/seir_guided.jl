@@ -40,7 +40,7 @@ import PartiallyObservedMarkovProcesses as POMP
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np = 1000)
 
-    ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
+    @time ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
     llest,llse = logmeanexp(ll,se=true)
     @info "logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
 
