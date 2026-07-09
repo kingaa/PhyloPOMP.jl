@@ -227,9 +227,17 @@ sum_relhaz(
     n::GuideNode{F,N,D},
     cols::Coloring{D},
     i::D, j::D,
+) where {D,F,N} = sum(relhaz(r,n,cols,i,j))
+
+choose_branch(
+    r::AbstractDict{Tuple{D,D},Vector{F}},
+    n::GuideNode{F,N,D},
+    cols::Coloring{D},
+    i::D, j::D,
 ) where {D,F,N} = begin
-    lins = getindex(n,cols[i])
-    sum(r[(i,j)][lins])
+    rates = relhaz(r,n,cols,i,j)
+    b, _, p = rcateg(rates,cols[i],true)
+    b, p
 end
 
 choose_branch(
@@ -287,9 +295,7 @@ end
 
 Base.getindex(g::Guide, i::Integer) = g.nodes[i]
 Base.getindex(g::Guide, i::AbstractVector{<:Integer}) = g.nodes[i]
-Base.getindex(g::GuideNode, col::BitSet) = begin
-    getindex.(Ref(g.linmap),col)
-end
+Base.getindex(g::GuideNode, col::BitSet) = getindex.(Ref(g.linmap),col)
 
 Base.length(g::Guide) = length(g.nodes)
 Base.eachindex(g::Guide) = eachindex(g.nodes)

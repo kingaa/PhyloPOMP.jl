@@ -18,70 +18,61 @@ using .Demes: Expos, Infec, DemeSet
 include("seir_trees.jl")
 include("seir_funs.jl")
 
-event_rates!(
-    alpha, ellI,
-    S, E, I, R;
-    β, σ, γ, ω, ψ, χ, pop,
-    _...,
-) = begin
-    alpha[1] = β*S*I/pop
-    alpha[2] = σ*E
-    alpha[3] = @indicator(I > ellI, γ*(I-ellI))
-    alpha[4] = ω*R
-    ψ*I + χ*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
-end
-
 regular_part!(
     cols, guide, node, ll,
     t, tf, S, E, I, R;
     kwargs...,
 ) = begin
     n = guide[node]
-    alpha = similar(Vector{Prob},4)
+    alpha = similar(Vector{Prob},6)
+    pi = similar(Vector{Prob},6)
+    rh = relhaz_alloc(guide,node)
     step::Time = zero(Time)
     decay::Prob = zero(Prob)
     ellE, ellI = ell(cols)
     while t < tf
         decay = event_rates!(
-            alpha, ellI,
-            S, E, I, R;
+            alpha, pi;
+            S, E, I, R,
+            ellE, ellI,
             kwargs...,
+            onE=ellE,
+            onI=ellI,
         )
         k, s = rcateg(alpha)
         step = -log(rand())/s
         if t+step < tf
-            ll -= decay*step
+            ll -= decay*step + log(pi[k])
             if k==1
-                b,p = choose_branch(t,guide,node,I,cols,Infec,Expos)
+                S -= 1
+                E += 1
+                ll += log(1-ellE/E)
+            elseif k==2
+                relhaz!(rh,t,guide,node)
+                b, p = choose_branch(rh,n,cols,Infec,Expos)
                 ll -= log(p)
                 S -= 1
                 E += 1
-                if b == 0
-                    ll += log(1-ellE/E)
-                else
-                    ellE, ellI = swap!(cols,Infec,Expos,b)
-                    ll += log(1-ellI/I)-log(E)
-                end
-            elseif k==2
-                b,p = choose_branch(t,guide,node,E,cols,Expos,Infec)
+                ellE, ellI = swap!(cols,Infec,Expos,b)
+                ll += log(1-ellI/I)-log(E)
+            elseif k==3
+                E -= 1
+                I += 1
+                ll += log(1-ellI/I)
+            elseif k==4
+                relhaz!(rh,t,guide,node)
+                b, p = choose_branch(rh,n,cols,Expos,Infec)
                 ll -= log(p)
                 E -= 1
                 I += 1
-                if b == 0
-                    ll += log(1-ellI/I)
-                else
-                    ellE, ellI = swap!(cols,Expos,Infec,b)
-                    ll -= log(I)
-                end
-            elseif k==3
-                ll -= log(1-ellI/I)
+                ellE, ellI = swap!(cols,Expos,Infec,b)
+                ll -= log(I)
+            elseif k==5
                 I -= 1
                 R += 1
-            elseif k==4
+            elseif k==6
                 R -= 1
                 S += 1
-            else
-                @assert false "impossible error!" # COV_EXCL_LINE
             end
             t += step
         else
