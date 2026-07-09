@@ -6,7 +6,7 @@ import LinearAlgebra: Diagonal, Symmetric, Transpose, eigen
 
 Represents a finite-state Markov process in continuous time.
 """
-struct FSMarkovProc{F<:AbstractFloat,D<:Enum}
+struct FSMarkovProc{F<:AbstractFloat,N,D<:Enum}
     statdist::Vector{F}
     generator::Matrix{F}
     eigenvals::Vector{F}
@@ -20,6 +20,7 @@ struct FSMarkovProc{F<:AbstractFloat,D<:Enum}
         F::Type{<:AbstractFloat},
         args::Union{Pair{D,<:Real},Pair{Tuple{D,D},<:Real}}...,
     ) where {D <: Enum} = begin
+        N = length(instances(D))
         pi,Q = make_generator(F,args...)
         s = sqrt.(pi)
         d = Diagonal(s)
@@ -29,7 +30,7 @@ struct FSMarkovProc{F<:AbstractFloat,D<:Enum}
         L = d*U
         R = Transpose(U)*di
         A = L ./ pi
-        new{F,D}(pi,Q,Lambda,L,R,A)
+        new{F,N,D}(pi,Q,Lambda,L,R,A)
     end
 end
 
@@ -58,27 +59,21 @@ forward_action(
 end
 
 forward_action(
-    m::FSMarkovProc{F},
+    m::FSMarkovProc{F,M},
     s::Real,
     X::AbstractArray{<:Real,N},
-) where {F,N} = begin
-    n = size(X,1)
-    if n != length(statdist(m))
-        error("size mismatch in 'forward_action'")
-    end
+) where {F,M,N} = begin
+    @assert size(X,1) == M "size mismatch"
     d = exp.(m.eigenvals.*F(s))
     m.left_trans*(Diagonal(d)*(m.right_trans*X))
 end
 
 relhaz_action(
-    m::FSMarkovProc{F},
+    m::FSMarkovProc{F,M},
     s::Real,
     X::AbstractArray{<:Real,N},
-) where {F,N} = begin
-    n = size(X,1)
-    if n != length(statdist(m))
-        error("size mismatch in 'forward_action'")
-    end
+) where {F,M,N} = begin
+    @assert size(X,1) == M "size mismatch"
     d = exp.(m.eigenvals.*F(s))
     m.A*(Diagonal(d)*X)
 end

@@ -36,7 +36,8 @@ include("coloring.jl")
 export fsmarkov, generator, forward_action, statdist
 include("fsmarkov.jl")
 
-export Guide, guide, relhaz, demekron!, choose_branch
+export Guide, guide, relhaz, relhaz_alloc, relhaz!, sum_relhaz,
+    demekron!, choose_branch
 include("guide.jl")
 
 export @marks, rcateg

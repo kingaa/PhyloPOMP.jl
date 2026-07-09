@@ -1,23 +1,27 @@
 import Base: eachindex, length, getindex, eachindex, show
 
 """
-    GuideNode{F,D}
+    GuideNode{F,N,D}
 
 A `GuideNode` contains the information needed to guide a phylodynamic
-Monte Carlo filter on a particular interval between genealogical events.
-`F` is an `AbstractFloat` type and `D` is the enumeration of the demes
-(see [`@demes`](@ref)).
+Monte Carlo filter on a particular interval between genealogical
+events.  `F` is an `AbstractFloat` type, `N` is the number of demes,
+and `D` is the enumeration of the demes (see [`@demes`](@ref)).
 
 A `GuideNode` contains:
 - the time interval to which it pertains
 - the type of event (`NodeType`) at the left endpoint of the interval
-- the name of the parent lineage (ancestral to the genealogical node at the left endpoint)
-- the names of the child lineages (immediately descended from the parent node)
+- the name of the parent lineage (ancestral to the genealogical node
+  at the left endpoint)
+- the names of the child lineages (immediately descended from the
+  parent node)
 - the names of all lineages present on the interval
-- the guide probability for each child lineage at the left interval endpoint
-- the target probabilities for all lineages at the right interval endpoint.
+- the guide probability for each child lineage at the left interval
+  endpoint
+- the target probabilities for all lineages at the right interval
+  endpoint.
 """
-struct GuideNode{F<:AbstractFloat,D<:Enum}
+struct GuideNode{F<:AbstractFloat,N,D<:Enum}
     "type of node at left endpoint of the interval"
     type::NodeType
     "left end of the time interval"
@@ -44,27 +48,28 @@ struct GuideNode{F<:AbstractFloat,D<:Enum}
 end
 
 """
-    Guide{F,D}
+    Guide{F,N,D}
 
-This type holds a "filter-guide" based on a reverse-time finite-state Markov process.
-Construct it with a call to [`guide`](@ref).
-`F` is an `AbstractFloat` type and `D` is the enumeration of the demes.
-It contains the [`FSMarkovProc`](@ref) object encoding the Markov process and a sequence of [`GuideNode`](@ref) objects.
+This type holds a "filter-guide" based on a reverse-time finite-state
+Markov process.  Construct it with a call to [`guide`](@ref).  `F` is
+an `AbstractFloat` type, `N` is the number of demes, and `D` is deme
+enumeration.  It contains the [`FSMarkovProc`](@ref) object encoding
+the Markov process and a sequence of [`GuideNode`](@ref) objects.
 """
-struct Guide{F<:AbstractFloat,D<:Enum}
+struct Guide{F<:AbstractFloat,N,D<:Enum}
     "finite-state Markov process"
-    process::FSMarkovProc{F,D}
+    process::FSMarkovProc{F,N,D}
     "vector of nodes, one for each interval"
-    nodes::Vector{GuideNode{F,D}}
+    nodes::Vector{GuideNode{F,N,D}}
     "total number of sample lineages"
     nsample::Size
     Guide(
         g::Genealogy{E},
-        m::FSMarkovProc{F,D},
+        m::FSMarkovProc{F,N,D},
         knowledge!::Function = known_deme!,
-    ) where {F<:AbstractFloat,D<:Enum,E} = begin
-        probs = zeros(F,length(instances(D)),g.nsample)
-        nodes = Vector{GuideNode{F,D}}(undef,length(g))
+    ) where {F<:AbstractFloat,N,D<:Enum,E} = begin
+        probs = zeros(F,N,g.nsample)
+        nodes = Vector{GuideNode{F,N,D}}(undef,length(g))
         tend::Time = g.time
         lins::Set{Name} = Set{Name}()
         for n ∈ reverse(eachindex(g))
@@ -77,7 +82,7 @@ struct Guide{F<:AbstractFloat,D<:Enum}
             probs[:,ells] = forward_action(m,tend-g[n].slate,probs[:,ells])
             present = probs[:,chillins]
             linmap = Dict(zip(ells,eachindex(ells)))
-            nodes[n] = GuideNode{F,D}(
+            nodes[n] = GuideNode{F,N,D}(
                 g[n].type,
                 g[n].slate,tend,
                 parlin,chillins,ells,linmap,
@@ -101,7 +106,7 @@ struct Guide{F<:AbstractFloat,D<:Enum}
             tend = g[n].slate
             union!(setdiff!(lins,chillins),parlin)
         end
-        new{F,D}(m,nodes,g.nsample)
+        new{F,N,D}(m,nodes,g.nsample)
     end
 end
 
@@ -128,19 +133,21 @@ end
     guide(g, m, knowledge!)
 
 - `g` is a [`Genealogy`](@ref).
-- `m`: is an [`FSMarkovProc`](@ref) encoding the guiding finite-state Markov process.
-  Construct it with a call to [`fsmarkov`](@ref).
-- `knowledge!` is a function with signature `knowledge!(v; deme, type, time)`.
-  It should overwrite the vector `v` with probabilities of being in each
-  possible deme, according to the given `deme`, `type`, and `time`.
-  By default, `knowledge! = known_deme!` (see [`known_deme!`](@ref)).
+- `m`: is an [`FSMarkovProc`](@ref) encoding the guiding finite-state
+  Markov process.  Construct it with a call to [`fsmarkov`](@ref).
+- `knowledge!` is a function with signature `knowledge!(v; deme, type,
+  time)`.  It should overwrite the vector `v` with probabilities of
+  being in each possible deme, according to the given `deme`, `type`,
+  and `time`.  By default, `knowledge! = known_deme!` (see
+  [`known_deme!`](@ref)).
 """
 guide(args...) = Guide(args...)
 
 """
     demekron!(v, d)
 
-Kronecker delta for deme `d`.  Replaces the entries of `v` with zeros in all places except the one corresponding to deme `d`.
+Kronecker delta for deme `d`.  Replaces the entries of `v` with zeros
+in all places except the one corresponding to deme `d`.
 """
 demekron!(v::AbstractVector{F}, d::D,) where {F,D <: Enum} = begin
     @assert length(v)==length(instances(D))
@@ -153,19 +160,21 @@ end
 """
     relhaz(t, g, n, i, j, lins)
 
-Compute the relative reverse-time hazards associated with filter guide `g` at time `t` relative
-to the target at guide-node `n`.  Only columns denoted by the indices in `lins` are considered.
+Compute the relative reverse-time hazards associated with filter guide
+`g` at time `t` relative to the target at guide-node `n`.  Only
+columns denoted by the indices in `lins` are considered.
 
-This returns a vector of hazards for the `i ⟶ j` transition relative to the hazard at stationarity.
+This returns a vector of hazards for the `i ⟶ j` transition relative
+to the hazard at stationarity.
 """
 relhaz(
     t::Time,
-    g::Guide{F,D},
+    g::Guide{F,N,D},
     n::Integer,
     i::D,
     j::D,
-    lins::Union{Integer,AbstractVector{<:Integer}},
-) where {F,D} = begin
+    lins::AbstractVector{<:Integer},
+) where {F,N,D} = begin
     @assert g[n].tbeg ≤ t < g[n].tend "t ∉ [$(g[n].tbeg),$(g[n].tend))"
     p = relhaz_action(
         g.process,
@@ -175,31 +184,62 @@ relhaz(
     @views p[Int(j),:]./p[Int(i),:]
 end
 
-"""
-    relhaz(t, g, n, i, j, cols)
-
-In this form, `cols` is a `Coloring`.
-"""
-relhaz(
-    t::Time,
-    g::Guide{F,D},
+relhaz_alloc(
+    g::Guide{F,N,D},
     n::Integer,
-    i::D,
-    j::D,
-    cols::Coloring{D}
-) where {F,D} = begin
-    lins = [g[n].linmap[k] for k ∈ cols[i]]
-    relhaz(t,g,n,i,j,lins)
+) where {F,N,D} = begin
+    Dict((i,j) => Vector{F}(undef,length(g[n].alllins))
+         for i ∈ instances(D), j ∈ instances(D) if i != j)
+end
+
+relhaz!(
+    r::AbstractDict{Tuple{D,D},Vector{F}},
+    t::Time,
+    g::Guide{F,N,D},
+    n::Integer,
+) where {F,N,D} = begin
+    @assert g[n].tbeg ≤ t < g[n].tend "t ∉ [$(g[n].tbeg),$(g[n].tend))"
+    p = relhaz_action(
+        g.process,
+        g[n].tend-t,
+        g[n].dtarget,
+    )
+    for i ∈ instances(D), j ∈ instances(D)
+        if i != j
+            @views r[(i,j)] .= p[Int(j),:]./p[Int(i),:]
+        end
+    end
+    nothing
+end
+
+relhaz(
+    r::AbstractDict{Tuple{D,D},Vector{F}},
+    n::GuideNode{F,N,D},
+    cols::Coloring{D},
+    i::D, j::D,
+) where {D,F,N} = begin
+    lins = getindex(n,cols[i])
+    r[(i,j)][lins]
+end
+
+sum_relhaz(
+    r::AbstractDict{Tuple{D,D},Vector{F}},
+    n::GuideNode{F,N,D},
+    cols::Coloring{D},
+    i::D, j::D,
+) where {D,F,N} = begin
+    lins = getindex(n,cols[i])
+    sum(r[(i,j)][lins])
 end
 
 choose_branch(
     t::Time,
-    guide::Guide{F,D},
+    guide::Guide{F,N,D},
     node::Integer,
     n,
     cols::Coloring{D},
     i::D, j::D,
-) where {F,D} = begin
+) where {F,N,D} = begin
     lins = [guide[node].linmap[k] for k ∈ cols[i]]
     p = relhaz(t,guide,node,i,j,lins)
     s1 = F(n-ell(cols,i))
@@ -247,6 +287,10 @@ end
 
 Base.getindex(g::Guide, i::Integer) = g.nodes[i]
 Base.getindex(g::Guide, i::AbstractVector{<:Integer}) = g.nodes[i]
+Base.getindex(g::GuideNode, col::BitSet) = begin
+    getindex.(Ref(g.linmap),col)
+end
+
 Base.length(g::Guide) = length(g.nodes)
 Base.eachindex(g::Guide) = eachindex(g.nodes)
 

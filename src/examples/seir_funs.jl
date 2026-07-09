@@ -141,6 +141,8 @@ filter_pomp(
                 S, E, I, R,
                 kwargs...,
                 )
+                t = guide[node].tbeg
+                tf = guide[node].tend
                 cols = copy(cols)
                 ll = zero(Prob)
                 ll, S, E, I, R = singular_part!(
@@ -148,10 +150,10 @@ filter_pomp(
                     S, E, I, R;
                     kwargs...,
                 )
-                if isfinite(ll)
+                if t < tf && isfinite(ll)
                     ll, S, E, I, R = regular_part!(
                         cols, guide, node, ll,
-                        S, E, I, R;
+                        t, tf, S, E, I, R;
                         kwargs...,
                     )
                 end
