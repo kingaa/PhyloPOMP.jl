@@ -22,6 +22,30 @@ pf = pfilter(p, Np = 1000)
 round(logLik(pf),digits=1)
 ```
 
+## Soft-guided filter
+
+```@autodocs
+Modules = [PhyloPOMP.SoftSEIR]
+Order   = [:module, :function, :macro, :type, :constant]
+```
+
+An example constructing the pomp object and running a particle filter.
+
+```@example
+using Random: seed!
+using PhyloPOMP
+using PhyloPOMP.SoftSEIR
+using PhyloPOMP.SoftSEIR.Demes: Expos, Infec
+
+seed!(351956486)
+
+g = parse_newick(SoftSEIR.seir_trees[1], time = 50.0)
+p = SoftSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
+pf = pfilter(p, Np = 1000)
+round(logLik(pf),digits=1)
+```
+
+
 ## Guided filter
 
 ```@autodocs
