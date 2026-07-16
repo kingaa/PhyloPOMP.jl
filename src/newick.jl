@@ -36,7 +36,7 @@ plainnewick(
         bstr = if isnothing(g[i].parent)
             ";"
         else
-            bl = round(g[i].slate-g[g[i].parent].slate,sigdigits=sigdigits)
+            bl = round(g[i].slate-g[g[i].parent].slate;sigdigits)
             ":$bl"
         end
         nstr[i] = if isempty(g[i].children)
@@ -73,7 +73,7 @@ extnewick(
         bstr = if isnothing(g[i].parent)
             ";"
         else
-            bl = round(g[i].slate-g[g[i].parent].slate,sigdigits=sigdigits)
+            bl = round(g[i].slate-g[g[i].parent].slate;sigdigits)
             "[&&PhyloPOMP type=$t$dstr]:$bl"
         end
         nstr[i] = if isempty(g[i].children)
