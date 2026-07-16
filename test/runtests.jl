@@ -16,5 +16,6 @@ h2 = s -> crayon"!bold light_yellow"("- "*s)
     include("seir_soft.jl")
     include("seir_guided.jl")
     include("seir_hard.jl")
+    include("mers_naive.jl")
 
 end
