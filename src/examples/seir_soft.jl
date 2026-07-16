@@ -1,5 +1,5 @@
 """
-    GuidedSEIR
+    SoftSEIR
 
 A module containing an implementation of the phylodynamic filter for
 an SEIR model, using a filter guide and "soft" proposals.  That is, when
@@ -7,7 +7,7 @@ population-process events occur, the guide can steer those events
 preferentially onto (or away from) particular branches, but the overall
 event rate remains equal to that of the underlying population process.
 """
-module GuidedSEIR
+module SoftSEIR
 
 using ..PhyloPOMP
 using ..PhyloPOMP: Root, Node, Sample, Name, Prob, Time, FSMarkovProc
