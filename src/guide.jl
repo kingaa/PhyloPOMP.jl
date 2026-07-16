@@ -274,22 +274,22 @@ end
 
 pretty_string(g::Guide; sigdigits = 4) = begin
     nodes = map(eachindex(g)) do i
-        "  $i: "*pretty_string(g[i],sigdigits=sigdigits)
+        "  $i: "*pretty_string(g[i];sigdigits)
     end
     "<guide:\n" * join(nodes,'\n') * ">"
 end
 
 pretty_string(n::GuideNode; sigdigits = 4) = begin
-    t1 = round(n.tbeg,sigdigits=sigdigits)
-    t2 = round(n.tend,sigdigits=sigdigits)
+    t1 = round(n.tbeg;sigdigits)
+    t2 = round(n.tend;sigdigits)
     chillins = map(eachindex(n.chillins)) do i
         ell = n.chillins[i]
-        prob = round.(n.present[:,i],sigdigits=sigdigits)
+        prob = round.(n.present[:,i];sigdigits)
         "$ell=>$prob"
     end
     targs = map(eachindex(n.alllins)) do i
         ell = n.alllins[i]
-        prob = round.(n.target[:,i],sigdigits=sigdigits)
+        prob = round.(n.target[:,i];sigdigits)
         "$ell=>$prob"
     end
     "<$(lowercase(String(Symbol(n.type)))): t ∈ [$t1,$t2] " *

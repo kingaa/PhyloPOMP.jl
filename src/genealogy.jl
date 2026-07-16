@@ -170,9 +170,9 @@ Base.show(
 
 pretty_string(g::Genealogy; sigdigits=4) = begin
     "<genealogy on ["*
-        "$(round(g.t0,sigdigits=sigdigits)),"*
-        "$(round(g.time,sigdigits=sigdigits))]:\n" *
-        pretty_string(g.nodes; sigdigits=sigdigits) *
+        "$(round(g.t0;sigdigits)),"*
+        "$(round(g.time;sigdigits))]:\n" *
+        pretty_string(g.nodes; sigdigits) *
         ">"
 end
 
@@ -180,7 +180,7 @@ pretty_string(g::AbstractVector{GenealNode}; sigdigits=4) = begin
     join(
         map(eachindex(g)) do i
             "  $(g[i].name): " *
-                pretty_string(g[i]; sigdigits=sigdigits)
+                pretty_string(g[i]; sigdigits)
         end,
         '\n'
     )
@@ -200,7 +200,7 @@ pretty_string(p::GenealNode; sigdigits = 4) = begin
     "<$(lowercase(String(Symbol(p.type)))) " *
         "lineage=$(p.lineage) " *
         (ismissing(p.deme) ? "" : "deme=$(p.deme) ") *
-        "time=$(round(p.slate,sigdigits=sigdigits)) " *
+        "time=$(round(p.slate;sigdigits)) " *
         parent_string *
         "children=[$children_string]" * ">"
 end
