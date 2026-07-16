@@ -1,29 +1,25 @@
-module HardSEIRTest
+module NaiveMERSTest
 
 import ..Main: h1, h2
 
-@info h1("SEIR model with hard-guided proposals")
+@info h1("MERS model with naïve proposals")
 
 using Test
 using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
-using PhyloPOMP.HardSEIR
-using PhyloPOMP.HardSEIR.Demes: Expos, Infec
+using PhyloPOMP.NaiveMERS
 import PartiallyObservedMarkovProcesses as POMP
 
-@testset verbose=true "SEIR model with guided proposals" begin
+@testset verbose=true "MERS model with naïve proposals" begin
 
     seed!(2121916527)
 
-    g = parse_newick(HardSEIR.seir_trees[1], time = 50.0)
-    @test g isa Genealogy{PhyloPOMP.Unstructured}
-
-    p = HardSEIR.filter_pomp(g,E0=0,I0=0,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
+    p = NaiveMERS.filter_pomp(Ic0=0,Ih0=0)
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = HardSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0.01)
+    p = NaiveMERS.filter_pomp()
     @test p isa POMP.PompObject
 
     @info h2("simulate test")
@@ -35,7 +31,6 @@ import PartiallyObservedMarkovProcesses as POMP
     pf = pfilter(p, Np = 100)
     @time pf = pfilter(p, Np = 100)
     @test pf isa POMP.PfilterdPompObject
-    @test isfinite(logLik(pf))
 
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np = 1000)

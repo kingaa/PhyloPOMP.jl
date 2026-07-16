@@ -57,12 +57,10 @@ singular_part!(
             ll -= log(p)
             ellE, ellI = chop!(cols,Infec,n.lineage)
             if k==1             # non-destructive sample
-                ll += log(ψ*I) + log(1-ellI/I)
+                ll += log(ψ*(I-ellI));
             elseif k==2         # destructive sample
                 ll += log(χ*I)
                 I -= 1
-            else
-                @assert false "impossible choice" # COV_EXCL_LINE
             end
         elseif length(n.children) == 1
             chillin = geneal[n.children[1]].lineage
@@ -176,8 +174,6 @@ regular_part!(
                 elseif k==6
                     R -= 1
                     S += 1
-                else
-                    @assert false "impossible error!" # COV_EXCL_LINE
                 end
                 t += step
             else

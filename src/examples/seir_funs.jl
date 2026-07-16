@@ -19,6 +19,86 @@ knowledge!(
     end
 end
 
+transmission!(
+    alpha, pi;
+    β, S, I, pop,
+    onI, offI = I - onI,
+    _...,
+) = begin
+    rate = β*S*I/pop
+    pi[1] = @indicator(I > 0, offI/I)
+    pi[2] = @indicator(I > 0, onI/I)
+    alpha[1] = rate*pi[1]
+    alpha[2] = rate*pi[2]
+    rate-sum(alpha)
+end
+
+progression!(
+    alpha, pi;
+    σ, E,
+    onE, offE = E - onE,
+    _...,
+) = begin
+    rate = σ*E
+    pi[1] = @indicator(E > 0, offE/E)
+    pi[2] = @indicator(E > 0, onE/E)
+    alpha[1] = rate*pi[1]
+    alpha[2] = rate*pi[2]
+    rate-sum(alpha)
+end
+
+recovery!(
+    alpha, pi;
+    γ, I,
+    ellI,
+    _...,
+) = begin
+    rate = γ*I
+    pi[1] = @indicator(I > ellI, 1-ellI/I)
+    alpha[1] = rate*pi[1]
+    rate-sum(alpha)
+end
+
+waning!(
+    alpha, pi;
+    ω, R,
+    _...,
+) = begin
+    rate = ω*R
+    pi[1] = 1
+    alpha[1] = rate
+    zero(Float64)
+end
+
+sampling(
+    ;ψ, χ, I,
+    _...,
+) = begin
+    (ψ+χ)*I
+end
+
+event_rates!(alpha, pi; kwargs...) = begin
+    decay = zero(Prob)
+    decay += transmission!(
+        @view(alpha[1:2]),@view(pi[1:2]);
+        kwargs...,
+    )
+    decay += progression!(
+        @view(alpha[3:4]),@view(pi[3:4]);
+        kwargs...,
+    )
+    decay += recovery!(
+        @view(alpha[5]),@view(pi[5]);
+        kwargs...,
+    )
+    decay += waning!(
+        @view(alpha[6]),@view(pi[6]);
+        kwargs...,
+    )
+    decay += sampling(;kwargs...,)
+    decay
+end
+
 singular_part!(
     cols, guide, node, ll,
     S, E, I, R;
@@ -54,15 +134,14 @@ singular_part!(
             I += 1
         end
         if length(n.chillins) == 0
-            ll += log((ψ+χ)*I)
+            k,_,p = rcateg([ψ, χ],true)
+            ll -= log(p)
             ellE, ellI = chop!(cols,Infec,n.parlin)
-            k,_ = rcateg([ψ, χ])
-            if k==1             # non-destructive sampling
-                ll += log(1-ellI/I)
-            elseif k==2         # destructive sampling
+            if k==1             # non-destructive sample
+                ll += log(ψ*(I-ellI));
+            elseif k==2         # destructive sample
+                ll += log(χ*I)
                 I -= 1
-            else
-                @assert false "impossible choice" # COV_EXCL_LINE
             end
         elseif length(n.chillins) == 1
             ellE, ellI = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
@@ -137,10 +216,12 @@ filter_pomp(
         end,
         rprocess = onestep(
             function (
-                ; node, ll, cols, guide,
+                ; t, dt,
+                node, ll, cols, guide,
                 S, E, I, R,
                 kwargs...,
                 )
+                tf = t+dt
                 cols = copy(cols)
                 ll = zero(Prob)
                 ll, S, E, I, R = singular_part!(
@@ -148,10 +229,10 @@ filter_pomp(
                     S, E, I, R;
                     kwargs...,
                 )
-                if isfinite(ll)
+                if t < tf && isfinite(ll)
                     ll, S, E, I, R = regular_part!(
                         cols, guide, node, ll,
-                        S, E, I, R;
+                        t, tf, S, E, I, R;
                         kwargs...,
                     )
                 end

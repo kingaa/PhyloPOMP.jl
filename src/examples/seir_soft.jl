@@ -1,12 +1,13 @@
 """
-    HardSEIR
+    SoftSEIR
 
 A module containing an implementation of the phylodynamic filter for
-an SEIR model, using a filter guide and "hard" proposals.  That is, color
-changes can be proposed on branches at rates that exceed the event rates
-in the underlying population process.
+an SEIR model, using a filter guide and "soft" proposals.  That is, when
+population-process events occur, the guide can steer those events
+preferentially onto (or away from) particular branches, but the overall
+event rate remains equal to that of the underlying population process.
 """
-module HardSEIR
+module SoftSEIR
 
 using ..PhyloPOMP
 using ..PhyloPOMP: Root, Node, Sample, Name, Prob, Time, FSMarkovProc
@@ -30,16 +31,13 @@ regular_part!(
     decay::Prob = zero(Prob)
     ellE, ellI = ell(cols)
     while t < tf
-        relhaz!(rh,t,guide,node)
         decay = event_rates!(
             alpha, pi;
             S, E, I, R,
             ellE, ellI,
             kwargs...,
-            onE=sum_relhaz(rh,n,cols,Expos,Infec),
-            offE=E-ellE,
-            onI=sum_relhaz(rh,n,cols,Infec,Expos),
-            offI=I-ellI,
+            onE=ellE,
+            onI=ellI,
         )
         k, s = rcateg(alpha)
         step = -log(rand())/s
@@ -50,6 +48,7 @@ regular_part!(
                 E += 1
                 ll += log(1-ellE/E)
             elseif k==2
+                relhaz!(rh,t,guide,node)
                 b, p = choose_branch(rh,n,cols,Infec,Expos)
                 ll -= log(p)
                 S -= 1
@@ -61,6 +60,7 @@ regular_part!(
                 I += 1
                 ll += log(1-ellI/I)
             elseif k==4
+                relhaz!(rh,t,guide,node)
                 b, p = choose_branch(rh,n,cols,Expos,Infec)
                 ll -= log(p)
                 E -= 1

@@ -28,8 +28,6 @@ ell(y::Coloring) = length.(y.cols)
 
 ell(y::Coloring{D}, i::D) where D = length(y.cols[Int(i)])
 
-ell(y::BitSet) = length(y)
-
 """
     swap!(y, i, j, b)
 
