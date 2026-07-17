@@ -53,6 +53,9 @@ using Test
     @test g.time==5.7
     @test g.nodes[3].type==PhyloPOMP.Sample
     @test occursin(r"^<genealogy on .*>>"s,sprint(show,g))
+    g1 = parse_newick("(d:3,(a:4,((c:1,b:2,e:3):1)):1):1;:4;");
+    g2 = parse_newick(":4;(d:3,(a:4,((c:1,b:2,e:3):1)):1):1;");
+    @test length(PhyloPOMP.roots(g1))==length(PhyloPOMP.roots(g2))
 
     @test_throws "unbalanced parentheses" parse_newick("(:0.1;",demes=SEIR,t0=0.0)
     @test_throws "unbalanced square brackets" parse_newick(")3:1;(((:0.1)),[&&PhyloPOMP:deme=E]type=sample]:1.00,(((:0.3,:0.1),),):0.3)a:0.5;",demes=SEIR,t0=0.0)
