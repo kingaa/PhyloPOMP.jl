@@ -44,6 +44,9 @@ parse_newick(
     end
     while b >= f
         if input[b]==';'
+            if open
+                scan_branch!(input[(b+1):e], G, p, dememapper, bl)
+            end
             if stack != 0
                 error("invalid Newick: unbalanced parentheses.")
             end
