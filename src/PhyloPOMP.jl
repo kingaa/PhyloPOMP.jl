@@ -24,6 +24,9 @@ include("demes.jl")
 export GenealNode, Genealogy, times, timezero
 include("genealogy.jl")
 
+export cblv, ladderize
+include("cblv.jl")
+
 export parse_newick
 include("parse.jl")
 
