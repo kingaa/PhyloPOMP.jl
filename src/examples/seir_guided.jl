@@ -45,20 +45,17 @@ singular_part!(
     n = guide[node]
     @assert I ≥ ellI && E ≥ ellE
     if n.type==Root
-        if length(n.chillins) == 1
-            if E-ellE+I-ellI > 0
-                i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
-                ll -= log(p)
-                ellE, ellI = plant!(cols,i,n.chillins[1])
-            else
-                ## even though this realization is incompatible with the data,
-                ## it is necessary to correct the coloring to avoid downstream errors.
-                ll += Prob(-Inf)
-                ellE, ellI = plant!(cols,Infec,n.chillins[1])
-                I += 1
-            end
+        @assert length(n.chillins)==1 "too many children ($(length(n.chillins)) > 1) at root $(n.name), t=$(n.time)"
+        if E-ellE+I-ellI > 0
+            i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
+            ll -= log(p)
+            ellE, ellI = plant!(cols,i,n.chillins[1])
         else
-            error("too many children ($(length(n.chillins)) > 1) at root $(n.name), t=$(n.time)")
+            ## even though this realization is incompatible with the data,
+            ## it is necessary to correct the coloring to avoid downstream errors.
+            ll += Prob(-Inf)
+            ellE, ellI = plant!(cols,Infec,n.chillins[1])
+            I += 1
         end
     elseif n.type==Sample
         if n.parlin ∉ cols[Infec]
@@ -69,6 +66,7 @@ singular_part!(
             E -= 1
             I += 1
         end
+        @assert length(n.chillins)<2 "too many children ($(length(n.chillins)) > 1) at sample $(n.name), t=$(n.time)"
         if length(n.chillins) == 0
             ll += log((ψ+χ)*I)
             ellE, ellI = chop!(cols,Infec,n.parlin)
@@ -83,8 +81,6 @@ singular_part!(
         elseif length(n.chillins) == 1
             ellE, ellI = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
             ll += log(ψ)
-        else
-            error("too many children ($(length(n.chillins)) > 1) at sample $(n.name), t=$(n.time)")
         end
     elseif n.type==Node
         if n.parlin ∉ cols[Infec]
@@ -95,21 +91,18 @@ singular_part!(
             E -= 1
             I += 1
         end
-        if length(n.chillins) == 2
-            ll += log(β*S*I/pop)
-            k, _, p = rcateg([n.present[1,1]*n.present[2,2], n.present[1,2]*n.present[2,1]], true)
-            ll -= log(p)
-            if k==1
-                ellE, ellI = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
-            else
-                ellE, ellI = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
-            end
-            S -= 1
-            E += 1
-            ll -= log(E*I)
+        @assert length(n.chillins)==2 "wrong number of children ($(length(n.chillins)) ≠ 2) at node $(n.name), t=$(n.time)"
+        ll += log(β*S*I/pop)
+        k, _, p = rcateg([n.present[1,1]*n.present[2,2], n.present[1,2]*n.present[2,1]], true)
+        ll -= log(p)
+        if k==1
+            ellE, ellI = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
         else
-            error("wrong number of children ($(length(n.chillins)) ≠ 2) at node $(n.name), t=$(n.time)")
+            ellE, ellI = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
         end
+        S -= 1
+        E += 1
+        ll -= log(E*I)
     end
     ll, S, E, I, R
 end

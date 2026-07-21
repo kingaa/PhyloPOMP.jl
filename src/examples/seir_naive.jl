@@ -28,20 +28,17 @@ singular_part!(
     n = geneal[node]
     @assert I ≥ ellI && E ≥ ellE
     if n.type==Root
-        if length(n.children) == 1
-            if E-ellE+I-ellI > 0
-                i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
-                ll -= log(p)
-                ellE, ellI = plant!(cols,i,n.lineage)
-            else
-                ## even though this realization is incompatible with the data,
-                ## it is necessary to correct the coloring to avoid downstream errors.
-                ll += Prob(-Inf)
-                ellE, ellI = plant!(cols,Infec,n.lineage)
-                I += 1
-            end
+        @assert length(n.children)==1 "too many children ($(length(n.children)) > 1) at root $(n.name), t=$(n.time)"
+        if E-ellE+I-ellI > 0
+            i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
+            ll -= log(p)
+            ellE, ellI = plant!(cols,i,n.lineage)
         else
-            error("too many children ($(length(n.children)) > 1) at root $(n.name), t=$(n.time)")
+            ## even though this realization is incompatible with the data,
+            ## it is necessary to correct the coloring to avoid downstream errors.
+            ll += Prob(-Inf)
+            ellE, ellI = plant!(cols,Infec,n.lineage)
+            I += 1
         end
     elseif n.type==Sample
         if n.lineage ∉ cols[Infec]
@@ -52,6 +49,7 @@ singular_part!(
             E -= 1
             I += 1
         end
+        @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
         if length(n.children) == 0
             k,_,p = rcateg([ψ, χ],true)
             ll -= log(p)
@@ -66,8 +64,6 @@ singular_part!(
             chillin = geneal[n.children[1]].lineage
             ellE, ellI = chop!(cols,Infec,n.lineage,Infec,chillin)
             ll += log(ψ)
-        else
-            error("too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)")
         end
     elseif n.type==Node
         if n.lineage ∉ cols[Infec]
@@ -78,24 +74,21 @@ singular_part!(
             E -= 1
             I += 1
         end
-        if length(n.children) == 2
-            chillins = map(n.children) do i
-                geneal[i].lineage
-            end
-            ll += log(β*S*I/pop)
-            k, _, p = rcateg([1, 1], true)
-            ll -= log(p)
-            if k==1
-                ellE, ellI = fork!(cols,Infec,n.lineage,(Expos,Infec),chillins)
-            else
-                ellE, ellI = fork!(cols,Infec,n.lineage,(Infec,Expos),chillins)
-            end
-            S -= 1
-            E += 1
-            ll -= log(E*I)
-        else
-            error("too many children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)")
+        @assert length(n.children)==2 "too many children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
+        chillins = map(n.children) do i
+            geneal[i].lineage
         end
+        ll += log(β*S*I/pop)
+        k, _, p = rcateg([1, 1], true)
+        ll -= log(p)
+        if k==1
+            ellE, ellI = fork!(cols,Infec,n.lineage,(Expos,Infec),chillins)
+        else
+            ellE, ellI = fork!(cols,Infec,n.lineage,(Infec,Expos),chillins)
+        end
+        S -= 1
+        E += 1
+        ll -= log(E*I)
     else
         @assert false "impossible node type" # COV_EXCL_LINE
     end
