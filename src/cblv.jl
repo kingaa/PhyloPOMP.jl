@@ -72,7 +72,7 @@ visit!(
     else
         visit!(x,y,memo,g,node.children[1])
         for c ∈ Base.rest(node.children,2)
-            push!(y,added_branch_length(g,memo,n))
+            push!(y,node.slate)
             memo[n] = true
             visit!(x,y,memo,g,c)
         end

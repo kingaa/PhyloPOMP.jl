@@ -21,7 +21,8 @@ import PartiallyObservedMarkovProcesses as POMP
 export @demes
 include("demes.jl")
 
-export GenealNode, Genealogy, times, timezero
+export GenealNode, Genealogy, times, timezero, roots, tips,
+    nsample, samples, nodes
 include("genealogy.jl")
 
 export cblv, ladderize

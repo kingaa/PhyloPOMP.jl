@@ -23,13 +23,13 @@ using Test
     x,y = cblv(n);
     [x y]
     @test x==[5.0,3.0,1.0,2.5]
-    @test y==[1.0,1.0,0.5,0.0]
+    @test y==[1.0,2.0,0.5,0.0]
 
     n = parse_newick("((a:4,((b:2,c:1):1)):0.5,d:2.5):0;");
     x,y = cblv(n);
     [x y]
     @test x==[4.5,3.0,1.0,2.5]
-    @test y==[0.5,1.0,0.0,0.0]
+    @test y==[0.5,1.5,0.0,0.0]
 
     ## one ternary node, one zero-length branch
     n1 = parse_newick("((a:4,((b:2,c:1,e:3):1)):1,d:3):1;");
@@ -49,6 +49,10 @@ using Test
     [x y]
     @test x==[6.0,2.0,1.0,4.0,3.0,4.0]
     @test y==[3.0,3.0,2.0,1.0,0.0,0.0]
+
+    n1 = parse_newick("(:4,(:2,:1):1):3;")
+    n2 = parse_newick("((:4,:3):2,:1):1;")
+    @test cblv(n1) != cblv(n2)
 
 end
 
