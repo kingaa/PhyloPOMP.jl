@@ -9,6 +9,8 @@ For doing phylodynamics in Julia.
 @demes
 parse_newick
 newick
+parse_cblv
+cblv
 guide
 fsmarkov
 rcateg

@@ -84,7 +84,7 @@ end
     cblv(g)
 
 Returns a compact, bijective, ladderized vector (CBLV) representation
-of the genealogy `g`.
+of the genealogy `g`.  See also [`parse_cblv`](@ref).
 """
 cblv(g::Genealogy) = begin
     x = Time[]
@@ -100,4 +100,82 @@ cblv(g::Genealogy) = begin
     end
     @assert all(memo)
     x, y
+end
+
+"""
+    parse_cblv(x, y; demes, t0, time)
+
+Parses the compact, bijective, ladderized vector (CBLV) representation
+contained in `x`, `y` into a `Genealogy`.  See also [`cblv`](@ref).
+
+Optional arguments:
+- `demes` is a `Module` enumerating the demes (see [`@demes`](@ref)).
+  By default, `demes = Unstructured`.
+- `t0` is the assumed root-time. By default, `t0 = 0`.
+- `time` is the (optional) final-time.
+"""
+parse_cblv(
+    x::Vector{F},
+    y::Vector{F};
+    demes::Module = Unstructured,
+    t0::Real = zero(Time),
+    time::Union{Missing,Real} = missing,
+) where {F <: Real} = begin
+    @assert length(x)==length(y) "length mismatch"
+    @assert length(x)>0 "empty CBLV representation"
+    @assert maximum(x) == x[1] "improper CBLV representation"
+    @assert maximum(y) <= x[1] "improper CBLV representation"
+    @assert minimum(x) >= 0 "improper CBLV representation"
+    @assert minimum(y) == 0 "improper CBLV representation"
+    @isademeset demes
+    E = demes.DemeSet
+    G = Genealogy{demes}(Time(t0),Time(t0)+Time(x[1]))
+    sizehint!(G.nodes,2*length(x))
+    p::Name = 0
+    name::Name = 0
+    for k ∈ eachindex(x)
+        if p == 0
+            n1 = GenealNode{E}(
+                name += 1, Time(t0),
+                missing, Root, nothing
+            )
+            p = n1.name
+            push!(G.nodes,n1)
+        end
+        t1 = GenealNode{E}(
+            name += 1, G[p].slate+Time(x[k]),
+            missing, Sample, p
+        )
+        push!(G[p].children,t1.name)
+        push!(G.nodes,t1)
+        t = t0+Time(y[k])
+        if t > t0
+            i = p
+            j = t1.name
+            @assert G[j].slate >= t "invalid CBLV"
+            while !isnothing(i) && G[i].slate > t
+                j = i
+                i = G[i].parent
+            end
+            @assert !isnothing(i)
+            n1 = GenealNode{E}(
+                name += 1, t,
+                missing, Node, i
+            )
+            push!(n1.children,j)
+            setdiff!(G[i].children,j)
+            push!(G[i].children,n1.name)
+            G[j].parent = n1.name
+            push!(G.nodes,n1)
+            p = n1.name
+        else
+            p = 0
+        end
+    end
+    @assert p == 0 "invalid CBLV"
+    set_time!(G,time)
+    cap_tips!(G)
+    clip_zlb!(G)
+    repair!(G)
+    G
 end
