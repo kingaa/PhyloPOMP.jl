@@ -155,6 +155,14 @@ trace_lineages!(G::Genealogy) = begin
     nothing
 end
 
+set_time!(G::Genealogy, time::Real) = begin
+    @assert G.time ≤ Time(time) "final time from data ($(G.time)) exceeds specified final time ($time)"
+    G.time = Time(time)
+    nothing
+end
+
+set_time!(G::Genealogy, time::Missing) = nothing
+
 Base.show(
     io::IO,
     g::Union{Genealogy,GenealNode,AbstractVector{GenealNode}};

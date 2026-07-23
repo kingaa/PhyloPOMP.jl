@@ -21,7 +21,8 @@ import PartiallyObservedMarkovProcesses as POMP
 export @demes
 include("demes.jl")
 
-export GenealNode, Genealogy, times, timezero
+export GenealNode, Genealogy, times, timezero, roots, tips,
+    nsample, samples, nodes
 include("genealogy.jl")
 
 export parse_newick
@@ -29,6 +30,9 @@ include("parse.jl")
 
 export newick
 include("newick.jl")
+
+export cblv, ladderize, parse_cblv
+include("cblv.jl")
 
 export Coloring, ell, swap!, chop!, fork!, plant!
 include("coloring.jl")

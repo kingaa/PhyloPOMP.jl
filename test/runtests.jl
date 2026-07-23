@@ -9,6 +9,7 @@ h2 = s -> crayon"!bold light_yellow"("- "*s)
 
     include("parse.jl")
     include("newick.jl")
+    include("cblv.jl")
     include("fsmarkov.jl")
     include("guide.jl")
     include("rcateg.jl")

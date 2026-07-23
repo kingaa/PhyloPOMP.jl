@@ -35,6 +35,7 @@ using Test
     @test length(collect(eachmatch(r"time",sprint(show,g))))==length(g)
     @test occursin(r"lineage=7 .* parent=10",sprint(show,g[11]))
     @test PhyloPOMP.nsample(g)==24
+    @test_logs (:warn,r"dropping (\d+) inline nodes") cblv(g)
 
     g=parse_newick("():0.1;",t0=0.0);
     @test g isa Genealogy{PhyloPOMP.Unstructured}

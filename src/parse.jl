@@ -6,9 +6,10 @@ It is possible to include metadata tags of format `[&&PhyloPOMP ...]` in the lab
 All tips are assumed to be samples.
 Zero-length branches are dropped.
 
-Arguments:
+Optional arguments:
 - `demes` is a `Module` enumerating the demes (see [`@demes`](@ref)).
-- `t0` is the assumed root-time.
+  By default, `demes = Unstructured`.
+- `t0` is the assumed root-time. By default, `t0 = 0`.
 - `time` is the (optional) final-time.
 """
 parse_newick(
@@ -119,13 +120,7 @@ parse_newick(
     if open
         scan_branch!(input[(b+1):e], G, p, dememapper, bl)
     end
-    if !ismissing(time)
-        if G.time > Time(time)
-            error("final time from data ($(G.time)) exceeds specified final time ($time)")
-        else
-            G.time = Time(time)
-        end
-    end
+    set_time!(G,time)
     cap_tips!(G)
     clip_zlb!(G)
     repair!(G)
