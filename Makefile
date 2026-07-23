@@ -5,6 +5,10 @@ default: build
 test: build
 	$(JULIA) -e 'import Pkg; Pkg.test()'
 
+light: export RUN_HEAVY_TESTS=false
+
+light: test
+
 coverage: build
 	$(JULIA) -e 'using LocalCoverage; report_coverage_and_exit(target_coverage=90)'
 
