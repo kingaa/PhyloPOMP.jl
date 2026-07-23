@@ -11,6 +11,8 @@ using PhyloPOMP
 using PhyloPOMP.NaiveSEIR
 import PartiallyObservedMarkovProcesses as POMP
 
+heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
+
 @testset verbose=true "SEIR model with naïve proposals" begin
 
     seed!(2121916527)
@@ -36,12 +38,14 @@ import PartiallyObservedMarkovProcesses as POMP
     @test pf isa POMP.PfilterdPompObject
     @test isfinite(logLik(pf))
 
-    @info h2("pfilter benchmark")
-    @btime pfilter($p, Np = 1000)
+    if heavy
+        @info h2("pfilter benchmark")
+        @btime pfilter($p, Np = 1000)
 
-    @time ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
-    llest,llse = logmeanexp(ll,se=true)
-    @info "logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
+        @time ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
+        llest,llse = logmeanexp(ll,se=true)
+        @info "logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
+    end
 
 end
 
