@@ -1,0 +1,411 @@
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{longtable}
+\usepackage{array}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+
+\pagestyle{plain}
+
+\title{%
+  \textsc{PhyloPOMP.jl} Development Branch\\[4pt]
+  {\large Summary of Changes Merged from \texttt{devel} into \texttt{atpabuser-devel}}%
+}
+\author{Auto-generated Documentation}
+\date{July 17, 2026}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\vspace{1em}
+
+%% ----------------------------------------------------------------
+\section{Overview}
+
+This document summarizes the changes introduced by merging the upstream
+\texttt{devel} branch (from \texttt{kingaa/PhyloPOMP.jl}) into the
+local \texttt{atpabuser-devel} branch. The merge encompassed 16 commits
+affecting 25 files, with 647 lines added and 232 lines removed. All
+changes applied as a clean fast-forward merge.
+
+The changes fall into five major categories:
+
+\begin{enumerate}
+  \item A new ``soft-guided'' SEIR filter module (\texttt{SoftSEIR}).
+  \item Significant refactoring of the filter-guide infrastructure for
+        performance and generality.
+  \item Bug fixes in the MERS naive filter and SEIR sampling logic.
+  \item Dependency and CI/CD updates.
+  \item Code simplification and cleanup throughout.
+\end{enumerate}
+
+%% ----------------------------------------------------------------
+\section{New Feature: Soft-Guided SEIR Filter (\texttt{SoftSEIR})}
+
+A new module \texttt{SoftSEIR} has been added in
+\texttt{src/examples/seir\_soft.jl} (88 lines), providing an
+alternative guided particle filter for the SEIR model.
+
+\subsection{Design Philosophy}
+
+The soft-guided filter uses a filter guide to steer population-process
+events preferentially onto or away from particular lineage branches,
+but crucially, \emph{the overall event rate remains equal to that of
+the underlying population process}. This contrasts with the
+``hard-guided'' filter (\texttt{HardSEIR}), where the guide modifies
+the actual event rates.
+
+\subsection{Key Implementation Details}
+
+\begin{itemize}
+  \item Uses the new \texttt{relhaz\_alloc} / \texttt{relhaz!} /
+        \texttt{choose\_branch} interface (see Section~\ref{sec:guide})
+        for efficient, allocation-free guide queries.
+  \item The \texttt{regular\_part!} function simulates the Gillespie
+        dynamics between genealogical events, applying guide-based
+        branch selection for transmission and progression events
+        involving tracked lineages.
+  \item Six event channels are handled: transmission (off-lineage and
+        on-lineage), progression (off-lineage and on-lineage), recovery,
+        and waning immunity.
+  \item Includes its own test suite (\texttt{test/seir\_soft.jl}) with
+        simulation, particle filter, and benchmark tests.
+\end{itemize}
+
+\subsection{Documentation}
+
+A new section has been added to \texttt{docs/src/seir.md} documenting
+\texttt{SoftSEIR} with an example that constructs a \texttt{pomp}
+object and runs a 1000-particle filter.
+
+%% ----------------------------------------------------------------
+\section{Filter-Guide Infrastructure Refactoring}
+\label{sec:guide}
+
+The guide system (\texttt{src/guide.jl}, \texttt{src/fsmarkov.jl}) has
+undergone substantial refactoring for both performance and type-level
+generality.
+
+\subsection{Type Parameter Changes}
+
+All core structs now carry an additional type parameter \texttt{N}
+representing the number of demes, which is resolved at compile time
+rather than being computed at runtime via
+\texttt{length(instances(D))}.
+
+\begin{center}
+\begin{tabular}{lll}
+  \hline
+  \textbf{Struct} & \textbf{Before} & \textbf{After} \\
+  \hline
+  \texttt{FSMarkovProc} & \texttt{FSMarkovProc\{F,D\}} & \texttt{FSMarkovProc\{F,N,D\}} \\
+  \texttt{GuideNode}    & \texttt{GuideNode\{F,D\}}    & \texttt{GuideNode\{F,N,D\}} \\
+  \texttt{Guide}        & \texttt{Guide\{F,D\}}        & \texttt{Guide\{F,N,D\}} \\
+  \hline
+\end{tabular}
+\end{center}
+
+The \texttt{N} parameter enables the compiler to specialize matrix
+operations on the known deme dimension, replacing runtime
+\texttt{length(instances(D))} calls with compile-time constants.
+
+\subsection{New Allocation-Free Relative Hazard API}
+
+Three new functions and one helper have been added to enable
+pre-allocated, in-place computation of relative hazards:
+
+\textbf{\texttt{relhaz\_alloc(g, n)}} --- Allocates a dictionary of
+vectors (keyed by deme-transition pairs $(i,j)$) sized for guide
+node~\texttt{n}. Called once per Gillespie interval.
+
+\textbf{\texttt{relhaz!(r, t, g, n)}} --- Fills the pre-allocated
+dictionary \texttt{r} in-place with the relative hazards at
+time~\texttt{t}. Replaces repeated allocation in the inner Gillespie
+loop.
+
+\textbf{\texttt{sum\_relhaz(r, n, cols, i, j)}} --- Returns the sum of
+relative hazards for the $i \to j$ transition across lineages in
+coloring \texttt{cols}.
+
+\textbf{\texttt{choose\_branch(r, n, cols, i, j)}} --- Selects a branch
+for a deme-switching event using the pre-computed hazards, returning
+both the chosen branch and its selection probability.
+
+These replace the previous pattern where \texttt{relhaz} was called
+repeatedly inside the Gillespie loop, each time allocating new vectors.
+
+\subsection{Removed: \texttt{demekron} (Non-Mutating)}
+
+The non-mutating \texttt{demekron(F, d)} and \texttt{demekron(d)}
+functions have been removed. Only the in-place \texttt{demekron!(v, d)}
+remains, reducing unnecessary allocations.
+
+\subsection{Removed: \texttt{ell(::BitSet)}}
+
+The method \texttt{ell(y::BitSet)} (which was simply
+\texttt{length(y)}) has been removed from \texttt{src/coloring.jl}.
+
+\subsection{New Exports}
+
+The module now exports the new functions:
+
+\begin{verbatim}
+export Guide, guide, relhaz, relhaz_alloc, relhaz!,
+    sum_relhaz, demekron!, choose_branch
+\end{verbatim}
+
+%% ----------------------------------------------------------------
+\section{Hard-Guided SEIR Filter Refactoring (\texttt{HardSEIR})}
+
+The hard-guided filter in \texttt{src/examples/seir\_hard.jl} has been
+substantially simplified (145 lines reduced to approximately 95 lines
+of core logic):
+
+\begin{itemize}
+  \item The local \texttt{event\_rates!} function has been removed.
+        The module now uses the shared \texttt{event\_rates!} from
+        \texttt{seir\_funs.jl}, which decomposes rates into
+        modular per-event-type functions.
+  \item The \texttt{regular\_part!} function now accepts explicit
+        \texttt{t} and \texttt{tf} time arguments instead of
+        extracting them from the guide node, enabling the caller to
+        control the integration window.
+  \item Guide queries use the new pre-allocated \texttt{relhaz!} /
+        \texttt{choose\_branch} API instead of per-call allocation.
+  \item Unnecessary \texttt{@assert false} branches after exhaustive
+        conditionals have been removed.
+\end{itemize}
+
+%% ----------------------------------------------------------------
+\section{Shared SEIR Utilities (\texttt{seir\_funs.jl})}
+
+The shared utility file \texttt{src/examples/seir\_funs.jl} has been
+significantly expanded (from $\sim$20 to $\sim$100 lines of new
+content) with modular event-rate functions:
+
+\textbf{\texttt{transmission!(alpha, pi; \ldots)}} --- Computes rates
+and pre-boost probabilities for transmission events, split into
+off-lineage and on-lineage channels.
+
+\textbf{\texttt{progression!(alpha, pi; \ldots)}} --- Analogous
+function for $E \to I$ progression events.
+
+\textbf{\texttt{recovery!(alpha, pi; \ldots)}} --- Recovery
+($I \to R$) rate computation.
+
+\textbf{\texttt{waning!(alpha, pi; \ldots)}} --- Waning immunity
+($R \to S$) rate computation.
+
+\textbf{\texttt{sampling(; \ldots)}} --- Returns the total sampling
+rate $(\psi + \chi) I$.
+
+\textbf{\texttt{event\_rates!(alpha, pi; \ldots)}} --- Master
+dispatcher that calls all of the above and accumulates the total
+``decay'' (the difference between true and boosted rates).
+
+\subsection{Sampling Logic Fix}
+
+The sampling logic at genealogical sample nodes has been corrected in
+both \texttt{seir\_funs.jl} and \texttt{seir\_naive.jl}:
+
+\begin{itemize}
+  \item Previously, the code computed
+        $\texttt{ll} \mathrel{+}= \log((\psi+\chi) \cdot I)$ before
+        choosing the sampling type, then adjusted the log-likelihood
+        with a conditional on the number of tracked lineages.
+  \item Now, the sampling type is chosen first via
+        \texttt{rcateg([$\psi$, $\chi$], true)}, the selection
+        probability is subtracted (\texttt{ll -= log(p)}), and the
+        log-likelihood contributions are:
+        \begin{itemize}
+          \item Non-destructive: $\log(\psi \cdot (I - \ell_I))$
+          \item Destructive: $\log(\chi \cdot I)$
+        \end{itemize}
+\end{itemize}
+
+\subsection{Time-Aware \texttt{rprocess}}
+
+The \texttt{rprocess} callback in \texttt{filter\_pomp} now receives
+\texttt{t} and \texttt{dt} keyword arguments, computing
+$t_f = t + dt$. The \texttt{regular\_part!} call is skipped when
+$t \geq t_f$, avoiding zero-length Gillespie intervals.
+
+%% ----------------------------------------------------------------
+\section{Guided SEIR Filter (\texttt{seir\_guided.jl}) --- Inlining}
+
+The \texttt{GuidedSEIR} module (\texttt{src/examples/seir\_guided.jl})
+has been expanded from a thin wrapper around \texttt{seir\_funs.jl} to
+a self-contained module ($\sim$170 lines). The key functions ---
+\texttt{knowledge!}, \texttt{singular\_part!}, and
+\texttt{filter\_pomp} --- are now defined directly in the module
+rather than included from \texttt{seir\_funs.jl}. This allows the
+guided variant to diverge from the shared utilities where needed (e.g.,
+its \texttt{singular\_part!} uses a slightly different sampling branch
+structure that retains the older two-branch \texttt{rcateg} pattern).
+
+%% ----------------------------------------------------------------
+\section{MERS Naive Filter Bug Fixes}
+
+Several correctness fixes have been applied to
+\texttt{src/examples/mers\_naive.jl}:
+
+\begin{enumerate}
+  \item \textbf{Cross-species transmission rates}: The factor of
+        $1/2$ was incorrectly applied to the total cross-species rate
+        (e.g., \texttt{Beta\_hc * Sh * Ic / Nc / 2.0}). It is now
+        correctly applied only to the individual branch weights passed
+        to \texttt{rcateg} (e.g., \texttt{0.5*lambda\_hc}), while the
+        full rate is used in the log-likelihood.
+
+  \item \textbf{Branch selection probability}: The \texttt{rcateg}
+        calls now use the \texttt{true} flag to return the selection
+        probability, which is properly subtracted from the
+        log-likelihood (\texttt{ll -= log(p)}). Previously, the
+        returned rate value was used directly, conflating the rate with
+        the selection probability.
+
+  \item \textbf{Missing log-likelihood terms}: Two
+        \texttt{ll += log(ell$_x$)} terms were added for cross-species
+        events in the regular part (events $k=4$ and $k=6$), accounting
+        for the probability of selecting a tracked lineage.
+\end{enumerate}
+
+%% ----------------------------------------------------------------
+\section{Finite-State Markov Process (\texttt{fsmarkov.jl})}
+
+\begin{itemize}
+  \item The \texttt{FSMarkovProc} struct gains the \texttt{N} type
+        parameter (number of demes), computed in the constructor as
+        \texttt{N = length(instances(D))}.
+  \item The \texttt{forward\_action} and \texttt{relhaz\_action}
+        methods now use \texttt{@assert size(X,1) == M} (where
+        \texttt{M} is the type parameter) instead of a runtime
+        \texttt{if}/\texttt{error} check. This provides clearer error
+        messages and enables the compiler to elide the check when the
+        size is statically known.
+\end{itemize}
+
+%% ----------------------------------------------------------------
+\section{Genealogy and Newick Formatting}
+
+\subsection{Keyword Argument Simplification}
+
+Throughout \texttt{src/genealogy.jl} and \texttt{src/newick.jl}, all
+calls of the form \texttt{round(x, sigdigits=sigdigits)} have been
+simplified to \texttt{round(x; sigdigits)} using Julia's shorthand
+keyword syntax. This is a purely stylistic change with no behavioral
+impact.
+
+\subsection{Removed Method}
+
+The standalone \texttt{Base.show(g; kwargs...)} method (which
+dispatched to \texttt{show(stdout, g; kwargs...)}) has been removed
+from \texttt{genealogy.jl}. The two-argument \texttt{Base.show(io, g;
+kwargs...)} method remains.
+
+%% ----------------------------------------------------------------
+\section{Dependency and Build Changes}
+
+\subsection{POMP.jl Dependency}
+
+The \texttt{Project.toml} now pins
+\texttt{PartiallyObservedMarkovProcesses} to the upstream
+\texttt{devel} branch via a \texttt{[sources]} entry pointing to\\
+\texttt{https://github.com/kingaa/PartiallyObservedMarkovProcesses.jl}
+with \texttt{rev = "devel"}.
+
+The compatibility specifier has been updated from
+\texttt{"0.6.3"} to \texttt{"0.7"}.
+
+The same source entry has been added to \texttt{test/Project.toml}.
+
+\subsection{Version Bump}
+
+The package version has been bumped from \texttt{0.0.11-dev} to
+\texttt{0.0.12-dev}.
+
+\subsection{Makefile}
+
+The test precompilation step now includes
+\texttt{-{}-check-bounds=yes} for stricter bounds checking during
+test builds.
+
+%% ----------------------------------------------------------------
+\section{CI/CD Workflow Changes}
+
+\subsection{CI Matrix Restructuring (\texttt{CI.yml})}
+
+The GitHub Actions CI matrix has been restructured:
+
+\begin{itemize}
+  \item The nested \texttt{matrix.config.\{os, version, arch, R\}}
+        structure has been flattened to top-level matrix keys.
+  \item A new \texttt{threads} dimension has been added with values
+        \texttt{"1"} and \texttt{"2"}, enabling multi-threaded test
+        runs. Julia 1.12 is excluded from the single-thread
+        configuration (only runs with 2 threads).
+  \item The \texttt{JULIA\_NUM\_THREADS} environment variable is set
+        from the matrix for the test step.
+  \item Job names now include the thread count for clarity.
+\end{itemize}
+
+\subsection{Documentation Workflow (\texttt{Documentation.yml})}
+
+The documentation workflow now triggers on pull requests in addition to
+pushes to \texttt{master} and tags.
+
+%% ----------------------------------------------------------------
+\section{Test Suite Updates}
+
+\begin{itemize}
+  \item \textbf{New}: \texttt{test/seir\_soft.jl} --- full test suite
+        for the \texttt{SoftSEIR} module including simulation,
+        particle filtering, and benchmarking (49 lines).
+  \item \textbf{Updated}: \texttt{test/runtests.jl} now includes
+        \texttt{seir\_soft.jl}.
+  \item \textbf{Updated}: Variable renaming in \texttt{test/guide.jl}
+        (\texttt{h$n$} $\to$ \texttt{r$n$}) for clarity.
+  \item \textbf{Updated}: Benchmark loops in
+        \texttt{test/seir\_naive.jl}, \texttt{test/seir\_hard.jl}, and
+        \texttt{test/mers\_naive.jl} are now wrapped in \texttt{@time}
+        for wall-clock reporting.
+\end{itemize}
+
+%% ----------------------------------------------------------------
+\section{Summary of Files Changed}
+
+\begin{center}
+\small
+\begin{tabular}{l r l}
+  \hline
+  \textbf{File} & \textbf{$\Delta$ Lines} & \textbf{Nature of Change} \\
+  \hline
+  \texttt{src/examples/seir\_soft.jl}    & $+88$   & New module \\
+  \texttt{src/examples/seir\_guided.jl}  & $+164$  & Inlined from shared funs \\
+  \texttt{src/examples/seir\_funs.jl}    & $+86$   & Modular event rates \\
+  \texttt{src/examples/seir\_hard.jl}    & $-50$   & Refactored to new API \\
+  \texttt{src/examples/seir\_naive.jl}   & $-3$    & Sampling fix \\
+  \texttt{src/examples/mers\_naive.jl}   & $+8$    & Bug fixes \\
+  \texttt{src/guide.jl}                  & $+42$   & New API, type params \\
+  \texttt{src/fsmarkov.jl}               & $-6$    & Type params, asserts \\
+  \texttt{src/genealogy.jl}              & $-6$    & Cleanup \\
+  \texttt{src/newick.jl}                 & $\pm 2$ & Keyword syntax \\
+  \texttt{src/PhyloPOMP.jl}              & $+2$    & New exports \\
+  \texttt{src/coloring.jl}               & $-2$    & Removed \texttt{ell(::BitSet)} \\
+  \texttt{Project.toml}                  & $+5$    & POMP source, version \\
+  \texttt{docs/src/seir.md}              & $+24$   & SoftSEIR docs \\
+  \texttt{test/seir\_soft.jl}            & $+49$   & New test suite \\
+  \texttt{test/runtests.jl}              & $+1$    & Include soft test \\
+  \texttt{.github/workflows/CI.yml}      & $+13$   & Thread matrix \\
+  \texttt{.github/workflows/Doc.yml}     & $+1$    & PR trigger \\
+  \texttt{Makefile}                      & $\pm 1$ & Bounds checking \\
+  \hline
+\end{tabular}
+\end{center}
+
+\end{document}
