@@ -31,7 +31,7 @@ include("parse.jl")
 export newick
 include("newick.jl")
 
-export cblv, ladderize, parse_cblv
+export cblv, parse_cblv
 include("cblv.jl")
 
 export Coloring, ell, swap!, chop!, fork!, plant!
