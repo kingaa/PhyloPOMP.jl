@@ -14,9 +14,9 @@ Optional arguments:
 """
 parse_newick(
     input::AbstractVector{V};
-    args...,
+    kwargs...,
 ) where {V<:AbstractString} =
-    parse_newick(join(reverse(input));args...)
+    parse_newick(join(reverse(input)); kwargs...)
 
 parse_newick(
     input::AbstractString;
@@ -26,30 +26,25 @@ parse_newick(
 ) = begin
     @isademeset demes
     D = demes.DemeSet
-    nnodes = count(')',input)+count(',',input)+2*count(';',input)
     dememapper = name2enum(D)
-    t0 = Time(t0)
+    tf = t0 = Time(t0)
+    bl = zero(Time)
     G = Genealogy{demes}(t0)
+    nnodes = count(')',input)+count(',',input)+2*count(';',input)
     sizehint!(G.nodes,nnodes)
     p::Union{Nothing,Name} = nothing
-    tf = t0
-    open = false
-    bl = zero(Time)
-    stack = 0
-    sqstack = 0
+    open::Bool = false
+    stack::Int = 0
+    sqstack::Int = 0
     f = firstindex(input)
-    e = lastindex(input)
-    b = e
-    if input[b] != ';'
-        error("invalid Newick format: no final semicolon.")
-    end
+    b = e = lastindex(input)
+    @assert input[b] == ';' "invalid Newick: no final semicolon."
     while b >= f
+        @assert input[b] != '[' "invalid Newick: unbalanced square brackets."
         if input[b]==';'
+            @assert stack == 0 "invalid Newick: unbalanced parentheses."
             if open
-                scan_branch!(input[(b+1):e], G, p, dememapper, bl)
-            end
-            if stack != 0
-                error("invalid Newick: unbalanced parentheses.")
+                scan_branch!(G, input[(b+1):e], p, dememapper, bl)
             end
             p = length(G.nodes)+1
             n = GenealNode{D}(p,t0)
@@ -58,30 +53,25 @@ parse_newick(
             open = true
             bl = zero(Time)
         elseif input[b] == ')'
-            if (open)
-                q = scan_branch!(input[(b+1):e], G, p, dememapper, bl)
-                p = q
-            else
-                error("invalid Newick: missing comma or semicolon.")
-            end
+            @assert open "invalid Newick: missing comma or semicolon."
+            scan_branch!(G, input[(b+1):e], p, dememapper, bl)
+            p = length(G.nodes)
             stack += 1
             e = b = b-1
             open = true
             bl = zero(Time)
         elseif input[b] == '('
             if open
-                scan_branch!(input[(b+1):e], G, p, dememapper, bl)
+                scan_branch!(G, input[(b+1):e], p, dememapper, bl)
             end
             p = G[p].parent
             e = b = b-1
             stack -= 1
             open = false
         elseif input[b] == ','
-            if stack <= 0
-                error("invalid Newick string: misplaced comma or unbalanced parentheses.")
-            end
+            @assert stack > 0 "invalid Newick: misplaced comma or unbalanced parentheses."
             if open
-                scan_branch!(input[(b+1):e], G, p, dememapper, bl)
+                scan_branch!(G, input[(b+1):e], p, dememapper, bl)
             end
             e = b = b-1
             open = true
@@ -96,45 +86,40 @@ parse_newick(
                     sqstack -= 1
                 end
             end
-            if sqstack != 0
-                error("invalid Newick format: unbalanced square brackets.")
-            else
-                b = b-1
-            end
-        elseif input[b] == '['
-            error("invalid Newick: unbalanced square brackets.")
+            @assert sqstack == 0 "invalid Newick: unbalanced square brackets."
+            b = b-1
         elseif input[b] == ':'
-            if open
-                bl = scan_length(input[(b+1):e])
-                e = b = b-1
-            else
-                error("invalid Newick format: misplaced colon.")
-            end
+            @assert open "invalid Newick: misplaced colon."
+            bl = scan_length(input[(b+1):e])
+            e = b = b-1
         else
             b = b-1
         end
     end
-    if stack != 0
-        error("invalid Newick format: unbalanced parentheses.")
-    end
+    @assert stack == 0 "invalid Newick: unbalanced parentheses."
     if open
-        scan_branch!(input[(b+1):e], G, p, dememapper, bl)
+        scan_branch!(G, input[(b+1):e], p, dememapper, bl)
     end
     set_time!(G,time)
-    cap_tips!(G)
-    clip_zlb!(G)
+    cap_tips!(G)     # all tips become samples
+    clip_zlb!(G)     # samples with zero-length branches become inline
     repair!(G)
     G
 end
 
 const nodetypemap = Dict(
-    "node"=>Node,"branch"=>Node,"migration"=>Node,"root"=>Node,
+    "node"=>Node,
+    "branch"=>Node,
+    "migration"=>Node,
+    "root"=>Node,
     "sample"=>Sample,
 )
 
-##     cap_tips!(G)
-##
-## Converts tip-nodes to sample-nodes.  The genealogy remains correct.
+"""
+    cap_tips!(G)
+
+Converts tip-nodes to sample-nodes.  The genealogy remains correct.
+"""
 cap_tips!(G::Genealogy) = begin
     for n ∈ G.nodes
         if isempty(n.children)
@@ -144,10 +129,13 @@ cap_tips!(G::Genealogy) = begin
     nothing
 end
 
-##     clip_zlb!(G)
-##
-## Isolates zero-length branches from Genealogy `G` as needed.
-## The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
+"""
+    clip_zlb!(G)
+
+Isolates zero-length branches from Genealogy `G` as needed.  The
+genealogy is now incorrect: and needs to be repaired (see
+[`repair!`](@ref)).
+"""
 clip_zlb!(G::Genealogy) = begin
     for n ∈ G.nodes
         if !isnothing(n.parent)
@@ -162,9 +150,7 @@ clip_zlb!(G::Genealogy) = begin
                     append!(p.children,n.children)
                     empty!(n.children)
                     n.parent = nothing
-                    if (p.type != Node)
-                        error("dropping zero-length branch collapses multiple samples.")
-                    end
+                    @assert p.type == Node "dropping zero-length branch collapses multiple samples."
                     p.type = n.type
                 end
             end
@@ -173,10 +159,12 @@ clip_zlb!(G::Genealogy) = begin
     nothing
 end
 
-##     insert_zlb!(G)
-##
-## Adds zero-length branches where needed.
-## The genealogy is now incorrect: and needs to be repaired (see [`repair!`](@ref)).
+"""
+    insert_zlb!(G)
+
+Adds zero-length branches where needed.  The genealogy is now
+incorrect: and needs to be repaired (see [`repair!`](@ref)).
+"""
 insert_zlb!(G::Genealogy{D}) where D = begin
     for n ∈ G.nodes
         if n.type==Sample && !isempty(n.children)
@@ -190,19 +178,23 @@ insert_zlb!(G::Genealogy{D}) where D = begin
     nothing
 end
 
-##     scan_branch!(input, G, p, mapper)
-##
-## Parse the branch-string in `input`, appending the corresponding
-## node to Genealogy `G`.
-##
-## Arguments:
-## - `input`: the string, or vector of strings, containing the branch information
-## - `G`: the genealogy to be modified
-## - `p`: the name of the parent node
-## - `mapper`: a function that maps strings to demes.
+
+"""
+    scan_branch!(G, input, p, mapper, bl)
+
+Parse the branch-string in `input`, appending the corresponding node
+to Genealogy `G`.
+
+Arguments:  
+- `G`: the genealogy to be modified
+- `input`: the string containing the branch information
+- `p`: the name of the parent node
+- `mapper`: a function that maps strings to demes.
+- `bl`: the branch length
+"""
 scan_branch!(
-    input::String,
     G::Genealogy{D},
+    input::AbstractString,
     p::Name,
     dememapper::Function,
     bl::Time,
@@ -212,18 +204,14 @@ scan_branch!(
         deme = missing
     else
         deme = dememapper(m.captures[1])
-        if ismissing(deme)
-            error("unrecognized deme '$(m.captures[1])'.")
-        end
+        @assert !ismissing(deme) "unrecognized deme '$(m.captures[1])'."
     end
     m = match(r"^.*\[&&PhyloPOMP.*type=(\w+).*\].*$"i, input)
     if isnothing(m)
         type = Node
     else
         type = get(nodetypemap,lowercase(m.captures[1]),missing)
-        if ismissing(type)
-            error("unrecognized type '$(m.captures[1])'.")
-        end
+        @assert !ismissing(type) "unrecognized type '$(m.captures[1])'."
     end
     q = length(G.nodes)+1
     slate = G[p].slate + bl
@@ -234,10 +222,10 @@ scan_branch!(
     if (n.slate > G.time)
         G.time = n.slate
     end
-    q
+    nothing
 end
 
-scan_length(input::String) = begin
+scan_length(input::AbstractString) = begin
     m = match(
         r"^(?:\[.*?\])?([^\[\]]+?)(?:\[.*?\])?$",
         input,
@@ -248,8 +236,6 @@ scan_length(input::String) = begin
     else
         bl = parse(Time,m.captures[1])
     end
-    if (bl < zero(Time))
-        error("negative branch length detected.")
-    end
+    @assert bl >= zero(Time) "negative branch length detected."
     bl
 end
