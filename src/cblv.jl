@@ -7,6 +7,8 @@ genealogy and the indices of the root nodes ordered in the same way.
 """
 ladderize(g::Genealogy) = begin
     g = deepcopy(g)
+    insert_zlb!(g)
+    repair!(g)
     heights = Vector{Time}(undef,length(g))
     for n ∈ Iterators.reverse(eachindex(g))
         ladderize!(heights,g,n)
@@ -72,7 +74,7 @@ visit!(
     else
         visit!(x,y,memo,g,node.children[1])
         for c ∈ Base.rest(node.children,2)
-            push!(y,node.slate)
+            push!(y,node.slate-timezero(g))
             memo[n] = true
             visit!(x,y,memo,g,c)
         end
@@ -87,18 +89,20 @@ Returns a compact, bijective, ladderized vector (CBLV) representation
 of the genealogy `g`.  See also [`parse_cblv`](@ref).
 """
 cblv(g::Genealogy) = begin
+    g, r = ladderize(g)
     x = Time[]
     y = Time[]
     sizehint!(x,nsample(g))
     sizehint!(y,nsample(g))
     memo = fill(false,length(g))
-    g, r = ladderize(g)
     for n ∈ r
         visit!(x,y,memo,g,n)
         push!(y,zero(Time))
         memo[n] = true
     end
-    @assert all(memo)
+    if !all(memo)
+        @warn "dropping $(sum(.!memo)) inline nodes"
+    end
     x, y
 end
 
@@ -135,47 +139,54 @@ parse_cblv(
     name::Name = 0
     for k ∈ eachindex(x)
         if p == 0
-            n1 = GenealNode{E}(
+            node = GenealNode{E}(
                 name += 1, Time(t0),
                 missing, Root, nothing
             )
-            p = n1.name
-            push!(G.nodes,n1)
+            p = node.name
+            push!(G.nodes,node)
         end
-        t1 = GenealNode{E}(
+        tip = GenealNode{E}(
             name += 1, G[p].slate+Time(x[k]),
             missing, Sample, p
         )
-        push!(G[p].children,t1.name)
-        push!(G.nodes,t1)
+        push!(G[p].children,tip.name)
+        push!(G.nodes,tip)
         t = t0+Time(y[k])
         if t > t0
             i = p
-            j = t1.name
+            j = tip.name
             @assert G[j].slate >= t "invalid CBLV"
             while !isnothing(i) && G[i].slate > t
                 j = i
                 i = G[i].parent
             end
             @assert !isnothing(i)
-            n1 = GenealNode{E}(
+            node = GenealNode{E}(
                 name += 1, t,
                 missing, Node, i
             )
-            push!(n1.children,j)
+            push!(node.children,j)
             setdiff!(G[i].children,j)
-            push!(G[i].children,n1.name)
-            G[j].parent = n1.name
-            push!(G.nodes,n1)
-            p = n1.name
+            push!(G[i].children,node.name)
+            G[j].parent = node.name
+            push!(G.nodes,node)
+            p = node.name
         else
             p = 0
         end
     end
-    @assert p == 0 "invalid CBLV"
+    @assert p == 0 "invalid CBLV: last value of `y` is nonzero."
     set_time!(G,time)
     cap_tips!(G)
     clip_zlb!(G)
     repair!(G)
     G
 end
+
+"""
+    parse_cblv((x, y); kwargs...)
+
+Equivalent to `parse_cblv(x, y; kwargs...)`.
+"""
+parse_cblv((x, y,); kwargs...,) = parse_cblv(x, y; kwargs...)
