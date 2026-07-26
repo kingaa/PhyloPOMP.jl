@@ -17,7 +17,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
 
     seed!(2121916527)
 
-    p = NaiveMERS.filter_pomp(I_c0=0,I_h0=0)
+    p = NaiveMERS.filter_pomp(Ic0=0,Ih0=0)
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
