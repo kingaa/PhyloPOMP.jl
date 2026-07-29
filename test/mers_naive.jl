@@ -26,6 +26,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     @test logLik(pfilter(p_legacy,Np=100))==-Inf
 
     @test_throws ArgumentError NaiveMERS.filter_pomp(Ic0=1,I_c0=2)
+    @test_throws ArgumentError NaiveMERS.filter_pomp(Ih0=1,I_h0=2)
 
     p = NaiveMERS.filter_pomp()
     @test p isa POMP.PompObject
