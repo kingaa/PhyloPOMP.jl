@@ -151,8 +151,10 @@ event_rates!(
     alpha[5] = alpha[6] = Beta_ch*Sc*Ih/Nh
     alpha[7] = @indicator(Ic > ellc, gamma_c*(Ic-ellc))
     alpha[8] = @indicator(Ih > ellh, gamma_h*(Ih-ellh))
-    alpha[10] = alpha[9] = Bc
-    alpha[12] = alpha[11] = Bh
+    alpha[9] = Bc
+    alpha[10] = Bh
+    alpha[11] = Bc*Sc/Nc
+    alpha[12] = Bh*Sh/Nh
 
     pi[1:2] .= one(Prob)
     pi[3] = @indicator(Ic > 0, 1-ellc/Ic)
@@ -187,8 +189,8 @@ regular_part!(
             )
             k, s = rcateg(alpha .* pi)
             step = -log(rand())/s
-            ll -= decay*step+log(pi[k])
             if t+step < tf
+                ll -= decay*step+log(pi[k])
                 if k == 1
                     Sc -= 1
                     Ic += 1
