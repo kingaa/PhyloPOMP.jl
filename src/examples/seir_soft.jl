@@ -41,7 +41,7 @@ regular_part!(
         )
         k, s = rcateg(alpha)
         step = -log(rand())/s
-        if t+step < tf
+        if k > 0 && t+step < tf
             ll -= decay*step + log(pi[k])
             if k==1
                 S -= 1
