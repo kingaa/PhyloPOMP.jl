@@ -207,7 +207,7 @@ regular_part!(
             )
             k, s = rcateg(alpha)
             step = -log(rand())/s
-            if t+step < tf
+            if k > 0 && t+step < tf
                 ll -= decay*step
                 if k==1
                     b,p = choose_branch(t,guide,node,I,cols,Infec,Expos)

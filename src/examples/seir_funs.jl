@@ -109,17 +109,16 @@ singular_part!(
     n = guide[node]
     @assert I ≥ ellI && E ≥ ellE
     if n.type==Root
-        @assert length(n.chillins)==1 "too many children ($(length(n.chillins)) > 1) at root $(n.name), t=$(n.time)"
-        if E-ellE+I-ellI > 0
-            i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
-            ll -= log(p)
-            ellE, ellI = plant!(cols,i,n.chillins[1])
-        else
+        @assert length(n.chillins)==1 "wrong number of children ($(length(n.chillins)) != 1) at root $(n.name), t=$(n.time)"
+        i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
+        ll -= log(p)
+        if ismissing(i)
             ## even though this realization is incompatible with the data,
             ## it is necessary to correct the coloring to avoid downstream errors.
-            ll += Prob(-Inf)
             ellE, ellI = plant!(cols,Infec,n.chillins[1])
             I += 1
+        else
+            ellE, ellI = plant!(cols,i,n.chillins[1])
         end
     elseif n.type==Sample
         if n.parlin ∉ cols[Infec]
@@ -163,7 +162,9 @@ singular_part!(
         else
             ellE, ellI = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
         end
-        S -= 1
+        if S > 0
+            S -= 1
+        end
         E += 1
         ll -= log(E*I)
     else
@@ -173,10 +174,11 @@ singular_part!(
 end
 
 """
-    filter_pomp(g; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
-         pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
+    filter_pomp(g, m; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
+         χ = 0.0, pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
 
-Constructs a pomp object based on the filter guide `g`.
+Constructs a pomp object based on the genealogy `g` and finite-state
+Markov guiding process `m`.
 """
 filter_pomp(
     gen::Genealogy,

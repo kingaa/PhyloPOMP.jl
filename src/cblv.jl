@@ -155,7 +155,7 @@ parse_cblv(
         if t > t0
             i = p
             j = tip.name
-            @assert G[j].slate >= t "invalid CBLV"
+            @assert G[j].slate >= t "invalid CBLV: node $j cannot attach."
             while !isnothing(i) && G[i].slate > t
                 j = i
                 i = G[i].parent
