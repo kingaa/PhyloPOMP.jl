@@ -257,10 +257,10 @@ Construct a Julia POMP object for the phylopomp MERS genealogy-conditioned
 filter. Parameter names and event order follow R phylopomp's MERS model.
 """
 filter_pomp(
-    ;Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 0.0, Beta_hh = 4.0,
+    ;Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 1.0, Beta_hh = 4.0,
     gamma_c = 1.0, gamma_h = 1.0,
     chi_c = 1.0, chi_h = 0.0,
-    Bc = 0.0, Bh = 0.0,
+    Bc = 0.1, Bh = 0.03,
     Sc0 = 1.0, Sh0 = 1.0,
     Ic0 = 0.01, Ih0 = 0.0,
     Nc = 10000, Nh = 10000,
