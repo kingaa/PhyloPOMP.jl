@@ -20,61 +20,42 @@ singular_part!(
 ) = begin
     ellc, ellh = ell(cols)
     n = geneal[node]
-    if Ic < ellc || Ih < ellh
-        ll += Prob(-Inf)
-    elseif n.type == Root
-        if length(n.children) == 1
-            freec = Ic - ellc
-            freeh = Ih - ellh
-            if freec + freeh > 0
-                i, _, p = rcateg([freec, freeh], DemeSet, true)
-                ll -= log(p)
-                ellc, ellh = plant!(cols, i, n.lineage)
-            else
-                ll += Prob(-Inf)
-                ellc, ellh = plant!(cols,Camel,n.lineage)
-                Ic += 1
-            end
+    @assert Ic ≥ ellc && Ih ≥ ellh
+    if n.type == Root
+        @assert length(n.children)==1 "wrong number of children ($(length(n.children)) != 1) at root $(n.name), t=$(n.slate)"
+        i, _, p = rcateg([Ic-ellc, Ih-ellh], DemeSet, true)
+        ll -= log(p)
+        if ismissing(i)
+            ll = Prob(-Inf)
+            ellc, ellh = plant!(cols,Camel,n.lineage)
+            Ic += 1
         else
-            error("too many children ($(length(n.children)) > 1) at root $(n.name)")
+            ellc, ellh = plant!(cols, i, n.lineage)
         end
     elseif n.type == Sample
-        deme = n.deme
-        if ismissing(deme) # FIXME: trap for this problem at an earlier stage
-            error("MERS samples must have deme metadata Camel or Human")
-        end
-        if n.lineage ∉ cols[deme]
-            ll += Prob(-Inf)
-            if deme == Camel
-                ellE, ellI = swap!(cols,Human,Camel,n.lineage)
+        @assert length(n.children)==0 "too many children ($(length(n.children)) > 0) at sample $(n.name), t=$(n.slate)"
+        if n.lineage ∉ cols[n.deme]
+            ll = Prob(-Inf)
+            if n.deme == Camel
+                ellc, ellh = swap!(cols,Human,Camel,n.lineage)
                 Ic += 1
-                Ih -= 1
-            elseif deme == Human
-                ellE, ellI = swap!(cols,Camel,Human,n.lineage)
-                Ic -= 1
-                Ih += 1
             else
-                @assert false "impossible sample deme" # COV_EXCL_LINE
+                ellc, ellh = swap!(cols,Camel,Human,n.lineage)
+                Ih += 1
             end
         end
-        if length(n.children) == 0
-            ellc, ellh = chop!(cols, deme, n.lineage)
-            if deme == Camel
-                ll += log(chi_c * Ic)
-                Ic -= 1
-            elseif deme == Human
-                ll += log(chi_h * Ih)
-                Ih -= 1
-            else
-                @assert false "impossible sample deme" # COV_EXCL_LINE
-            end
+        ellc, ellh = chop!(cols, n.deme, n.lineage)
+        if n.deme == Camel
+            ll += log(chi_c * Ic)
+            Ic -= 1
+        elseif n.deme == Human
+            ll += log(chi_h * Ih)
+            Ih -= 1
         else
-            error("MERS sampling is destructive but sample $(n.name) has $(length(n.children)) children")
+            @assert false "impossible sample deme" # COV_EXCL_LINE
         end
     elseif n.type == Node
-        if length(n.children) != 2
-            error("too many children ($(length(n.children)) != 2) at node $(n.name)")
-        end
+        @assert length(n.children)==2 "wrong number of children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
         children = map(n.children) do i
             geneal[i].lineage
         end
@@ -83,14 +64,18 @@ singular_part!(
             lambda_hc = Nc > 0 ? Beta_hc * Sh * Ic / Nc : 0.0
             k,_,p = rcateg([lambda_cc, 0.5*lambda_hc, 0.5*lambda_hc], true)
             ll -= log(p)
-            if k == 1
-                @assert Sc > 0
+            if k == 0
+                ll = Prob(-Inf)
                 ellc, ellh = fork!(cols, Camel, n.lineage, (Camel, Camel), children)
-                Sc -= 1
+                Ic += 1
+            elseif k == 1       # camel-camel
+                ellc, ellh = fork!(cols, Camel, n.lineage, (Camel, Camel), children)
+                if Sc > 0
+                    Sc -= 1
+                end
                 Ic += 1
                 ll += log(lambda_cc) - log(Ic * (Ic - 1) / 2)
-            else
-                @assert Sh > 0
+            else                # camel-human
                 if k == 2
                     ellc, ellh = fork!(cols, Camel, n.lineage, (Camel, Human), children)
                 elseif k == 3
@@ -98,7 +83,9 @@ singular_part!(
                 else
                     @assert "impossible rcateg output" # COV_EXCL_LINE
                 end
-                Sh -= 1
+                if Sh > 0
+                    Sh -= 1
+                end
                 Ih += 1
                 ll += log(lambda_hc) - log(Ic * Ih)
             end
@@ -107,14 +94,18 @@ singular_part!(
             lambda_ch = Nh > 0 ? Beta_ch * Sc * Ih / Nh : 0.0
             k,_,p = rcateg([lambda_hh, 0.5*lambda_ch, 0.5*lambda_ch], true)
             ll -= log(p)
-            if k == 1
-                @assert Sh > 0
+            if k == 0
+                ll = Prob(-Inf)
                 ellc, ellh = fork!(cols, Human, n.lineage, (Human, Human), children)
-                Sh -= 1
+                Ih += 1
+            elseif k == 1       # human-human
+                ellc, ellh = fork!(cols, Human, n.lineage, (Human, Human), children)
+                if Sh > 0
+                    Sh -= 1
+                end
                 Ih += 1
                 ll += log(lambda_hh) - log(Ih * (Ih - 1) / 2)
-            else
-                @assert Sc > 0
+            else                # human-camel
                 if k == 2
                     ellc, ellh = fork!(cols, Human, n.lineage, (Camel, Human), children)
                 elseif k == 3
@@ -122,7 +113,9 @@ singular_part!(
                 else
                     @assert "impossible rcateg output" # COV_EXCL_LINE
                 end
-                Sc -= 1
+                if Sc > 0
+                    Sc -= 1
+                end
                 Ic += 1
                 ll += log(lambda_ch) - log(Ic * Ih)
             end
