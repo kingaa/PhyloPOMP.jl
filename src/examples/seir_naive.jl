@@ -19,85 +19,74 @@ using .Demes: Expos, Infec, DemeSet
 include("seir_trees.jl")
 
 singular_part!(
-    cols, geneal, node, ll,
+    cols, geneal, node, ll, live,
     S, E, I, R;
     pop, β, ψ, χ,
     _...,
 ) = begin
     ellE, ellI = ell(cols)
-    n = geneal[node]
-    @assert I ≥ ellI && E ≥ ellE
-    if n.type==Root
-        @assert length(n.children)==1 "wrong number of children ($(length(n.children)) != 1) at root $(n.name), t=$(n.slate)"
-        i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
-        ll -= log(p)
-        if ismissing(i)
-            ## even though this realization is incompatible with the data,
-            ## it is necessary to correct the coloring to avoid downstream errors.
-            ll = Prob(-Inf)
-            ellE, ellI = plant!(cols,Infec,n.lineage)
-            I += 1
-        else
-            ellE, ellI = plant!(cols,i,n.lineage)
-        end
-    elseif n.type==Sample
-        @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
-        if n.lineage ∉ cols[Infec]
-            ## even though this realization is incompatible with the data,
-            ## it is necessary to correct the coloring to avoid downstream errors.
-            ll = Prob(-Inf)
-            ellE, ellI = swap!(cols,Expos,Infec,n.lineage)
-            E -= 1
-            I += 1
-        end
-        if length(n.children) == 0
-            k,_,p = rcateg([ψ, χ],true)
-            ll -= log(p)
-            ellE, ellI = chop!(cols,Infec,n.lineage)
-            if k==0
-                ll = Prob(-Inf)
-            elseif k==1         # non-destructive sample
-                ll += log(ψ*(I-ellI));
-            elseif k==2         # destructive sample
-                ll += log(χ*I)
-                I -= 1
-            end
-        elseif length(n.children) == 1
-            chillin = geneal[n.children[1]].lineage
-            ellE, ellI = chop!(cols,Infec,n.lineage,Infec,chillin)
-            ll += log(ψ)
-        end
-    elseif n.type==Node
-        @assert length(n.children)==2 "wrong number of children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
-        if n.lineage ∉ cols[Infec]
-            ## even though this realization is incompatible with the data,
-            ## it is necessary to correct the coloring to avoid downstream errors.
-            ll = Prob(-Inf)
-            ellE, ellI = swap!(cols,Expos,Infec,n.lineage)
-            E -= 1
-            I += 1
-        end
-        chillins = map(n.children) do i
-            geneal[i].lineage
-        end
-        ll += log(β*S*I/pop)
-        k, _, p = rcateg([1, 1], true)
-        ll -= log(p)
-        @assert k ≠ 0
-        if k==1
-            ellE, ellI = fork!(cols,Infec,n.lineage,(Expos,Infec),chillins)
-        else
-            ellE, ellI = fork!(cols,Infec,n.lineage,(Infec,Expos),chillins)
-        end
-        if S > 0
-            S -= 1
-        end
-        E += 1
-        ll -= log(E*I)
-    else
-        @assert false "impossible node type" # COV_EXCL_LINE
+    if I < ellI || E < ellE
+        live = false
     end
-    ll, S, E, I, R
+    if live
+        n = geneal[node]
+        if n.type==Root
+            i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
+            ll -= log(p)
+            if ismissing(i)
+                live = false
+            else
+                ellE, ellI = plant!(cols,i,n.lineage)
+            end
+        elseif n.type==Sample
+            if n.lineage ∉ cols[Infec]
+                live = false
+            elseif length(n.children) == 0
+                k,_,p = rcateg([ψ, χ],true)
+                ll -= log(p)
+                ellE, ellI = chop!(cols,Infec,n.lineage)
+                if k==0
+                    live = false
+                elseif k==1         # non-destructive sample
+                    ll += log(ψ*(I-ellI));
+                elseif k==2         # destructive sample
+                    ll += log(χ*I)
+                    I -= 1
+                end
+            elseif length(n.children) == 1
+                chillin = geneal[n.children[1]].lineage
+                ellE, ellI = chop!(cols,Infec,n.lineage,Infec,chillin)
+                ll += log(ψ)
+            end
+        elseif n.type==Node
+            if n.lineage ∉ cols[Infec]
+                live = false
+            else
+                chillins = map(n.children) do i
+                    geneal[i].lineage
+                end
+                ll += log(β*S*I/pop)
+                k, _, p = rcateg([1, 1], true)
+                ll -= log(p)
+                if k==1
+                    ellE, ellI = fork!(cols,Infec,n.lineage,(Expos,Infec),chillins)
+                else
+                    ellE, ellI = fork!(cols,Infec,n.lineage,(Infec,Expos),chillins)
+                end
+                if S > 0
+                    S -= 1
+                end
+                E += 1
+                ll -= log(E*I)
+            end
+        else
+            @assert false # COV_EXCL_LINE
+        end
+    end
+    if !live
+        ll = Prob(-Inf)
+    end
+    ll, S, E, I, R, live
 end
 
 event_rates!(
@@ -185,6 +174,22 @@ regular_part!(
     ll, S, E, I, R
 end
 
+check(
+    gen::Genealogy,
+) = begin
+    for node ∈ eachindex(gen)
+        n = gen[node]
+        if n.type == Root
+            @assert length(n.children)==1 "wrong number of children ($(length(n.children)) != 1) at root $(n.name), t=$(n.slate)"
+        elseif n.type == Sample
+            @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
+        elseif n.type == Node
+            @assert length(n.children)==2 "wrong number of children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
+        end
+    end
+    nothing
+end
+
 """
     filter_pomp(gen; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
          pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08)
@@ -198,6 +203,7 @@ filter_pomp(
     pop = 100,
     S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
 ) = begin
+    check(gen)
     pomp(
         params = (
             β = Float64(β), σ = Float64(σ), γ = Float64(γ),
@@ -218,31 +224,31 @@ filter_pomp(
                 E = round(Int64, m*Float64(E0)),
                 I = round(Int64, m*Float64(I0)),
                 R = round(Int64, m*Float64(R0)),
+                live = true
             )
         end,
         rprocess = onestep(
             function (
-                ; node, ll, cols, geneal,
+                ; node, live, ll, cols, geneal,
                 t, dt,
                 S, E, I, R,
                 args...,
                 )
                 cols = copy(cols)
                 ll = zero(Prob)
-                ll, S, E, I, R = singular_part!(
-                    cols, geneal, node, ll,
+                ll, S, E, I, R, live = singular_part!(
+                    cols, geneal, node, ll, live,
                     S, E, I, R;
                     args...,
                 )
-                if dt > 0 && isfinite(ll)
+                if live && dt > 0 && isfinite(ll)
                     ll, S, E, I, R = regular_part!(
                         cols, ll, t, dt,
                         S, E, I, R;
                         args...,
                     )
                 end
-                (; node = node+1, ll = ll, cols = cols,
-                 S = S, E = E, I = I, R = R)
+                (;node = node+1, ll, cols, S, E, I, R, live)
             end,
         ),
         logdmeasure = function (; ll, _...)
