@@ -1,0 +1,822 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{xcolor}
+\usepackage[framemethod=default]{mdframed}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\col}{\operatorname{col}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\evZ}{\mathrm{ev}(Z)}
+% Indicator: package-free double-struck 1 (dsfont/bbm unavailable here; \mathbb{1} has no glyph).
+\newcommand{\ind}{1\!\!1}
+\newcommand{\Supp}{\ind_{I_C\ge\ell_C}\,\ind_{I_H\ge\ell_H}}
+\newcommand{\rw}{\widetilde{w}}  % reversal weight (KLI's w^r)
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{remark}{Remark}[section]
+
+% Changelog / note box (no amsthm nesting; manual labels; nobreak)
+\definecolor{chline}{RGB}{30,90,160}
+\newmdenv[
+  linecolor=chline,linewidth=0.8pt,backgroundcolor=chline!5,
+  innertopmargin=6pt,innerbottommargin=6pt,skipabove=8pt,skipbelow=8pt,nobreak=true
+]{notebox}
+
+\begin{document}
+\begin{center}
+{\large\bfseries MERS Filtering Equations (v26)}\\[2pt]
+{\small A companion to King, Lin \& Ionides, arXiv:2405.17032}
+\end{center}
+\medskip
+
+\tableofcontents
+\bigskip
+
+\medskip
+\noindent\textit{Disclosure.} Prepared with assistance from Claude (Anthropic) and ChatGPT
+(OpenAI) for \LaTeX\ typesetting, computation checks, and exposition. All mathematical content
+verified independently by the author against KLI (arXiv:2405.17032) and the \texttt{phylopomp} source.
+\bigskip
+
+\begin{notebox}
+\textbf{Changes in v25.} \emph{(i) Notation (per A.~King).} Both filters are now written as sums of
+their component terms: the singular filter is assembled as $w=\sum_{u\in\mathcal U_e(y)}S_u$ (\S7.2),
+symmetric with the regular $\partial_t w=\sum_{k}I_k-(\text{outflow})-\lambda w$ (\S7.4); the six
+singular terms (Eqs.~1--6) are relabelled as the components
+$S_{\mathrm{SC}},S_{\mathrm{SH}},S_{\mathrm{TCC}},S_{\mathrm{THH}},S_{\mathrm{THC}},S_{\mathrm{TCH}}$.
+\emph{(ii) Demography.} Human death corrected to the constant rate $B_H$ (camel/human symmetric),
+matching the shipped \texttt{mers.yml}; the v24 per-capita term $\tfrac{B_H}{N_H}S_H$ is removed.
+
+\smallskip
+\textbf{Changes in v26 (review cleanup).} (a) The assembled singular filter is now an \emph{unnumbered}
+display, so the regular components keep their names Eqs.~7--12. (b) The compatible mark set is written
+$\mathcal U_e(y)$ (it depends on the post-event coloring), with its cases and the analytic
+fixed-destination update given explicitly. (c) The forward/SMC (parent-conditioned) enumeration is
+removed from \S7.2 and left to \S9/\S11, so the analytic update cannot be misread. (d) The reduced
+regular exit rate (\S8.2) spells out the demography term $B_C+B_H+B_C\ind_{S_C>0}+B_H\ind_{S_H>0}$ in
+place of ``neutral''. (e) The Eq.~7/8 ``net'' remark is softened (inflow uses $x'$, outflow $x$).
+(f) The intro's duplicated metadata sentence is cut.
+\end{notebox}
+
+\section{What King, Lin, and Ionides Establish}
+
+\paragraph{The problem.} For the general colored problem one is given a pruned genealogy $P=(T,Z,Y)$
+with $n$ typed tips. KLI's obscuring operator discards all deme and inline-event information not
+visible from the tree topology: $\mathrm{obs}(P)=(T,Z)$, the \emph{obscured} genealogy, with the
+internal coloring $Y$ latent. Let $M$ denote the camel/human tip metadata. Per KLI Remark~3, $M$ is
+not part of $(T,Z)$ itself; it enters through the sample-associated compatibility factors, which in
+the MERS specialization allow only the camel chop $S_C$ at camel-labeled leaves and only the human
+chop $S_H$ at human-labeled leaves. Given a parametric structured population model with
+parameters $\theta$, the likelihood computed here is therefore the joint density of the obscured
+genealogy \emph{and} the tip metadata,
+\[
+L(\theta)=\Pr_\theta\{(T,Z),M\}
+=\E_\theta\!\left[\Pr\{(T,Z),M\mid H_T\}\right],
+\]
+where the expectation averages over all compatible population histories $H_T$. Prior approaches
+required either coalescent approximations, typically requiring large populations and negligible sample fractions, or linear birth--death models. KLI derive an exact likelihood construction for a broad class of discretely structured continuous-time Markov population models.
+
+\paragraph{The population model.} A CTMC on state space $\mathcal X$ with $D$ demes
+$\mathcal D=\{1,\dots,D\}$. Each jump mark $u\in\mathcal U$ has a rate kernel $\alpha_u(t,x,x')$, a
+jump $x\to x'$, and a production vector $r^u=(r^u_1,\dots,r^u_D)\in\Z^D_{\ge0}$, where $r^u_d$ is the
+number of lineages produced in deme $d$ at event $u$. Each jump mark may be of birth type (new lineages created), death type (lineages removed), migration type (lineages change deme), sample type (samples collected), neutral type (no genealogical change), or compound type, such as sample/death.
+The deme-occupancy function $n(x)=(n_1(x),\dots,n_D(x))$ counts active individuals in each deme.
+
+\paragraph{Key quantities.} For a pruned genealogy $P$ with coloring $Y$ and a population jump of
+mark $u$ at time $t$:
+\begin{itemize}[leftmargin=1.6em]
+\item \textbf{Pruned lineage count $\ell_d(Y_t)$}: number of branches of $P$ in deme $d$
+immediately \emph{after} $t$ (the post-event coloring).
+\item \textbf{Saturation $s_d=s_d(Y_t)$}: number of pruned lineages assigned to the $r^u_d$
+production slots in deme $d$ at this event.
+\item \textbf{Binomial ratio:}
+\[
+\phi_u=\prod_{d=1}^{D}
+\frac{\dbinom{n_d(X_t)-\ell_d(Y_t)}{r^u_d-s_d}}{\dbinom{n_d(X_t)}{r^u_d}}.
+\]
+This is the conditional probability that exactly $s_d$ of the $r^u_d$ produced lineages are pruned,
+given the current occupancy. Both the occupancy $n_d(X_t)$ and the count $\ell_d(Y_t)$ are
+post-event.
+\item \textbf{Compatibility indicator $Q_u(Y_{t^-},Y_t)$}: equals $1$ iff the coloring transition
+$Y_{t^-}\to Y_t$ is consistent with mark $u$ and saturation $s$ (the operators $\sigma^b_{dd'}$ or
+$\kappa^{bb'}_{d\,d_b\,d_{b'}}$ match the slot structure), and $0$ otherwise. This is the
+\emph{only} place the pre-event coloring $Y_{t^-}$ appears.
+\end{itemize}
+
+\begin{theorem}[KLI Theorem~1, specialized to the present notation]
+\[
+\Pr\!\left[P_T=P\mid H_T=H\right]
+=\ind_{\mathrm{ev}(H)\supseteq\mathrm{ev}(P)}\cdot
+\prod_{t\in\mathrm{ev}(H)}\phi_{U_t}\!\left(X_t,\,Y_{t^-},\,Y_t\right),
+\]
+where $\phi_u=0$ whenever $Q_u(Y_{t^-},Y_t)=0$, and equals the binomial ratio otherwise. The
+product is over all population event times; events not involving a pruned lineage contribute their
+$s=0$ ratio.
+\end{theorem}
+
+In $\phi_u(x,y,y')$, $x=X_t$ and $y'=Y_t$ are the post-event population state and coloring,
+respectively, with $X$ and $Y$ taken to be c\`adl\`ag. The lineage count and saturation entering
+the binomial ratio are therefore evaluated at $Y_t$, whereas the pre-event coloring $y=Y_{t^-}$
+enters only through $Q_u$.
+
+Appendix A of KLI proves the result by adding sampled lineages one at a time;
+each extends backward until it coalesces with an already-tracked lineage or reaches $t=0$.
+At each population event the lineage either emerges from the event or does not;
+the product in Theorem~1 accumulates these local factors.
+
+\paragraph{The filter of KLI Theorem~5.} The data are the \emph{obscured} genealogy
+$\mathrm{obs}(P)=(T,Z)$: the tree-structure $Z$ with its sampled tips, while the internal lineage
+colorings $Y$ are latent. (KLI Theorem~2 is the \emph{colored} case, $Y$ given, with a filter over
+$x$ alone; the latent-coloring case here is Theorem~5 with Appendix~B.) The camel/human tip types
+are sample metadata in the sense of KLI Remark~3, entering $\phi$ multiplicatively through the
+compatible chop operator, and $L(\theta)=\Pr_\theta\{(T,Z),M\}=\E_\theta[\Pr\{(T,Z),M\mid H_T\}]$. The filter in KLI Theorem~5 is a \emph{weighted} process: with $V_t$ the running importance weight (initial $1/q$, regular
+boosts, singular rate$\times$boost factors, decay), define
+$w(t,x,y)\,dx=\E\!\left[V_t\,\ind_{X_t\in dx,\,Y_t=y}\right]$, so that
+$L(\theta)=\sum_{y\in\mathcal Y_T(Z)}\int w(T,x,y)\,dx$. It satisfies a filter
+equation with a driver $\beta$, a boost $B$, and a decay $\lambda$.
+
+\paragraph{Driver--boost--decay form of the Theorem~5 filter (KLI Appendix B).}
+At non-event times $t\notin\evZ$,
+\begin{multline*}
+\frac{\partial w}{\partial t}(t,x,y)=\sum_{u\in\mathbb U}\sum_{y'}\int w(t,x',y')\,\beta^{\mathrm{reg}}_u(t,x',x,y',y)\,B_u(t,x',x,y',y)\,dx'\\
+-\sum_{u\in\mathbb U}\sum_{y'}\int w(t,x,y)\,\beta^{\mathrm{reg}}_u(t,x,x',y,y')\,dx'-\lambda(t,x,y)\,w(t,x,y),
+\end{multline*}
+and at an event $t=e\in\evZ$,
+\[
+w(t,x,y)=\sum_{u\in\mathcal U_e}\sum_{y'}\int w(t^-,x',y')\,\beta^{\mathrm{ev}}_{e,u}(t,x',x,y',y)\,B_u(t,x',x,y',y)\,dx',
+\]
+where $\mathcal U_e$ are the marks compatible with event $e$ and the post-event coloring $y$ (a typed
+leaf: one mark; a fork with both post-event branches $C$: $\{T_{CC}\}$; both $H$: $\{T_{HH}\}$; a mixed
+fork: $\{T_{HC},T_{CH}\}$) and $\beta^{\mathrm{ev}}_{e,u}=\alpha_u\,\pi_u$ is supported on $\evZ$.
+The sum runs over the full mark collection $\mathbb U$; the singular sampling marks have
+$\beta^{\mathrm{reg}}_u=0$ on open intervals and so contribute to the regular part only through the
+decay $\lambda$, not the flow.
+Since $\sum_{y'}\pi_u=1$, the outflow collapses to
+$-w(t,x,y)\sum_{u}\int\alpha^{\mathrm{reg}}_u(t,x,x';y)\,dx'$ (the reduced removal rate depends on $y$
+through the threshold $\ind_{I_d>\ell_d(y)}$). The likelihood is
+$L(\theta)=\sum_{y\in\mathcal Y_T(Z)}\int w(T,x,y)\,dx$, the sum over colorings of $Z$ consistent with
+the typed tips.
+
+\paragraph{Algorithm B1 (SMC).} Because $w$ has no closed form in general, KLI give a \emph{simple
+sequential importance-sampling} algorithm (no resampling in the displayed Algorithm~B1; resampling is an
+optional improvement): $P$ particles $\{(x^{(p)},y^{(p)})\}$ are propagated forward, their weights
+$V^{(p)}$ multiplied by the boost $B$ at each regular jump and by the rate$\times$boost $A\,B$ at each
+$t_i\in\evZ$, and decayed by $\int\lambda\,dt$ between events. The estimator
+$\hat L(\theta)=\tfrac1P\sum_p V_T^{(p)}$ is unbiased for $L(\theta)$ (KLI Lemma~3); $\log\hat L$ is then
+a (biased) estimate of $\log L$, $\E[\log\hat L]\le\log L$ by Jensen. These estimates support
+likelihood profiling and MCAP; an IF2 fit would embed the same model-specific filter components in the
+usual resampling and parameter-perturbation recursion.
+
+\section{Model Specification}
+Demes $\mathcal D=\{C,H\}$ ($I_C$: infectious camels; $I_H$: infectious humans). State
+$x=(S_C,I_C,S_H,I_H)$, deme-occupancy $n(x)=(I_C,I_H)$.
+\begin{center}
+\begin{tabular}{@{}llll@{}}
+\toprule
+$u$ & Description & Rate $\alpha_u$ & $r^u=(r_C,r_H)$\\
+\midrule
+TCC & camel$\to$camel birth & $\beta_{CC}S_CI_C/N_C$ & $(2,0)$\\
+THH & human$\to$human birth & $\beta_{HH}S_HI_H/N_H$ & $(0,2)$\\
+THC & camel$\to$human birth & $\beta_{HC}S_HI_C/N_C$ & $(1,1)$\\
+TCH & human$\to$camel birth & $\beta_{CH}S_CI_H/N_H$ & $(1,1)$\\
+RC  & camel removal (death) & $\gamma_C I_C$ & $(0,0)$\\
+RH  & human removal (death) & $\gamma_H I_H$ & $(0,0)$\\
+SC  & camel sample/death$^\ddagger$ & $\chi_C I_C$ & $(0,0)$\\
+SH  & human sample/death$^\ddagger$ & $\chi_H I_H$ & $(0,0)$\\
+BC,BH,DC,DH & demography (neutral) & (see YAML) & $(0,0)$\\
+\bottomrule
+\end{tabular}
+\end{center}
+$^\ddagger$SC and SH are compound sample/death-type events (KLI Fig.~4G): each simultaneously
+collects a sample (leaf node inserted) and removes the host. In the phylopomp YAML these appear as
+the jump mark \texttt{sample\_death}. The cross-deme births THC and TCH are the distinguishing
+events: each has one slot in $C$ and one in $H$, with the new child born from a parent in the
+opposite deme.
+
+The generic \texttt{TwoSpecies} implementation distinguishes a per-capita sampling rate $\psi_d$
+from a culling probability $c_d$; the MERS specification fixes $c_C=c_H=1$, so every sampled
+infectious host is culled and we write $\chi_d=\psi_d$. A model with $c_d<1$ would require
+separate non-destructive sample and sample/death marks.
+
+\section{Coupling Between Camel and Human Lineages}
+In the two-strain companion (Note S), no production vector had nonzero components in both strains,
+so the genealogy decoupled. For MERS that fails: THC has $r=(1,1)$ with parent in $C$ and child
+born into $H$; TCH has $r=(1,1)$ with parent in $H$ and child born into $C$. Both span both demes
+and produce cross-deme branch points $\kappa^{bb'}_{CHC}$ (THC) and $\kappa^{bb'}_{HCH}$ (TCH).
+Consequently a lineage's deme is not a time-invariant label (a human lineage traces back to a camel
+at a THC event), the operators $\sigma^b_{CH},\sigma^b_{HC}$ are genuine cross-deme operators, and
+the coloring $y$ couples both demes.
+
+\begin{remark}
+A cross-deme branch point $\kappa^{bb'}_{CHC}$ is the local fork structure of camel-to-human
+spillover: in a \emph{fully colored} genealogy, going backward, a human lineage $b$ and a camel lineage
+$b'$ share a common ancestor in the camel deme. In the \emph{obscured} genealogy it is one latent
+explanation of a mixed internal fork, summed over by the filter (the parent deme, the newly infected
+host, and the $T_{HC}$-vs-$T_{CH}$ direction are not directly observed). This is the structure
+visible once a coloring is imposed on the Dudas et al.\ MERS phylogeny.
+\end{remark}
+
+\paragraph{Coloring convention.} Throughout the MERS-specific derivation, $y$ denotes only the
+\emph{deme coloring} of the active branches, obtained from KLI's full coloring $Y=(d,m)$ by
+summing out the inline event-indicator component $m$. On this reduced state a same-deme swap is
+the identity, $\sigma^b_{CC}y=y$ and $\sigma^b_{HH}y=y$, even though the corresponding operator
+is not an identity on KLI's full coloring (it changes the event indicator).
+
+For a transition of the reduced color-only process, let $\Phi_u(y^-,y^+)$ denote the sum of
+the KLI compatibility factors $\phi_u$ over all full-coloring transitions that collapse to the
+same reduced transition. The proposal kernel $\pi_u$ is defined on reduced colorings, and the
+boost is therefore
+\[
+B_u(y^-,y^+)=\frac{\Phi_u(y^-,y^+)}{\pi_u(y^-,y^+)}.
+\]
+When a reduced transition corresponds to a single full-coloring transition, $\Phi_u=\phi_u$.
+When several collapse under the reduction, $\Phi_u$ is their sum, evaluated in closed form by the Chu--Vandermonde identity. Thus
+$\beta_uB_u=\alpha_u\pi_u\cdot(\Phi_u/\pi_u)=\alpha_u\Phi_u$.
+
+\section{Construction of Compatibility Terms}
+Each mark $u$ contributes the binomial ratio $\phi_u$ and the indicator $Q_u(y,y')$, derived in
+four steps.
+
+\subsection{Step A: production slots and ancestral demes}
+For each slot, the \emph{ancestral deme} is the deme the lineage came from immediately before the
+event: a continuing-parent slot or a same-deme new child has ancestral deme $d$; a new child in a
+different deme $d'$ has ancestral deme $d$ (the parent's deme), not $d'$.
+
+\subsection{Step B: enumerate saturations}
+For each deme $d$, $s_d\in\{0,1,\dots,\min(r_d,\ell_d)\}$; feasibility also requires
+$I_d\ge\max\{\ell_d,r_d\}$ (automatic post-event for the production marks). For the \emph{transmission}
+marks, whose total production is two, full saturation $s_C=r_C$ and $s_H=r_H$ is a
+branch point, handled only at data-event times; for the $r=(0,0)$ marks (removal, sample/death,
+neutral) full saturation $s=r=(0,0)$ involves no fork.
+
+\subsection{Step C: compute the binomial ratio}
+\[
+\phi_u=\prod_{d\in\{C,H\}}\frac{\dbinom{I_d-\ell_d}{r_d-s_d}}{\dbinom{I_d}{r_d}},
+\]
+where $I_d$ is the \emph{post-event} occupancy and $\ell_d=|\col_d(Y_t)|$ is the \emph{post-event}
+pruned count (the count attached to the destination coloring in the filter). Demes with $r_d=0$
+contribute factor $1$. The $\binom{\ell_d}{s_d}$ ways to choose which pruned lineages fill pruned
+slots are handled by the sum over colorings in the filter equations.
+
+\subsection{Step D: the coloring operator}
+Single slot occupied by pruned $b$ (ancestral deme $d_{\mathrm{pre}}$, post-event deme
+$d_{\mathrm{post}}$): $y'=\sigma^b_{d_{\mathrm{pre}},d_{\mathrm{post}}}y$. On the reduced
+color-only state this is the identity when $d_{\mathrm{pre}}=d_{\mathrm{post}}$; on KLI's full
+coloring it is still a distinct inline-event transition because the event-indicator component
+changes. Two slots occupied (branch point), pruned $b,b'$ with common
+ancestor deme $d_{\mathrm{anc}}$: $y'=\kappa^{bb'}_{d_{\mathrm{anc}},d_b,d_{b'}}y$. No slot occupied:
+$y'=y$.
+
+\section{Event-Specific Derivations}
+Throughout, $I_C,I_H$ are post-event occupancies and $\ell_C,\ell_H$ are the pruned counts in the
+post-event coloring $y$.
+
+\subsection{TCC: within-camel birth, $r=(2,0)$}
+Both slots (parent C1, new child C2) have ancestral deme $C$. With $s_C\in\{0,1,2\}$, $s_H=0$:
+\[
+s_C{=}0:\ \frac{(I_C-\ell_C)(I_C-\ell_C-1)}{I_C(I_C-1)},\quad
+s_C{=}1:\ \frac{2(I_C-\ell_C)}{I_C(I_C-1)},\quad
+s_C{=}2:\ \frac{2}{I_C(I_C-1)}.
+\]
+Operators: $s_C{=}0$: $y'=y$; $s_C{=}1$: $\sigma^b_{CC}y=y$ (identity); $s_C{=}2$:
+$y'=\kappa^{bb'}_{CCC}y$ (within-camel coalescence).
+
+\subsection{THH: within-human birth, $r=(0,2)$}
+Exactly symmetric with $C\leftrightarrow H$: ratios
+$\frac{(I_H-\ell_H)(I_H-\ell_H-1)}{I_H(I_H-1)}$, $\frac{2(I_H-\ell_H)}{I_H(I_H-1)}$,
+$\frac{2}{I_H(I_H-1)}$; operators $y$, $\sigma^b_{HH}y=y$, $\kappa^{bb'}_{HHH}y$.
+
+\subsection{THC: camel-to-human spillover, $r=(1,1)$}
+C-slot is the continuing camel parent (ancestral deme $C$); H-slot is the new human child, ancestral
+deme $C$ (not $H$). With $(s_C,s_H)\in\{(0,0),(0,1),(1,0),(1,1)\}$:
+\[
+(0,0):\frac{(I_C-\ell_C)(I_H-\ell_H)}{I_CI_H},\quad
+(0,1):\frac{I_C-\ell_C}{I_CI_H},\quad
+(1,0):\frac{I_H-\ell_H}{I_CI_H},\quad
+(1,1):\frac{1}{I_CI_H}.
+\]
+Operators: $(0,0)$: $y'=y$; $(0,1)$: $y'=\sigma^b_{CH}y$, $b\in\col_C(y)$ pre-event (the new human
+child traces to a camel parent); $(1,0)$: $y'=\sigma^b_{CC}y=y$ (continuing parent); $(1,1)$:
+$y'=\kappa^{bb'}_{CHC}y$ ($d_{\mathrm{anc}}=C$, $d_b=H$, $d_{b'}=C$) --- the spillover branch point.
+
+\subsection{TCH: human-to-camel spillover, $r=(1,1)$}
+Exact mirror with $C\leftrightarrow H$; the slot roles swap (in TCH the C-slot is the child):
+\[
+(0,0):\frac{(I_H-\ell_H)(I_C-\ell_C)}{I_HI_C},\quad
+(1,0):\frac{I_H-\ell_H}{I_HI_C},\quad
+(0,1):\frac{I_C-\ell_C}{I_HI_C},\quad
+(1,1):\frac{1}{I_HI_C}.
+\]
+Operators: $(1,0)$: $y'=\sigma^b_{HC}y$, $b\in\col_H(y)$ (new camel child from a human parent);
+$(0,1)$: $\sigma^b_{HH}y=y$; $(1,1)$: $y'=\kappa^{bb'}_{HCH}y$.
+
+\subsection{RC and RH: removal (death)}
+$r=(0,0)$, $s=(0,0)$ forced, $\phi=1$, $y'=y$, with post-event support $\ind_{I_d(x)\ge\ell_d(y)}$ for $d\in\{C,H\}$. As a transition
+\emph{into} the post-event state $x$, removal is compatible whenever $I_d\ge\ell_d$ (the removed host
+was untracked). The \emph{strict} $I_d>\ell_d$ is the driver-\emph{outflow} condition: removal
+from the current state needs $I_d-1\ge\ell_d$ at the destination. When $I_d=\ell_d$ the outflow has no
+compatible target and becomes the sub-threshold decay $\gamma_d I_d\ind_{I_d\le\ell_d}$ in $\lambda$
+(\S8).
+
+\subsection{SC and SH: destructive sampling (sample/death)}
+The phylopomp mark \texttt{sample\_death(camel)} is compound: it inserts a leaf and removes the host
+from $I_C$. Its genealogical role splits by time:
+\begin{itemize}[leftmargin=1.6em,nosep]
+\item \textbf{Observed leaf} ($t\in S^{(C)}_0$, a data-event time): the sampled camel is a leaf;
+singular update.
+\item \textbf{Sample-type jump at $t\notin\evZ$}: not in the data tree; contributes to $\lambda$.
+\end{itemize}
+\textbf{Steps A--B.} $r=(0,0)$: no production slots (the host is consumed, not born into a slot);
+$s=(0,0)$ forced by $s_d\le r_d$.
+
+\textbf{Step C.} Since $r=(0,0)$, KLI Eq.~(9) gives the empty-product value $\phi_{\mathrm{SC}}=1$,
+as it does for the removal event $R_C$. Hence the singular contribution is carried by the event rate
+$\alpha_{\mathrm{SC}}(t,x',x)=\chi_C I_C(x')$, where $I_C(x')=I_C(x)+1$ because $x'$ is the state
+immediately before the sampled host is removed. No additional factor $1/I_C$ appears. For comparison,
+when a mark has $r=1$, factors such as $(I-\ell)/I$ or $1/I$ may arise directly from KLI's binomial
+ratio; here $r=0$, so that ratio is $1$.
+
+\textbf{Step D.} Data-event time: leaf $a$ sampled ($a\in\col_C(y)$), $y'=\chi^{a\emptyset}_C y$.
+Non-data time: contributes to $\lambda$ only. The full camel sampling rate $\chi_C I_C$ enters
+$\lambda$ because the exact likelihood conditions on no sample at $t\notin\evZ$. SH is symmetric.
+
+\section{Complete Reference Table}
+The first table is the \emph{uncollapsed} KLI compatibility table. In this table $y$ and $y'$
+denote KLI's full pre-event and post-event colorings, including the inline event-indicator
+component $m$. Thus same-deme swap rows such as $y'=\sigma^b_{CC}y$ are distinct from $y'=y$ in this
+full table. The quantities $I_C,I_H$ and $\ell_C=\ell_C(y')$, $\ell_H=\ell_H(y')$ are post-event
+quantities, while $\col_C(y)$ and $\col_H(y)$ refer to the pre-event coloring.
+\begin{center}
+{\small
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{clllllc}
+\toprule
+$u$ & $r$ & $(s_C,s_H)$ & $Q_u(y,y')$: compatible transition & ratio $\phi_u$$^\dagger$\\
+\midrule
+TCC & $(2,0)$ & $(0,0)$ & $y'=y$ & $\dfrac{(I_C-\ell_C)(I_C-\ell_C-1)}{I_C(I_C-1)}\,\Supp$\\
+&& $(1,0)$ & $y'=\sigma^b_{CC}y$, $\exists b\in\col_C(y)$ & $\dfrac{2(I_C-\ell_C)}{I_C(I_C-1)}\,\Supp$\\
+&& $(2,0)$ & $y'=\kappa^{bb'}_{CCC}y$, $b\cup b'\in\col_C(y)$ & $\dfrac{2}{I_C(I_C-1)}\,\Supp$\\
+THH & $(0,2)$ & $(0,0)$ & $y'=y$ & $\dfrac{(I_H-\ell_H)(I_H-\ell_H-1)}{I_H(I_H-1)}\,\Supp$\\
+&& $(0,1)$ & $y'=\sigma^b_{HH}y$, $\exists b\in\col_H(y)$ & $\dfrac{2(I_H-\ell_H)}{I_H(I_H-1)}\,\Supp$\\
+&& $(0,2)$ & $y'=\kappa^{bb'}_{HHH}y$, $b\cup b'\in\col_H(y)$ & $\dfrac{2}{I_H(I_H-1)}\,\Supp$\\
+THC & $(1,1)$ & $(0,0)$ & $y'=y$ & $\dfrac{(I_C-\ell_C)(I_H-\ell_H)}{I_CI_H}\,\Supp$\\
+&& $(0,1)$ & $y'=\sigma^b_{CH}y$, $\exists b\in\col_C(y)$ & $\dfrac{I_C-\ell_C}{I_CI_H}\,\Supp$\\
+&& $(1,0)$ & $y'=\sigma^b_{CC}y$, $\exists b\in\col_C(y)$ & $\dfrac{I_H-\ell_H}{I_CI_H}\,\Supp$\\
+&& $(1,1)$ & $y'=\kappa^{bb'}_{CHC}y$, $b\cup b'\in\col_C(y)$ & $\dfrac{1}{I_CI_H}\,\Supp$\\
+TCH & $(1,1)$ & $(0,0)$ & $y'=y$ & $\dfrac{(I_H-\ell_H)(I_C-\ell_C)}{I_HI_C}\,\Supp$\\
+&& $(1,0)$ & $y'=\sigma^b_{HC}y$, $\exists b\in\col_H(y)$ & $\dfrac{I_H-\ell_H}{I_HI_C}\,\Supp$\\
+&& $(0,1)$ & $y'=\sigma^b_{HH}y$, $\exists b\in\col_H(y)$ & $\dfrac{I_C-\ell_C}{I_HI_C}\,\Supp$\\
+&& $(1,1)$ & $y'=\kappa^{bb'}_{HCH}y$, $b\cup b'\in\col_H(y)$ & $\dfrac{1}{I_HI_C}\,\Supp$\\
+RC & $(0,0)$ & $(0,0)$ & $y'=y$ & $\Supp$\\
+RH & $(0,0)$ & $(0,0)$ & $y'=y$ & $\Supp$\\
+SC & $(0,0)$ & $(0,0)$ & $y'=\chi^{a\emptyset}_C y$, $a\in\col_C(y)$ & $\Supp$\ \ ($\alpha_{\mathrm{SC}}=\chi_C I_C(x')$)\\
+SH & $(0,0)$ & $(0,0)$ & $y'=\chi^{a\emptyset}_H y$, $a\in\col_H(y)$ & $\Supp$\ \ ($\alpha_{\mathrm{SH}}=\chi_H I_H(x')$)\\
+BC & $(0,0)$ & $(0,0)$ & $y'=y$ & $\Supp$\\
+BH & $(0,0)$ & $(0,0)$ & $y'=y$ & $\Supp$\\
+DC & $(0,0)$ & $(0,0)$ & $y'=y$ & $\Supp$\\
+DH & $(0,0)$ & $(0,0)$ & $y'=y$ & $\Supp$\\
+\bottomrule
+\end{tabular}}
+\end{center}
+$^\dagger$For every row the displayed weight is the production-slot binomial ratio
+$\phi_u=\prod_d\binom{I_d-\ell_d}{r_d-s_d}/\binom{I_d}{r_d}$ with $I_d,\ell_d$ post-event, times the
+support indicators $\Supp$ (KLI Eq.~37): the ratio is defined only where each deme has at least as
+many infectious hosts as pruned lineages. For RC, RH,
+SC, SH, BC/BH/DC/DH: all have $r=(0,0)$, the empty product, so the entry is $\Supp$ itself. For SC
+and SH, $\phi_u=1$ and the singular update is carried by the full rate
+$\alpha_{S_d}=\chi_d I_d(x')$ with $I_d(x')=I_d(x)+1$, on compatible chop transitions
+$\chi^{a\emptyset}_d$. RC/RH
+compatibility is the post-event support $\ind_{I_d\ge\ell_d}$ (the removed host was untracked); the
+strict $I_d>\ell_d$ is \emph{not} a compatibility condition but the driver-outflow condition (\S5.5,
+\S8), since the outflow destination $I_d-1$ must still satisfy $\ge\ell_d$.
+
+\paragraph{Reading the uncollapsed table.} Each row is one compatible transition; all unlisted
+$(y,y')$ have $Q_u=0$. Conditions $\exists b\in\col_d(y)$ refer to the pre-event coloring
+(Theorem~1: $Q_u(Y_{t^-},Y_t)$). The binomial ratio uses post-event occupancies $I_C,I_H$
+\emph{and} post-event pruned counts $\ell_C(Y_t),\ell_H(Y_t)$; only $Q_u$ uses the pre-event
+coloring. The cross-deme forks THC/TCH $(1,1)$ have $b\cup b'\in\col_C(y)$ (resp.\ $\col_H$)
+pre-event, with post-event demes encoded in the $\kappa$ subscript. SC/SH have $r=(0,0)$,
+$s=(0,0)$, $\phi=1$, with singular rate $\alpha_{S_d}=\chi_d I_d(x')$.
+
+\paragraph{Reduction over the event indicator.} Following KLI \S5.3, write the full coloring as
+$Y=(d,m)$, where $d$ is the deme coloring and $m$ the event-indicator component, and define
+\[
+w(t,x,d)=\sum_m w(t,x,d,m).
+\]
+Transitions that differ only in $m$ but induce the same reduced
+deme-coloring transition $d\to d'$ therefore combine; for each mark $u$, $\Phi_u(d,d')$ denotes the
+resulting summed compatibility factor. The reduced table below lists these $\Phi_u$. They are
+\emph{not} in general the proposal boosts: for a reduced proposal kernel $\pi_u$, the boost is
+$B_u=\Phi_u/\pi_u$ (\S9).
+\begin{center}
+{\small
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{clllc}
+\toprule
+$u$ & color change & reduced factor $\Phi_u$\\
+\midrule
+TCC & $d'=d$ & $\left(1-\frac{\ell_C(\ell_C-1)}{I_C(I_C-1)}\right)\,\Supp$\\[1.6ex]
+& $d'=\kappa^{bb'}_{CCC}d$ & $\frac{2}{I_C(I_C-1)}\,\Supp$\\[1.6ex]
+THH & $d'=d$ & $\left(1-\frac{\ell_H(\ell_H-1)}{I_H(I_H-1)}\right)\,\Supp$\\[1.6ex]
+& $d'=\kappa^{bb'}_{HHH}d$ & $\frac{2}{I_H(I_H-1)}\,\Supp$\\[1.6ex]
+THC & $d'=d$ & $\left(1-\frac{\ell_H}{I_H}\right)\,\Supp$\\[1.6ex]
+& $d'=\sigma^b_{CH}d$ & $\dfrac{I_C-\ell_C}{I_CI_H}\,\Supp$\\[1.6ex]
+& $d'=\kappa^{bb'}_{CHC}d$ & $\dfrac{1}{I_CI_H}\,\Supp$\\[1.6ex]
+TCH & $d'=d$ & $\left(1-\frac{\ell_C}{I_C}\right)\,\Supp$\\[1.6ex]
+& $d'=\sigma^b_{HC}d$ & $\dfrac{I_H-\ell_H}{I_CI_H}\,\Supp$\\[1.6ex]
+& $d'=\kappa^{bb'}_{HCH}d$ & $\dfrac{1}{I_CI_H}\,\Supp$\\[1.6ex]
+SC & $d'=\chi^{a\emptyset}_C d$ & $\Supp$\\[1.6ex]
+SH & $d'=\chi^{a\emptyset}_H d$ & $\Supp$\\[1.6ex]
+RC & $d'=d$ & $\Supp$\\
+RH & $d'=d$ & $\Supp$\\
+BC & $d'=d$ & $\Supp$\\
+BH & $d'=d$ & $\Supp$\\
+DC & $d'=d$ & $\Supp$\\
+DH & $d'=d$ & $\Supp$\\
+\bottomrule
+\end{tabular}}
+\end{center}
+
+\section{Genealogy-Specific Filter Terms}
+There are twelve genealogy-specific terms: six singular update terms (chop $\chi$ and fork $\kappa$
+rows, weight jumps at $t\in\evZ$) and six regular inflow components obtained from the non-fork rows after summing over the event-indicator component, which the
+regular filter equation (Eq.~13) assembles.
+
+\paragraph{Convention.} In the singular equations $y$ is the post-event filter coloring; reversal
+operators ($\chi^r,\kappa^r$) recover the pre-event coloring, and $\rw(t,x',y'):=\lim_{s\uparrow
+t}w(s,x',y')=w(t^-,x',y')$ is the \emph{left-limit} weight at the source state $x'$ and the recovered
+pre-event coloring $y'$ (KLI's left-limit notation, p.~29; the reversals are the operators
+$\chi^r,\sigma^r,\kappa^r$, p.~20; $\rw$ is not a separate ``reversal weight''). In the regular
+equations $y$ is the current (post-event) filter state. KLI Eq.~9 gives the post-event support condition $\ind_{I_C(x)\ge\ell_C(y)}\,\ind_{I_H(x)\ge\ell_H(y)}$; throughout, $w\equiv0$ outside $\mathcal S=\{I_C\ge\ell_C,\ I_H\ge\ell_H\}$, and we
+display the support indicators on the singular equations and take the regular components
+$I_7$--$I_{12}$ to hold on $\mathcal S$ (without repeating the factor). \emph{Eqs.~5--6 are the two
+components of the mixed-fork singular update}: the
+assembled update at $t\in\evZ$ sums over the feasible marks and predecessor colorings. A typed leaf
+collapses to one term (the tip deme $C/H$ is observed); a mixed internal fork does not; it sums over
+THC and TCH (camel parent/human child vs.\ human parent/camel child), since internal demes are latent.
+
+\subsection{Equations 1--6: Singular}
+\textbf{Eq.~1 --- Camel leaf $t\in S^{(C)}_0$ (chop $\chi^{a\emptyset}_C$):}
+\begin{equation}
+S_{\mathrm{SC}}(t,x,y)=\ind_{I_C(x)\ge\ell_C(y)}\,\ind_{I_H(x)\ge\ell_H(y)}\int \rw\!\left(t,x',\chi^r_{a\emptyset,C}y\right)\alpha_{\mathrm{SC}}(t,x',x)\,
+dx',
+\end{equation}
+with $\alpha_{\mathrm{SC}}=\chi_C I_C(x')=\chi_C(I_C(x)+1)$.
+
+\textbf{Eq.~2 --- Human leaf $t\in S^{(H)}_0$ (chop $\chi^{a\emptyset}_H$):}
+\begin{equation}
+S_{\mathrm{SH}}(t,x,y)=\ind_{I_C(x)\ge\ell_C(y)}\,\ind_{I_H(x)\ge\ell_H(y)}\int \rw\!\left(t,x',\chi^r_{a\emptyset,H}y\right)\alpha_{\mathrm{SH}}(t,x',x)\,
+dx',
+\end{equation}
+with $\alpha_{\mathrm{SH}}=\chi_H I_H(x')=\chi_H(I_H(x)+1)$.
+
+\begin{remark}[Why $\phi_{S_d}=1$]
+For $S_d$ the production vector is $r=(0,0)$, so KLI Eq.~(9) gives $\phi_{S_d}=1$. The singular
+update is therefore weighted by the full event rate $\alpha_{S_d}(t,x',x)=\chi_d I_d(x')$, together
+with the compatibility condition and the post-event support indicator. Since $I_d(x')=I_d(x)+1$, the
+pre-removal occupancy enters through $\alpha_{S_d}$; there is no additional $1/I_d$ factor.
+\end{remark}
+
+\textbf{Eq.~3 --- Within-camel fork $t\in B(CC)$ (fork $\kappa^{bb'}_{CCC}$):}
+\begin{equation}
+S_{\mathrm{TCC}}(t,x,y)=\ind_{I_C(x)\ge\ell_C(y)}\,\ind_{I_H(x)\ge\ell_H(y)}\int \rw\!\left(t,x',\kappa^r_{bb',CCC}y\right)\alpha_{\mathrm{TCC}}\,
+\frac{2}{I_C(I_C-1)}\,dx'.
+\end{equation}
+The factor $2$ absorbs both label assignments of $b,b'$ to the two $C$-slots.
+
+\textbf{Eq.~4 --- Within-human fork $t\in B(HH)$ (fork $\kappa^{bb'}_{HHH}$):}
+\begin{equation}
+S_{\mathrm{THH}}(t,x,y)=\ind_{I_C(x)\ge\ell_C(y)}\,\ind_{I_H(x)\ge\ell_H(y)}\int \rw\!\left(t,x',\kappa^r_{bb',HHH}y\right)\alpha_{\mathrm{THH}}\,
+\frac{2}{I_H(I_H-1)}\,dx'.
+\end{equation}
+
+\textbf{Eq.~5 --- Cross-deme fork THC component $t\in B(CH)$ (fork $\kappa^{bb'}_{CHC}$):}
+\begin{equation}
+S_{\mathrm{THC}}(t,x,y)=\ind_{I_C(x)\ge\ell_C(y)}\,\ind_{I_H(x)\ge\ell_H(y)}\int \rw\!\left(t,x',\kappa^r_{bb',CHC}y\right)\alpha_{\mathrm{THC}}\,
+\frac{1}{I_CI_H}\,dx'.
+\end{equation}
+In the post-event $y$: $b\in\col_H(y)$ (new $H$-child), $b'\in\col_C(y)$ (continuing $C$-parent).
+
+\textbf{Eq.~6 --- Cross-deme fork TCH component $t\in B(HC)$ (fork $\kappa^{bb'}_{HCH}$):}
+\begin{equation}
+S_{\mathrm{TCH}}(t,x,y)=\ind_{I_C(x)\ge\ell_C(y)}\,\ind_{I_H(x)\ge\ell_H(y)}\int \rw\!\left(t,x',\kappa^r_{bb',HCH}y\right)\alpha_{\mathrm{TCH}}\,
+\frac{1}{I_HI_C}\,dx'.
+\end{equation}
+In Eq.~6 the labels are oriented for the TCH explanation: $b\in\col_C(y)$ is the new camel child and
+$b'\in\col_H(y)$ the continuing human parent (the swapped branch order relative to Eq.~5, matching the
+$\kappa^r_{bb',HCH}$ subscript $d_b=C$, $d_{b'}=H$).
+At a mixed internal fork both THC and TCH are latent explanations of the same obscured branch point
+(the parent deme is unobserved), so $S_{\mathrm{THC}}$ and $S_{\mathrm{TCH}}$ are two \emph{component}
+terms entering the same singular update; each child orientation $(C,H)$ or $(H,C)$ carries binomial
+ratio $1/(I_CI_H)$, and the forward fork proposal (\S9) splits $\tfrac12{+}\tfrac12$ between them.
+
+\subsection{Assembled singular filter}
+Write $S_{\mathrm{SC}},S_{\mathrm{SH}},S_{\mathrm{TCC}},S_{\mathrm{THH}},S_{\mathrm{THC}},S_{\mathrm{TCH}}$
+for the six component terms above (Eqs.~1--6). At a data-event time $t=e\in\evZ$ the singular filter is
+their compatible sum --- the event-time analogue of the regular $\sum_{k=7}^{12}I_k$ inflow (\S7.4):
+\[
+w(t,x,y)=\sum_{u\in\mathcal U_e(y)}S_u(t,x,y),\qquad t=e\in\evZ,
+\]
+where $\mathcal U_e(y)$ is the set of marks compatible with the observed event $e$ \emph{and} the
+post-event coloring $y$:
+\[
+\mathcal U_e(y)=
+\begin{cases}
+\{\mathrm{SC}\}, & \text{camel leaf},\\
+\{\mathrm{SH}\}, & \text{human leaf},\\
+\{\mathrm{TCC}\}, & \text{fork with two $C$ children},\\
+\{\mathrm{THH}\}, & \text{fork with two $H$ children},\\
+\{\mathrm{THC},\mathrm{TCH}\}, & \text{mixed fork.}
+\end{cases}
+\]
+Equivalently, the analytic (fixed-destination) singular update is
+\[
+w(t,x,y)=
+\begin{cases}
+S_{\mathrm{SC}}(t,x,y), & \text{camel leaf},\\
+S_{\mathrm{SH}}(t,x,y), & \text{human leaf},\\
+S_{\mathrm{TCC}}(t,x,y), & y\text{ has two }C\text{ children},\\
+S_{\mathrm{THH}}(t,x,y), & y\text{ has two }H\text{ children},\\
+S_{\mathrm{THC}}(t,x,y)+S_{\mathrm{TCH}}(t,x,y), & y\text{ is mixed.}
+\end{cases}
+\]
+A typed leaf or a same-deme post-event coloring fixes a unique compatible mark, so the sum has one term;
+only a mixed fork sums two components (the parent deme is latent). A same-deme mark contributes a single
+coloring ($\pi=1$, the factor $2$ carried in $\phi$: $B_{\mathrm{TCC}}=2/[I_C(I_C-1)]$); each cross-deme
+component contributes two child orientations ($\pi=\tfrac12$ each,
+$B_{\mathrm{THC}}=\phi_{\mathrm{THC}}/\tfrac12=2/(I_CI_H)$). The forward, parent-conditioned (SMC)
+enumeration of these same transitions --- which a particle realizes by conditioning on the carried parent
+deme --- is deferred to \S9 and \S11, to keep this analytic update impossible to misread.
+
+\subsection{Equations 7--12: Regular}
+\textbf{Chu--Vandermonde simplification.} After summing over the event-indicator component, any
+same-deme non-fork single-slot transition collapses to the same reduced coloring $y$ (the
+single-slot swap satisfies $\sigma^b_{dd}y=y$). In the cross-deme birth marks, the
+continuing-parent slot contributes to the identity-coloring term, while the new-child slot crossing
+demes produces a cross-coloring term.
+
+\textbf{Eq.~7 --- TCC ($\sigma^b_{CC}=\mathrm{id}$; C-V):}
+\begin{equation}
+I_7(t,x,y)=\int w(t,x',y)\,\alpha_{\mathrm{TCC}}(t,x',x)\left[1-\frac{\ell_C(\ell_C-1)}{I_C(I_C-1)}\right]dx'.
+\end{equation}
+The bracketed factor is the reduced non-fork contribution for TCC. The missing mass corresponds to
+unobserved within-camel branch points and is accounted for through the regular birth inflow/outflow
+balance (\S8), not through $\lambda$; the same holds for THH (Eq.~8).
+
+\textbf{Eq.~8 --- THH ($\sigma^b_{HH}=\mathrm{id}$; C-V):}
+\begin{equation}
+I_8(t,x,y)=\int w(t,x',y)\,\alpha_{\mathrm{THH}}(t,x',x)\left[1-\frac{\ell_H(\ell_H-1)}{I_H(I_H-1)}\right]dx'.
+\end{equation}
+
+\textbf{Eq.~9 --- THC C-V term (C-slot stays, $\sigma^b_{CC}=\mathrm{id}$):}
+\begin{equation}
+I_9(t,x,y)=\int w(t,x',y)\,\alpha_{\mathrm{THC}}(t,x',x)\,\frac{I_H-\ell_H}{I_H}\,dx'.
+\end{equation}
+
+\textbf{Eq.~10 --- THC cross-coloring (H-slot enters; swap $\sigma^b_{CH}$):}
+\begin{equation}
+I_{10}(t,x,y)=\sum_{b\in\col_H(y)}\int w\!\left(t,x',\sigma^r_{b,CH}y\right)\alpha_{\mathrm{THC}}(t,x',x)\,\frac{I_C-\ell_C(y)}{I_CI_H}\,dx'.
+\end{equation}
+The coefficient uses the post-event (destination) count $\ell_C(y)$: in $y$, $b\in\col_H(y)$, so
+$b$ is not counted in $\ell_C(y)$. Per KLI Eq.~(9) the ratio uses $Y_t$; cf.\ SEIRS Eq.~(43).
+
+\textbf{Eq.~11 --- TCH C-V term (H-slot stays, $\sigma^b_{HH}=\mathrm{id}$):}
+\begin{equation}
+I_{11}(t,x,y)=\int w(t,x',y)\,\alpha_{\mathrm{TCH}}(t,x',x)\,\frac{I_C-\ell_C}{I_C}\,dx'.
+\end{equation}
+
+\textbf{Eq.~12 --- TCH cross-coloring (C-slot enters; swap $\sigma^b_{HC}$):}
+\begin{equation}
+I_{12}(t,x,y)=\sum_{b\in\col_C(y)}\int w\!\left(t,x',\sigma^r_{b,HC}y\right)\alpha_{\mathrm{TCH}}(t,x',x)\,\frac{I_H-\ell_H(y)}{I_HI_C}\,dx'.
+\end{equation}
+
+\subsection{Assembled regular filter}
+Between events ($t\notin\evZ$) the regular filter equation is the sum, over all regular marks, of
+each mark's inflow integral minus its outflow (KLI Eqs.~(35)--(36)). The birth inflows are the
+integral components $I_7,\dots,I_{12}$ of \S7.3; the removal and demography kernels are point masses,
+shown here with the transition evaluated (the $w(t,x{\pm}e,y)$ shifted-state form of KLI Eq.~(36)).
+Each birth mark's outflow is its full hazard $\alpha_u(t,x)\,w$. Removal and demography contribute matched gain--loss pairs, and
+the sampling hazard together with the sub-threshold removal appears as the explicit decay:
+\begin{equation}
+\begin{aligned}
+\frac{\partial w}{\partial t}(t,x,y)={}
+&\sum_{k=7}^{12} I_k
+-\big(\alpha_{\mathrm{TCC}}+\alpha_{\mathrm{THH}}+\alpha_{\mathrm{THC}}+\alpha_{\mathrm{TCH}}\big)\,w(t,x,y)\\
+&+\gamma_C(I_C{+}1)\,\ind_{I_C\ge\ell_C(y)}\,w(t,x{+}e_C,y)
+-\gamma_C I_C\,\ind_{I_C>\ell_C(y)}\,w(t,x,y)\\
+&+\gamma_H(I_H{+}1)\,\ind_{I_H\ge\ell_H(y)}\,w(t,x{+}e_H,y)
+-\gamma_H I_H\,\ind_{I_H>\ell_H(y)}\,w(t,x,y)\\
+&+B_C\,\ind_{S_C\ge1}\,w(t,x{-}e_{S_C},y)-B_C\,w(t,x,y)\\
+&+B_H\,\ind_{S_H\ge1}\,w(t,x{-}e_{S_H},y)-B_H\,w(t,x,y)\\
+&+B_C\,w(t,x{+}e_{S_C},y)-B_C\,\ind_{S_C>0}\,w(t,x,y)\\
+&+B_H\,w(t,x{+}e_{S_H},y)-B_H\,\ind_{S_H>0}\,w(t,x,y)\\
+&-\big(\chi_C I_C+\chi_H I_H\big)\,w(t,x,y)
+-\big(\gamma_C I_C\,\ind_{I_C\le\ell_C(y)}+\gamma_H I_H\,\ind_{I_H\le\ell_H(y)}\big)\,w(t,x,y).
+\end{aligned}
+\end{equation}
+The births' full mass-removal outflow $\sum_u\alpha_u\,w$ collapses against the birth inflows
+$I_7$--$I_{12}$ (Chu--Vandermonde, \S7.3) to the reduced driver of \S8. Each removal hazard
+$\gamma_d I_d$ splits into an above-threshold outflow ($I_d>\ell_d(y)$, a compatible transition) and
+a sub-threshold remainder ($I_d\le\ell_d(y)$); the remainder joins the sampling hazard in the final
+(decay) line. This $\ge$ versus $>$ split is the removal-compatibility point of \S5.5 (cf.\ KLI
+Eq.~(34)): the inflow to $x$ requires only $I_d\ge\ell_d$, whereas the outflow from $x$ needs the
+destination $I_d-1\ge\ell_d$. Camel death $D_C$ has the \emph{constant} rate $B_C$ guarded by
+$S_C>0$, so the $S_C=0$ attempted jump is a self-transition contributing no outflow (the
+$\ind_{S_C>0}$ records this); the matching inflow to $x$ is unconditional because it comes from
+$x{+}e_{S_C}$, where the guard $S_C{+}1>0$ always holds. Human death $D_H$ is the exact mirror:
+constant rate $B_H$ guarded by $S_H>0$. All four demography rates are constant --- birth and death both
+$B_C$ for camels, both $B_H$ for humans (undamped random walks in $S_C,S_H$) --- matching the shipped
+\texttt{mers.yml} (\texttt{death\_h}: \texttt{rate params.Bh}; \texttt{jump if(Sh>0) Sh-=1}); there is
+\emph{no} camel/human asymmetry. The sampling marks SC, SH are singular and contribute nothing on open intervals; their
+full hazards $\chi_C I_C+\chi_H I_H$ enter only as the decay above.
+\section{Filter Components}
+\subsection{Decay $\lambda$}
+\begin{equation}
+\lambda(t,x,y)=\underbrace{\chi_C I_C+\chi_H I_H}_{\text{sampling hazard}}
++\underbrace{\gamma_C I_C\,\ind_{I_C\le\ell_C}+\gamma_H I_H\,\ind_{I_H\le\ell_H}}_{\text{sub-threshold removal}}.
+\end{equation}
+\textbf{Sampling hazard.} The exact likelihood conditions on no sample-type jump outside $\evZ$;
+the \emph{full} rate $\chi_C I_C+\chi_H I_H$ enters $\lambda$. \textbf{Sub-threshold removal.} When
+$I_C=\ell_C$ any RC would push $I_C$ below $\ell_C$; the weight is killed at rate $\gamma_C I_C$
+($\ind_{I_C\le\ell_C}\equiv\ind_{I_C=\ell_C}$). \textbf{No separate branch-point hazard.} The
+within-deme unseen branch-point loss arises automatically from Eqs.~7--8 inflow against the TCC/THH
+share of the (full-birth) outflow; the cross-deme loss likewise from Eqs.~9--12 against the THC/TCH
+share. Adding either to $\lambda$ would double-count.
+
+\subsection{Assembled filter equation and the driver $\beta$}
+\begin{notebox}
+\textbf{Per-mark driver and reduced exit rate.} The per-mark driver is KLI's
+$\beta^{\mathrm{reg}}_u=\alpha^{\mathrm{reg}}_u\,\pi_u$ (rate times proposal), so that
+$\beta^{\mathrm{reg}}_u B_u=\alpha^{\mathrm{reg}}_u\,\Phi_u$. Summed over destinations the outflow
+$\sum_u\sum_{y'}\int w\,\beta^{\mathrm{reg}}_u\,dx'$ collapses (since $\sum_{y'}\pi_u=1$) to
+$w\sum_u\int\alpha^{\mathrm{reg}}_u(t,x,x';y)\,dx'$, with the \emph{reduced regular exit rate}
+\[
+\begin{aligned}
+\sum_u\int\alpha^{\mathrm{reg}}_u(t,x,x';y)\,dx'
+={}&\underbrace{\alpha_{\mathrm{TCC}}+\alpha_{\mathrm{THH}}+\alpha_{\mathrm{THC}}+\alpha_{\mathrm{TCH}}}_{\text{full births}}\\
+&+\underbrace{\gamma_C I_C\ind_{I_C>\ell_C}+\gamma_H I_H\ind_{I_H>\ell_H}}_{\text{above-threshold deaths}}
++\underbrace{B_C+B_H+B_C\ind_{S_C>0}+B_H\ind_{S_H>0}}_{\text{demography (constant; deaths guarded)}},
+\end{aligned}
+\]
+with \emph{no} sampling term. Sampling is singular (Eqs.~1--2) and enters $\lambda$ at full rate, as
+does the sub-threshold death. Births are kept full so the branch-point-loss arguments of \S8.1 hold
+unchanged. This is KLI's split (Eqs.~45--47); a literal ``full CTMC driver'' would subtract
+$\chi_d I_d$ and the sub-threshold $\gamma_d I_d$ twice.
+\end{notebox}
+Regular ($t\notin\evZ$), with the driver $\beta^{\mathrm{reg}}_u=\alpha^{\mathrm{reg}}_u\pi_u$ from the box above:
+\begin{multline*}
+\frac{\partial w}{\partial t}(t,x,y)=\sum_{u\in\mathbb U}\sum_{y'}\int w(t,x',y')\,\beta^{\mathrm{reg}}_u(t,x',x,y',y)\,B_u(t,x',x,y',y)\,dx'\\
+-w(t,x,y)\sum_{u\in\mathbb U}\int\alpha^{\mathrm{reg}}_u(t,x,x';y)\,dx'-\lambda(t,x,y)\,w(t,x,y).
+\end{multline*}
+Singular ($t=e\in\evZ$): $\displaystyle w(t,x,y)=\sum_{u\in\mathcal U_e}\sum_{y'}\int w(t^-,x',y')\,
+\beta^{\mathrm{ev}}_{e,u}\,B_u\,dx'$ with $\beta^{\mathrm{ev}}_{e,u}=\alpha_u\pi_u$ supported on $\evZ$
+(distinct from $\beta^{\mathrm{reg}}$, which excludes sampling), in the six explicit forms of \S7.1.
+
+\section{Proposal Kernel}
+The proposal is a \emph{forward} kernel: from the pre-event coloring $y^-$ it proposes a post-event
+$y^+$, so it must satisfy $\sum_{y^+}\pi_u(t,x^-,x^+,y^-,y^+)=1$ for each fixed source $(x^-,y^-)$ (KLI
+Thm.~4). For a cross-deme birth the recolored branch sits in the \emph{parent} deme before the event:
+at a THC event with only the human child tracked, the tracked branch is the ancestral camel lineage
+$b\in\col_C(y^-)$; the continuing camel host is the untracked branch. The event recolors $b$ $C\to H$ via $\sigma^b_{CH}$. Hence the proposal ranges over the source/parent deme:
+\[
+\pi^\emptyset_{\mathrm{THC}}=\frac{I_C-\ell_C(y^-)}{I_C},\quad
+\pi^b_{\mathrm{THC}}=\frac{1}{I_C}\ \ \bigl(b\in\col_C(y^-),\ y^+=\sigma^b_{CH}y^-\bigr);
+\]
+\[
+\pi^\emptyset_{\mathrm{TCH}}=\frac{I_H-\ell_H(y^-)}{I_H},\quad
+\pi^b_{\mathrm{TCH}}=\frac{1}{I_H}\ \ \bigl(b\in\col_H(y^-),\ y^+=\sigma^b_{HC}y^-\bigr),
+\]
+each summing to $1$ over the $\ell_d(y^-)+1$ outgoing destinations. This follows the same source/parent-deme indexing used in KLI's SEIRS transmission proposal ($\pi^b_{\mathrm{Trans}}=1/I$ over $\col_I$, $\pi^\emptyset_{\mathrm{Trans}}=(I-\ell_I)/I$). The boosts $B_u=\Phi_u/\pi_u$ are
+then \emph{not} generally one:
+\[
+B^\emptyset_{\mathrm{THC}}=\frac{(I_H-\ell_H)/I_H}{(I_C-\ell_C(y^-))/I_C}=\frac{I_C(I_H-\ell_H)}{I_H(I_C-\ell_C)},
+\qquad
+B^b_{\mathrm{THC}}=\frac{(I_C-\ell_C(y^+))/(I_CI_H)}{1/I_C}=\frac{I_C-\ell_C(y^+)}{I_H},
+\]
+with the TCH mirror. For the within-deme births TCC/THH every non-fork regular case leaves $y$
+unchanged, so $\pi(y,y)=1$ and the collapsed C-V factor is carried entirely in $B$, e.g.\
+$B_{\mathrm{TCC}}=1-\dfrac{\ell_C(\ell_C-1)}{I_C(I_C-1)}$. In the analytic filter equation, $\beta B=\alpha_u\Phi_u$
+(the $\pi$-factors cancel); the proposal matters only for the particle filter.
+
+\paragraph{Singular fork proposals.} At an observed branch point the proposal is over the post-event
+coloring, and the count of distinct colorings (not an auxiliary slot label) determines it. A
+\emph{same-deme} fork (TCC/THH) gives a \emph{single} coloring (both children take the parent's deme;
+swapping the two distinguishable subtrees leaves $y$ unchanged), so $\pi=1$ and the factor $2$ stays in
+$\phi$: $B_{\mathrm{TCC}}=\phi_{\mathrm{TCC}}=2/[I_C(I_C-1)]$ (THH mirror). A \emph{cross-deme} fork
+(THC/TCH) gives \emph{two} distinct colorings --- the two subtrees can be $(C,H)$ or $(H,C)$ --- so
+$\pi=\tfrac12$ per orientation and $B_{\mathrm{THC}}=\phi_{\mathrm{THC}}/\tfrac12=2/(I_CI_H)$ (TCH
+mirror). KLI's SEIRS branch-point proposal uses the same \textonehalf{}+\textonehalf{} orientation split.
+
+\paragraph{Full-support proposal for the weighted process.} The na\"{i}ve relative-abundance
+proposal above is not support-safe: when $I_C=\ell_C(y^-)$ (all camels tracked),
+$\pi^\emptyset_{\mathrm{THC}}=0$, while the collapsed identity-coloring weight
+$\Phi^\emptyset_{\mathrm{THC}}:=(I_H-\ell_H)/I_H$ (the aggregate of Eq.~9 over the identity transition)
+remains positive. Hence $B^\emptyset=\Phi^\emptyset/\pi^\emptyset$ divides by zero. KLI Theorem~4 requires $\pi_u>0$ whenever $\alpha_uQ_u>0$; in the reduced process this corresponds
+to every transition for which $\alpha_u\Phi_u>0$. The condition is needed not only for simulation but wherever the representation
+$\beta_u=\alpha_u\pi_u$, $B_u=\Phi_u/\pi_u$ is used, since otherwise $\beta B=0\cdot\infty$ at a boundary
+transition. Mix in a uniform floor over the $\ell_C(y^-)+1$ outcomes: with $m_C=\ell_C(y^-)$ and
+$0<\varepsilon\le1$,
+\[
+\pi^\emptyset_{\mathrm{THC}}=(1-\varepsilon)\frac{I_C-m_C}{I_C}+\frac{\varepsilon}{m_C+1},\qquad
+\pi^b_{\mathrm{THC}}=(1-\varepsilon)\frac1{I_C}+\frac{\varepsilon}{m_C+1}\ \ (b\in\col_C(y^-)),
+\]
+($\varepsilon=1$ gives the fully uniform $\pi=1/(m_C+1)$); this $\varepsilon$-floored $\pi$ is
+one support-safe choice among many; with it $\beta=\alpha\pi$, $B=\Phi/\pi$, and one recomputes $B_u$ from it. The TCH mirror
+floors over $\col_H(y^-)$. Since $\beta_uB_u=\alpha_u\pi_u\cdot(\Phi_u/\pi_u)=\alpha_u\Phi_u$, the target filter is independent of $\varepsilon$. Changing $\varepsilon$ alters the proposal dynamics and the resulting importance weights, but not the analytic filter equation.
+
+\begin{notebox}
+\textbf{Forward vs.\ inflow indexing.} Eq.~10 sums its inflow over $b\in\col_H(y^+)$, the \emph{backward} enumeration of predecessor colorings feeding a fixed destination. The proposal is the
+\emph{forward} object and is indexed by $\col_C(y^-)$; the two label the same transitions from opposite
+ends. A destination-indexed proposal $\pi^b=1/I_H$ over $\col_H(y^+)$ does \emph{not} normalize over
+$y^+$ from a fixed $y^-$ (its mass is $1+(\ell_C(y^-)-\ell_H(y^-))/I_H\neq1$), so it is not a valid
+kernel; the source-deme form above is.
+\end{notebox}
+
+\section{Log-Likelihood}
+Following KLI Algorithm~B1 (sequential importance sampling, no resampling), each particle carries a
+running weight $V^{(p)}$ and the estimator is
+\[
+\hat L=\frac1P\sum_{p=1}^{P}V_T^{(p)},\qquad
+\begin{aligned}[t]
+\log V_T^{(p)}={}&-\log q\!\left(X_0^{(p)},Y_0^{(p)}\right)+\sum_{\tau\in J^{(p)}_{\mathrm{reg}}}\log B^{(p)}_{u_\tau}\\
+&+\sum_{t_i\in\evZ}\log\!\big(A^{(p)}_i\,B^{(p)}_i\big)
+-\int_0^T\lambda\big(t,x^{(p)}(t),y^{(p)}(t)\big)\,dt,
+\end{aligned}
+\]
+so $\hat L$ is unbiased for $L$ (KLI Lemma~3) and $\log\hat L$ estimates $\log L$ with a downward
+Jensen bias. Here:
+\begin{itemize}[leftmargin=1.4em,nosep]
+\item $J^{(p)}_{\mathrm{reg}}$ is every realized \emph{regular} jump with $B_{u_\tau}\neq1$ , not only color-changing jumps: under the collapsed within-deme proposal (\S9) a background TCC carries the full
+C-V boost $B_{\mathrm{TCC}}=1-\ell_C(\ell_C-1)/[I_C(I_C-1)]\neq1$;
+\item $B_u=\Phi_u/\pi_u$, so $B_u=0$ for an incompatible proposal and $B_u=1$ \emph{iff} $\pi_u=\Phi_u$
+(compatibility alone does not give $B_u=1$);
+\item at a data event $t_i$ the increment is $\log(A_i B_i)$ \emph{including the rate} $A_i$: for a
+sample/death leaf $A_i=\chi_d I_d(x')$ and $B_i=1$, so the contribution is $\log[\chi_d I_d(x')]$, not
+zero.
+\end{itemize}
+The filter-equation identity $\beta B=\alpha\Phi$ does \emph{not} remove the regular boosts from the particle
+weight, since a particle simulates from $\pi$ and reweights by $\Phi/\pi$ (KLI Thm.~5, Lemma~3).
+
+\paragraph{Initial coloring.} Theorem~5 also requires a root-coloring proposal $q(x,y)$: with $Y_0$
+latent, each particle draws $Y_0^{(p)}\sim q(X_0,\cdot)$ and carries the initial weight
+\[
+V_0^{(p)}=\frac{1}{q\!\left(X_0,Y_0^{(p)}\right)},\qquad w(0,x,y)=p_0(x)\,\ind_{q(x,y)>0}.
+\]
+The $p_0$ in $w(0,\cdot)$ is realized by sampling $X_0\sim p_0$, not carried in the weight (had $X_0$
+been drawn from a separate proposal $g$, $V_0=p_0(X_0)/[g(X_0)\,q(X_0,Y_0)]$); thus
+$-\log q(X_0^{(p)},Y_0^{(p)})$ enters $\log V_T^{(p)}$. A normalized, support-safe choice for $k$ root
+lineages is the labeled (without-replacement) hypergeometric
+$q_x(y)=(I_C)_{\ell_C(y)}(I_H)_{\ell_H(y)}/(I_C{+}I_H)_k$, $k=\ell_C(y){+}\ell_H(y)$, with $(n)_j$ the
+falling factorial (no $\binom{k}{\ell_C}$ multiplicity, since that appears only when summing over
+distinct labeled colorings). It is defined on states with $I_C{+}I_H\ge k$ (otherwise $(I_C{+}I_H)_k=0$;
+the numerator already vanishes unless $I_C\ge\ell_C(y),I_H\ge\ell_H(y)$); states unable to support the
+$k$ root lineages carry zero weight. For the MERS tree the typed tips do not
+fix the internal/root colors, so this term is generally present; only if the root coloring is imposed
+externally is $q\equiv1$ and $V_0=1$.
+
+\paragraph{Mixed forks.} At a typed leaf $\mathcal U_e$ is a singleton, so $A_i=\chi_d I_d(x')$. At an
+internal fork the feasible marks depend on perspective: for a fixed \emph{mixed} post-event coloring the
+backward filter sums the predecessor components $T_{HC}$ and $T_{CH}$ (the parent color is latent); in
+the \emph{forward} SMC each particle knows its pre-event parent color, so a camel parent permits
+$\{T_{CC},T_{HC}\}$ and a human parent $\{T_{HH},T_{CH}\}$. The total singular rate is
+$A_i=\sum_{u\in\mathcal U_e}\sum_{y^+}\int\beta^{\mathrm{ev}}_{e,u}\,dx^+$. The singular kernel proposes
+a feasible mark by its rate share and a post-event coloring through $\pi_u$ (one outcome for a same-deme
+mark, two orientations for a cross-deme mark); $A_i$ restores the total singular rate and
+$B_u=\Phi_u/\pi_u$ corrects the conditional coloring proposal.
+
+\section{Summary}
+\begin{enumerate}[leftmargin=1.6em,nosep]
+\item \textbf{No decoupling.} THC and TCH span both demes; cross-deme branch points
+$\kappa^{bb'}_{CHC},\kappa^{bb'}_{HCH}$ are possible.
+\item \textbf{Recipe (\S4):} (A) slots and ancestral demes; (B) saturations; (C)
+$\phi_u=\prod_d\binom{I_d-\ell_d}{r_d-s_d}/\binom{I_d}{r_d}$ with $I_d,\ell_d$ \emph{post-event};
+(D) operator $\sigma^b_{d_{\mathrm{pre}}d_{\mathrm{post}}}$ or $\kappa^{bb'}$.
+\item \textbf{THC:} $r=(1,1)$; the C-slot remains in $C$ and contributes to the reduced identity term, while the H-slot is ancestrally in $C$ despite landing in $H$ ($\sigma^b_{CH}$); branch point $\kappa^{bb'}_{CHC}$. TCH is the mirror.
+\item \textbf{Cross-color regular coefficient} uses the post-event count: $\frac{I_C-\ell_C(y)}{I_CI_H}$
+(Eq.~10), $\frac{I_H-\ell_H(y)}{I_HI_C}$ (Eq.~12); no spurious $-1$.
+\item \textbf{Sample/death:} $r=(0,0)\Rightarrow\phi=1$; singular weight $\alpha_{S_d}=\chi_d I_d(x')$,
+no $1/I_d$ factor; only terminal leaves ($\chi^{a\emptyset}_d$).
+\item \textbf{Decay} $\lambda=\chi_C I_C+\chi_H I_H+\gamma_d I_d\ind_{I_d\le\ell_d}$. The reduced
+regular exit rate has births full, deaths above-threshold, and no sampling; the per-mark driver
+kernels are KLI's $\beta^{\mathrm{reg}}_u=\alpha^{\mathrm{reg}}_u\pi_u$ (Theorem~5).
+\item \textbf{SMC weights} carry regular-jump contributions
+$\sum_{\tau\in J_{\mathrm{reg}}}\log(\Phi_{u_\tau}/\pi_{u_\tau})$,
+singular rate--boost contributions $\sum_{t_i\in\evZ}\log(A_iB_i)$,
+and decay $-\int_0^T\lambda(t,X_t,Y_t)\,dt$.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem{KLI} King, A.~A., Lin, Q., and Ionides, E.~L. \emph{Exact phylodynamic likelihood
+via structured Markov genealogy processes.} arXiv:2405.17032 (posted 2024, revised 2026).
+\bibitem{Dudas} Dudas, G., Carvalho, L.~M., Rambaut, A., and Bedford, T. (2018). MERS-CoV spillover
+at the camel-human interface. \emph{eLife} 7:e31257.
+\end{thebibliography}
+
+\end{document}
