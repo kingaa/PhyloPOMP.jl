@@ -1,3 +1,10 @@
 Manifest.toml
 /coverage/**
 /docs/build/**
+/output/**
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
