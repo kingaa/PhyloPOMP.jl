@@ -28,33 +28,35 @@ singular_part!(
     n = geneal[node]
     @assert I ≥ ellI && E ≥ ellE
     if n.type==Root
-        @assert length(n.children)==1 "too many children ($(length(n.children)) > 1) at root $(n.name), t=$(n.time)"
-        if E-ellE+I-ellI > 0
-            i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
-            ll -= log(p)
-            ellE, ellI = plant!(cols,i,n.lineage)
-        else
+        @assert length(n.children)==1 "wrong number of children ($(length(n.children)) != 1) at root $(n.name), t=$(n.slate)"
+        i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
+        ll -= log(p)
+        if ismissing(i)
             ## even though this realization is incompatible with the data,
             ## it is necessary to correct the coloring to avoid downstream errors.
-            ll += Prob(-Inf)
+            ll = Prob(-Inf)
             ellE, ellI = plant!(cols,Infec,n.lineage)
             I += 1
+        else
+            ellE, ellI = plant!(cols,i,n.lineage)
         end
     elseif n.type==Sample
+        @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
         if n.lineage ∉ cols[Infec]
             ## even though this realization is incompatible with the data,
             ## it is necessary to correct the coloring to avoid downstream errors.
-            ll += Prob(-Inf)
+            ll = Prob(-Inf)
             ellE, ellI = swap!(cols,Expos,Infec,n.lineage)
             E -= 1
             I += 1
         end
-        @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
         if length(n.children) == 0
             k,_,p = rcateg([ψ, χ],true)
             ll -= log(p)
             ellE, ellI = chop!(cols,Infec,n.lineage)
-            if k==1             # non-destructive sample
+            if k==0
+                ll = Prob(-Inf)
+            elseif k==1         # non-destructive sample
                 ll += log(ψ*(I-ellI));
             elseif k==2         # destructive sample
                 ll += log(χ*I)
@@ -66,27 +68,30 @@ singular_part!(
             ll += log(ψ)
         end
     elseif n.type==Node
+        @assert length(n.children)==2 "wrong number of children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
         if n.lineage ∉ cols[Infec]
             ## even though this realization is incompatible with the data,
             ## it is necessary to correct the coloring to avoid downstream errors.
-            ll += Prob(-Inf)
+            ll = Prob(-Inf)
             ellE, ellI = swap!(cols,Expos,Infec,n.lineage)
             E -= 1
             I += 1
         end
-        @assert length(n.children)==2 "too many children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
         chillins = map(n.children) do i
             geneal[i].lineage
         end
         ll += log(β*S*I/pop)
         k, _, p = rcateg([1, 1], true)
         ll -= log(p)
+        @assert k ≠ 0
         if k==1
             ellE, ellI = fork!(cols,Infec,n.lineage,(Expos,Infec),chillins)
         else
             ellE, ellI = fork!(cols,Infec,n.lineage,(Infec,Expos),chillins)
         end
-        S -= 1
+        if S > 0
+            S -= 1
+        end
         E += 1
         ll -= log(E*I)
     else
@@ -136,7 +141,7 @@ regular_part!(
             )
             k, s = rcateg(alpha .* pi)
             step = -log(rand())/s
-            if t+step < tf
+            if k > 0 && t+step < tf
                 ll -= decay*step+log(pi[k])
                 if k==1
                     S -= 1
@@ -229,7 +234,7 @@ filter_pomp(
                     S, E, I, R;
                     args...,
                 )
-                if isfinite(ll)
+                if dt > 0 && isfinite(ll)
                     ll, S, E, I, R = regular_part!(
                         cols, ll, t, dt,
                         S, E, I, R;

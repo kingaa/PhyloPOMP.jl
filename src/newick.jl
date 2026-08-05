@@ -29,14 +29,13 @@ plainnewick(
     g::Genealogy,
     sigdigits::Integer = 6,
 ) = begin
-    g = deepcopy(g)
-    insert_zlb!(g)
+    g,r = ladderize(g)
     nstr = Array{String}(undef,length(g))
     for i ∈ reverse(eachindex(g))
         bstr = if isnothing(g[i].parent)
             ";"
         else
-            bl = round(g[i].slate-g[g[i].parent].slate;sigdigits)
+            bl = round(g[i].slate-g[g[i].parent].slate; sigdigits)
             ":$bl"
         end
         nstr[i] = if isempty(g[i].children)
@@ -45,7 +44,7 @@ plainnewick(
             "("*join(map(j -> nstr[j], g[i].children),',')*")"*bstr
         end
     end
-    nstr[roots(g)]
+    nstr[r]
 end
 
 """
@@ -73,7 +72,7 @@ extnewick(
         bstr = if isnothing(g[i].parent)
             ";"
         else
-            bl = round(g[i].slate-g[g[i].parent].slate;sigdigits)
+            bl = round(g[i].slate-g[g[i].parent].slate; sigdigits)
             "[&&PhyloPOMP type=$t$dstr]:$bl"
         end
         nstr[i] = if isempty(g[i].children)

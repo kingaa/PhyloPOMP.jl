@@ -14,8 +14,8 @@ ladderize(g::Genealogy) = begin
         ladderize!(heights,g,n)
     end
     r = roots(g)
-    p = sortperm(map(c -> heights[c], r), rev=true)
-    g, r[p]
+    sort!(r, by=i->heights[i], rev=true)
+    g, r
 end
 
 ladderize!(
@@ -27,39 +27,38 @@ ladderize!(
     if isempty(node.children)
         heights[n] = Time(node.slate)
     else
-        h = map(c -> heights[c], node.children)
-        heights[n] = maximum(h)
-        p = sortperm(h, rev=true)
-        node.children = node.children[p]
+        sort!(node.children, by=i->heights[i], rev=true)
+        heights[n] = heights[node.children[1]]
     end
     nothing
 end
 
 ## The distance along the genealogy to the first already-visited node.
-added_branch_length(
+joining_branch_length(
     g::Genealogy,
     memo::Vector{Bool},
     n::Integer,
 ) = begin
     p = g[n].parent
+    while (!isnothing(p) && !memo[p])
+        p = g[p].parent
+    end
     if isnothing(p)
-        zero(Time)
-    elseif memo[p]
-        Time(g[n].slate - g[p].slate)
+        Time(g[n].slate - timezero(g))
     else
-        Time(g[n].slate - g[p].slate) + added_branch_length(g,memo,p)
+        Time(g[n].slate - g[p].slate)
     end
 end
 
 """
-    visit!(x, y, memo, g, n)
+    cblv!(x, y, memo, g, n)
 
 Recursively perform an in-order walk over the subtree of genealogy `g`
 rooted at node `n`.  Push the length of the new branch for each tip
 node into `x` and for each internal node into `y`.  The Boolean vector
 `memo` is used to track which nodes have been visited.
 """
-visit!(
+cblv!(
     x::Vector{Time},
     y::Vector{Time},
     memo::Vector{Bool},
@@ -69,14 +68,14 @@ visit!(
     node = g[n]
     @assert !memo[n]
     if isempty(node.children)
-        push!(x,added_branch_length(g,memo,n))
+        push!(x,joining_branch_length(g,memo,n))
         memo[n] = true
     else
-        visit!(x,y,memo,g,node.children[1])
+        cblv!(x,y,memo,g,node.children[1])
         for c ∈ Base.rest(node.children,2)
             push!(y,node.slate-timezero(g))
             memo[n] = true
-            visit!(x,y,memo,g,c)
+            cblv!(x,y,memo,g,c)
         end
     end
     nothing
@@ -96,7 +95,7 @@ cblv(g::Genealogy) = begin
     sizehint!(y,nsample(g))
     memo = fill(false,length(g))
     for n ∈ r
-        visit!(x,y,memo,g,n)
+        cblv!(x,y,memo,g,n)
         push!(y,zero(Time))
         memo[n] = true
     end
@@ -156,7 +155,7 @@ parse_cblv(
         if t > t0
             i = p
             j = tip.name
-            @assert G[j].slate >= t "invalid CBLV"
+            @assert G[j].slate >= t "invalid CBLV: node $j cannot attach."
             while !isnothing(i) && G[i].slate > t
                 j = i
                 i = G[i].parent

@@ -47,9 +47,9 @@ rcateg(
         end
     else
         if prob
-            one(Int), zero(Prob), zero(Prob)
+            zero(Size), zero(Prob), zero(Prob)
         else
-            one(Int), zero(Prob)
+            zero(Size), zero(Prob)
         end
     end
 end
@@ -65,7 +65,8 @@ rcateg(
     prob::Bool = false,
 ) where {D <: Enum} = begin
     k, s... = rcateg(p, prob)
-    demes(k), s...
+    d = (k > 0) ? demes(k) : missing
+    d, s...
 end
 
 """
@@ -80,8 +81,13 @@ rcateg(
     prob::Bool = false,
 ) = begin
     k, s... = rcateg(p, prob)
-    v = collect(set)::Vector{Int}
-    v[k], s...
+    if k > 0
+        v = collect(set)::Vector{Int}
+        vk = v[k]
+    else
+        vk = missing
+    end
+    vk, s...
 end
 
 """
@@ -95,5 +101,6 @@ rcateg(
     prob::Bool = false,
 ) = begin
     k, s... = rcateg(p, prob)
-    v[k], s...
+    vk = (k > 0) ? v[k] : missing
+    vk, s...
 end

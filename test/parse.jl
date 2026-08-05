@@ -36,6 +36,8 @@ using Test
     @test occursin(r"lineage=7 .* parent=10",sprint(show,g[11]))
     @test PhyloPOMP.nsample(g)==24
     @test_logs (:warn,r"dropping (\d+) inline nodes") cblv(g)
+    g1 = parse_newick(newick(g,extended=false))
+    @test newick(g,extended=false)==newick(g1,extended=false)
 
     g=parse_newick("():0.1;",t0=0.0);
     @test g isa Genealogy{PhyloPOMP.Unstructured}

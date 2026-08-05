@@ -16,7 +16,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
 
 @testset verbose=true "SEIR model with guided proposals" begin
 
-    seed!(2121916527)
+    seed!(2123986527)
 
     g = parse_newick(GuidedSEIR.seir_trees[1], time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured}
