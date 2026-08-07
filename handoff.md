@@ -374,3 +374,15 @@ could consider (not requested, not started):
   parameter-regime change (`β_CH>0`, different `B_C`/`I_C0`) has been attempted.
 - `yang-phylopomp/mers_profile.R`'s MCAP patch is dry-run-verified only; never
   actually re-run to produce `profile_likelihood_mcap.png`.
+- **Cross-language gold-standard validation (never implemented).** Nothing in
+  the repo validates the Julia filter's *absolute* likelihood against an
+  independent implementation. The check would be: run R `phylopomp`'s shipped
+  `runTwoSpecies` filter on the same Dudas genealogy at matched parameters
+  (β_cc, β_hh, β_hc=β₂₁, β_ch=β₁₂, γ_*, χ_*, N_*) and compare log-likelihoods;
+  agreement within Monte Carlo error would be the definitive confirmation.
+  Salvaged from `src/examples/mers_naive_fixes_test.jl`, a v26-era regression
+  harness deleted 2026-08-05 — it was stale three ways (old Greek kwarg names,
+  and its one substantive assertion, `alpha[9:12] == [2.0,3.0,2.0,3.0]`, encoded
+  the *pre*-per-capita demography that round 4 replaced). Only the two
+  aspirational `@test_skip` ideas were worth keeping: this one, and three-filter
+  agreement, which `test/mers_{soft,guided,hard}.jl` now cover concretely.
