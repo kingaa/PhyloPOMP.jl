@@ -37,7 +37,7 @@
 
 \begin{document}
 \begin{center}
-{\large\bfseries MERS Filtering Equations (v29)}\\[2pt]
+{\large\bfseries MERS Filtering Equations (v30)}\\[2pt]
 {\small A companion to King, Lin \& Ionides, arXiv:2405.17032}
 \end{center}
 \medskip
@@ -91,11 +91,8 @@ adopted back to the per-capita form v25 had removed: $B_C\,S_C/N_C$ and $B_H\,S_
 demes, symmetric), in place of $B_C\ind_{S_C>0}$ and $B_H\ind_{S_H>0}$. The same change has been
 ported into \texttt{mers\_soft.jl}, \texttt{mers\_guided.jl}, and \texttt{mers\_hard.jl}
 (previously still on the constant/guarded form) so all four kernels agree.
-\textbf{This does not match the currently-checked-out \texttt{mers.yml}} (the two most recently
-modified copies found, dated after v25's citation, both still specify the constant/guarded
-rate for \emph{both} demes) --- i.e.\ the Julia \texttt{devel} branch and the R reference model
-currently disagree on this term, and this document does not resolve which is intended; it
-records the Julia-side choice actually shipped in this repository's kernels. See \S8.2 below
+\emph{(Corrected in v30 --- see below. The v28 text asserted here that this diverged from the R
+reference model; it does not.)} See \S8.2 below
 for the updated reduced exit rate, and \texttt{mers\_kernel\_diagnostic\_findings.md} for a
 related, separate correction (the real-tree collapse point under current defaults is the first
 Human sample, $\chi_H=0$, not camel extinction --- that finding is empirical/diagnostic and is
@@ -116,6 +113,20 @@ $\varepsilon=0$ is opt-in, added specifically so a user who prefers to let this 
 show up as $-\infty$ can do so without disabling the floor helpers' separate, unrelated
 all-zero-weight fallback (which still substitutes a uniform law when literally no weight
 information is available at all, independent of $\varepsilon$).
+
+\smallskip
+\textbf{Changes in v30.} \emph{Correction: the v28 Julia/R demography ``divergence'' was an
+error and did not exist.} v28 asserted that the per-capita death rates $B_C S_C/N_C$,
+$B_H S_H/N_H$ disagreed with the R \texttt{phylopomp} reference \texttt{yaml/mers.yml}, and
+\S8.1 repeated the claim. That conclusion was drawn from stale local clones of the R
+repository, which had not been fetched: their newest commit touching \texttt{yaml/mers.yml}
+was \texttt{817e558} (2026-07-02), predating the change in question. Upstream
+\texttt{kingaa/phylopomp} commit \texttt{f636a7e} (``fix MERS demography'', 2026-08-01)
+rewrote \texttt{death\_c}/\texttt{death\_h} to \texttt{params.Bc/params.Nc * state.Sc} and
+\texttt{params.Bh/params.Nh * state.Sh}, and dropped the \texttt{if (S>0)} guards --- exactly
+the form this repository's kernels use. \textbf{The Julia and R models agree on this term};
+both were corrected in the same direction. Nothing in the derivation, the code, or the
+reduced exit rate changes as a result --- only the erroneous divergence claim is withdrawn.
 \end{notebox}
 
 \section{Plain-Language Overview}
@@ -769,10 +780,10 @@ already zero exactly when $S_C=0$, so no separate guard indicator is needed --- 
 constant-rate form, an attempted death at $S_C=0$ never has positive hazard in the first place, and
 the matching inflow to $x$ (from $x{+}e_{S_C}$) is likewise unconditional. Human death $D_H$ is the
 exact mirror: per-capita rate $B_H S_H/N_H$. Births remain the constant rates $B_C$, $B_H$ (unchanged
-from v25). \textbf{This is not currently matched by the checked-out \texttt{mers.yml}}, whose
-\texttt{death\_c}/\texttt{death\_h} marks both still use the constant, guarded form
-(\texttt{rate params.Bh}; \texttt{jump if(Sh>0) Sh-=1}) that v25 verified against; see the v28
-changelog note. The sampling marks SC, SH are singular and contribute nothing on open intervals; their
+from v25). This \emph{does} agree with the R \texttt{phylopomp} reference model: its
+\texttt{yaml/mers.yml} was changed to the same per-capita form, and likewise dropped its
+\texttt{if (S>0)} guard, in \texttt{f636a7e} (``fix MERS demography'', 2026-08-01). The sampling
+marks SC, SH are singular and contribute nothing on open intervals; their
 full hazards $\chi_C I_C+\chi_H I_H$ enter only as the decay above.
 \section{Filter Components}
 \label{sec:filter-components}

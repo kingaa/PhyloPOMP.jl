@@ -326,14 +326,9 @@ a merge: the file had been reset to upstream's naming/API (non-underscored
    `@indicator(S>0, B)` (flat, guarded) to `B*S/N` (per-capita, self-zeroing).
    Verified via direct `rcateg` sampling (200k draws) that a zero-weight category is
    never selected when mixed with nonzero ones, so dropping the indicator guard
-   doesn't risk negative `S`. **Found a live discrepancy while documenting this**:
-   the two most recently modified copies of the reference R `mers.yml`
-   (`phylopomp`/`phylopomp-fork`, both last touched by commit `817e558`, Jul 2) still
-   use the old flat/guarded rate for *both* demes — i.e. the Julia `devel` branch and
-   the R reference currently disagree on this term. Per explicit user decision, kept
-   the per-capita (Julia) form and documented the disagreement rather than silently
-   picking a side; **worth raising with Aaron directly** since it's a two-line
-   question that's fast for him and slow to reverse-engineer from here.
+   doesn't risk negative `S`. ~~Found a live discrepancy: the R `mers.yml` still uses
+   the flat/guarded rate, so Julia and R disagree.~~ **This was wrong — retracted
+   2026-08-07, see below.**
 3. **`mers_kernel_diagnostic_findings.md` corrected**: under the module's current
    *bare* defaults (`chi_h=0.0`, changed since the original diagnostic via the
    "change default MERS parameters" commit), the real tree's first `-Inf` is now at
@@ -359,6 +354,44 @@ a merge: the file had been reset to upstream's naming/API (non-underscored
 formula + Julia/R discrepancy note in v28; ε=0 mode in v29), each version
 recompiled cleanly and spot-checked visually via `pdftoppm`, not just `pdftotext`.
 
+## Follow-up round 5: retraction — the Julia/R demography "divergence" did not exist (2026-08-07)
+
+Round 4 item 2 reported that this repository's per-capita demography death rates
+(`B_c*S_c/N_c`, `B_h*S_h/N_h`) disagreed with the R `phylopomp` reference model,
+and that disagreement was written into `mers_filter_suite.tex` v28 (changelog and
+§8.1) and into commit `efca216`'s message. **That was an error. There is no
+divergence.**
+
+Cause: the conclusion was drawn from local clones of `kingaa/phylopomp` that had
+never been fetched. In those stale clones the newest commit touching
+`yaml/mers.yml` was `817e558` (2026-07-02), which does predate the change — so
+`git log -- yaml/mers.yml` appeared to confirm the flat/guarded rate was current.
+It was not; the clone was simply behind, and the staleness was explicitly (and
+wrongly) ruled out at the time.
+
+What upstream actually says, at `origin/master` after fetching:
+
+    death_c:
+      rate: params.Bc/params.Nc * state.Sc
+      jump: state.Sc -= 1;
+    death_h:
+      rate: params.Bh/params.Nh * state.Sh
+      jump: state.Sh -= 1;
+
+introduced by `f636a7e` ("fix MERS demography", 2026-08-01) — the same per-capita
+form, and likewise dropping the `if (S>0)` guard, matching this repository's
+kernels exactly. Aaron corrected both the Julia and the R side; only one of the
+two was seen.
+
+Corrected in: `mers_filter_suite.tex` (v30 changelog entry withdrawing the claim,
+plus §8.1 rewritten to state the agreement), this file (round 4 item 2 struck,
+"Remaining work" entry withdrawn), and commit `efca216`'s message (amended during
+the trailer-stripping rebase of the same date).
+
+Methodology note for future comparisons: fetch before concluding anything about a
+reference repository, and treat `git log` in an unfetched clone as evidence about
+the clone, not about upstream.
+
 ## Remaining work
 
 None required by this task's deliverables list. Optional follow-ups a future session
@@ -368,8 +401,8 @@ could consider (not requested, not started):
 - Install `texlive-latex-extra` (which provides `mdframed`/`enumitem`) if the
   original, more elaborate `notebox`/list styling is wanted back; the current
   self-contained replacements are functionally complete but visually simpler.
-- Raise the Julia/R demography-rate discrepancy (round 4, item 2) with Aaron; a
-  drafted note is not yet sent (see chat for a draft on request).
+- ~~Raise the Julia/R demography-rate discrepancy with Aaron.~~ **Withdrawn: there
+  is no discrepancy** (see round 5).
 - The camel-extinction absorbing-state finding was diagnosed, not fixed — no
   parameter-regime change (`β_CH>0`, different `B_C`/`I_C0`) has been attempted.
 - `yang-phylopomp/mers_profile.R`'s MCAP patch is dry-run-verified only; never
