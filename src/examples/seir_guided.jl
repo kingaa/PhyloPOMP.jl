@@ -105,7 +105,7 @@ singular_root!(
     i, _, p = rcateg(node.present[:,1].*(n.-ells), true)
     if i > 0
         live = true
-        ll = log(p)
+        ll = -log(p)
         plant!(cols,D(i),node.chillins[1])
     else
         live = false
@@ -163,7 +163,7 @@ singular_sample!(node, cols, state; kwargs...) = begin
 end
 
 singular_branch!(node, cols, (;S, E, I, R); β, pop, _...) = begin
-    if node.parlin ∈ cols[Infec]
+    if node.parlin ∈ cols[Infec] && S > 0
         live = true
         ll = log(β*S*I/pop)
         k, _, p = rcateg(branch_options(node.present), true)
@@ -174,9 +174,7 @@ singular_branch!(node, cols, (;S, E, I, R); β, pop, _...) = begin
         else
             fork!(cols,Infec,node.parlin,(Infec,Expos),node.chillins)
         end
-        if S > 0
-            S -= 1
-        end
+        S -= 1
         E += 1
         ll -= log(E*I)
     else
