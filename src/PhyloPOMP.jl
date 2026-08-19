@@ -52,4 +52,6 @@ include("indicator.jl")
 
 include("examples/Examples.jl")
 
+include("simulate.jl")
+
 end # module PhyloPOMP
