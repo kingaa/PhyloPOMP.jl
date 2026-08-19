@@ -10,10 +10,9 @@ these auxiliary intensities is returned to the population process through
 the compensating decay `alpha_population - sum_j beta_j`.
 
 This is the MERS analogue of `HardSEIR` (seir_hard.jl), and differs from
-`SoftMERS` precisely in that its per-branch law (`hard_branch_law` in
-`mers_funs.jl`) uses the raw relative hazards as intensity multipliers
-rather than renormalizing them to preserve the naive tracked-branch mass
-`ell/I`.
+`SoftMERS` precisely in that its per-branch auxiliary intensities use the
+raw relative hazards directly rather than renormalizing them to preserve
+the naive tracked-branch mass `ell/I`.
 """
 module HardMERS
 
@@ -29,28 +28,12 @@ const mers_tree = parse_newick(first(mers_trees), t0=0, demes=Demes)
 
 include("mers_funs.jl")
 
-## Twelve hard events. The cross-host transmissions keep the naive
-## no-swap/swap split (like `SoftMERS`), but both the no-swap identity mass
-## (`kappa_epsilon(0)`, epsilon-floored exactly as in `cross_proposal`) and
-## each swap branch's auxiliary intensity (`kappa_epsilon(b) =
-## (1-epsilon) r_b/I + epsilon/(ell+1)`, via `hard_branch_law`) are
-## support-safe: every target-compatible outcome keeps strictly positive
-## mass even when the corresponding relative hazard vanishes or is
-## non-finite. Because `hard_branch_law` does *not* renormalize to `ell/I`,
-## `kappa_epsilon(0) + sum_b kappa_epsilon(b)` need not equal 1; the
-## shortfall or excess relative to the population rate is returned via
-## `decay` below (`rate_hc - alpha[3] - alpha[4]`, etc.), which may
-## therefore be negative -- exactly the "auxiliary rate may exceed the
-## population rate" behavior that distinguishes hard proposals. The
-## within-host transmissions (cc, hh) and the demography events carry no
-## cross-deme swap, so they are treated as target-only (`pi = 1`).
 event_rates!(
     alpha, pi, rh, n,
     cols, ellC, ellH,
     S_c, I_c, S_h, I_h;
     β_cc, β_ch, β_hc, β_hh,
     γ_c, γ_h, χ_c, χ_h, B_c, B_h, N_c, N_h,
-    proposal_floor = 0.05,
     _...,
 ) = begin
     rh_c2h = relhaz(rh,n,cols,Camel,Human)
@@ -65,19 +48,17 @@ event_rates!(
     alpha[2] = rate_hh
 
     rate_hc = β_hc*S_h*I_c/N_c                                   # camel → human
-    kappaC0, _ = cross_proposal(I_c, ellC, proposal_floor)
-    kappaC = hard_branch_law(rh_c2h, ellC, I_c, proposal_floor)
-    pi[3] = kappaC0                                       # no-swap
+    pi[3] = @indicator(I_c > 0, (I_c-ellC)/I_c)          # no-swap (identity)
     alpha[3] = rate_hc*pi[3]
-    pi[4] = sum(kappaC)                                   # boosted swap (aggregate)
+    onC = sum(rh_c2h)
+    pi[4] = @indicator(I_c > 0, onC/I_c)                 # swap (aggregate)
     alpha[4] = rate_hc*pi[4]
 
     rate_ch = β_ch*S_c*I_h/N_h                                   # human → camel
-    kappaH0, _ = cross_proposal(I_h, ellH, proposal_floor)
-    kappaH = hard_branch_law(rh_h2c, ellH, I_h, proposal_floor)
-    pi[5] = kappaH0                                       # no-swap
+    pi[5] = @indicator(I_h > 0, (I_h-ellH)/I_h)          # no-swap (identity)
     alpha[5] = rate_ch*pi[5]
-    pi[6] = sum(kappaH)                                   # boosted swap (aggregate)
+    onH = sum(rh_h2c)
+    pi[6] = @indicator(I_h > 0, onH/I_h)                 # swap (aggregate)
     alpha[6] = rate_ch*pi[6]
 
     rate_c = γ_c*I_c                                          # camel removal
@@ -98,7 +79,7 @@ event_rates!(
         rate_ch - alpha[5] - alpha[6] +
         rate_c - alpha[7] +
         rate_h - alpha[8]
-    decay, kappaC, kappaH
+    decay, rh_c2h, rh_h2c
 end
 
 regular_part!(
@@ -118,7 +99,7 @@ regular_part!(
         ellC, ellH = ell(cols)
         while t < tf
             relhaz!(rh,t,guide,node)
-            decay, kappaC, kappaH = event_rates!(
+            decay, rh_c2h, rh_h2c = event_rates!(
                 alpha, pi, rh, n,
                 cols, ellC, ellH,
                 S_c, I_c, S_h, I_h;
@@ -141,7 +122,7 @@ regular_part!(
                     I_h += 1
                     ll += log(1 - ellH/I_h)
                 elseif k==4                                 # camel → human, swap
-                    b, _, p = rcateg(kappaC, cols[Camel], true)
+                    b, _, p = rcateg(rh_c2h, cols[Camel], true)
                     ll -= log(p)
                     S_h -= 1
                     I_h += 1
@@ -152,7 +133,7 @@ regular_part!(
                     I_c += 1
                     ll += log(1 - ellC/I_c)
                 elseif k==6                                 # human → camel, swap
-                    b, _, p = rcateg(kappaH, cols[Human], true)
+                    b, _, p = rcateg(rh_h2c, cols[Human], true)
                     ll -= log(p)
                     S_c -= 1
                     I_c += 1

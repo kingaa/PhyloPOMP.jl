@@ -4,14 +4,12 @@
 A module containing an implementation of the phylodynamic filter for the
 MERS-CoV two-host (Camel/Human) model, using so-called "soft" proposals.
 Soft preserves the naive aggregate identity/tracked-branch mass split
-(`(I-ell)/I` vs `ell/I`, support-safe via an epsilon floor -- see
-`NaiveMERS.cross_proposal` / `cross_proposal` in `mers_funs.jl`) but, when
-a tracked-branch event is proposed, distributes that fixed mass among the
-tracked branches according to the guide's relative hazards rather than
-uniformly. The overall event rate for each population process therefore
-remains exactly that of the underlying population process, matching the
-target's collapsed identity/tracked split; only the *within-group* branch
-choice is guided.
+(`(I-ell)/I` vs `ell/I`) but, when a tracked-branch event is proposed,
+distributes that fixed mass among the tracked branches according to the
+guide's relative hazards rather than uniformly. The overall event rate
+for each population process therefore remains exactly that of the
+underlying population process, matching the target's collapsed
+identity/tracked split; only the *within-group* branch choice is guided.
 
 This is the MERS analogue of `SoftSEIR` (seir_soft.jl), and is
 mathematically distinct from `GuidedMERS` (mers_guided.jl), which instead
@@ -33,21 +31,11 @@ const mers_tree = parse_newick(first(mers_trees), t0=0, demes=Demes)
 
 include("mers_funs.jl")
 
-## Twelve events, exactly as in `NaiveMERS.event_rates!`: cc, hh, hc-identity,
-## hc-tracked-group, ch-identity, ch-tracked-group, camel removal, human
-## removal, and the four demography events. `pi[3]/pi[4]` and `pi[5]/pi[6]`
-## carry the epsilon-floored identity/tracked-group split from
-## `cross_proposal`, identical in form to `NaiveMERS`'s. The only departure
-## from `NaiveMERS` is *which* specific tracked branch is chosen once the
-## tracked-group outcome is drawn (see `regular_part!` below): naive chooses
-## uniformly, soft chooses by relative hazard (with a uniform fallback and
-## epsilon floor via `floored_branch_law`).
 event_rates!(
     alpha, pi, cols,
     S_c, I_c, S_h, I_h;
     β_cc, β_ch, β_hc, β_hh,
     γ_c, γ_h, χ_c, χ_h, B_c, B_h, N_c, N_h,
-    proposal_floor = 0.05,
     _...,
 ) = begin
     ellC, ellH = ell(cols)
@@ -63,13 +51,11 @@ event_rates!(
     alpha[11] = B_c*S_c/N_c
     alpha[12] = B_h*S_h/N_h
 
-    qC0, qC1 = cross_proposal(I_c, ellC, proposal_floor)
-    qH0, qH1 = cross_proposal(I_h, ellH, proposal_floor)
     pi[1:2] .= one(Prob)
-    pi[3] = qC0
-    pi[4] = qC1
-    pi[5] = qH0
-    pi[6] = qH1
+    pi[3] = @indicator(I_c > 0, (I_c-ellC)/I_c)
+    pi[4] = @indicator(I_c > 0, ellC/I_c)
+    pi[5] = @indicator(I_h > 0, (I_h-ellH)/I_h)
+    pi[6] = @indicator(I_h > 0, ellH/I_h)
     pi[7:12] .= one(Prob)
 
     χ_c*I_c + χ_h*I_h +
@@ -90,7 +76,6 @@ regular_part!(
         pi = similar(Vector{Prob}, 12)
         step::Time = zero(Time)
         decay::Prob = zero(Prob)
-        proposal_floor = get(kwargs, :proposal_floor, 0.05)
         ellC, ellH = ell(cols)
         while t < tf
             decay = event_rates!(
@@ -117,8 +102,7 @@ regular_part!(
                 elseif k==4                                 # camel → human, tracked-branch swap
                     lins = [guide[node].linmap[b] for b ∈ cols[Camel]]
                     rh = relhaz(t, guide, node, Camel, Human, lins)
-                    qb = floored_branch_law(rh, ellC, I_c, proposal_floor)
-                    b, _, share = rcateg(qb, cols[Camel], true)
+                    b, _, share = rcateg(rh, cols[Camel], true)
                     ll -= log(share)
                     S_h -= 1
                     I_h += 1
@@ -131,8 +115,7 @@ regular_part!(
                 elseif k==6                                 # human → camel, tracked-branch swap
                     lins = [guide[node].linmap[b] for b ∈ cols[Human]]
                     rh = relhaz(t, guide, node, Human, Camel, lins)
-                    qb = floored_branch_law(rh, ellH, I_h, proposal_floor)
-                    b, _, share = rcateg(qb, cols[Human], true)
+                    b, _, share = rcateg(rh, cols[Human], true)
                     ll -= log(share)
                     S_c -= 1
                     I_c += 1

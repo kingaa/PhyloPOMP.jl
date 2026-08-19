@@ -37,7 +37,7 @@
 
 \begin{document}
 \begin{center}
-{\large\bfseries MERS Filtering Equations (v30)}\\[2pt]
+{\large\bfseries MERS Filtering Equations (v31)}\\[2pt]
 {\small A companion to King, Lin \& Ionides, arXiv:2405.17032}
 \end{center}
 \medskip
@@ -127,6 +127,49 @@ rewrote \texttt{death\_c}/\texttt{death\_h} to \texttt{params.Bc/params.Nc * sta
 the form this repository's kernels use. \textbf{The Julia and R models agree on this term};
 both were corrected in the same direction. Nothing in the derivation, the code, or the
 reduced exit rate changes as a result --- only the erroneous divergence claim is withdrawn.
+
+\smallskip
+\textbf{Changes in v31 (17 August 2026).} \emph{The $\varepsilon$-floor proposal mechanism has been
+removed from every MERS kernel.} The five shared helpers
+(\texttt{floored\_shares}, \texttt{floored\_shares\_feasible}, \texttt{cross\_proposal},
+\texttt{floored\_branch\_law}, \texttt{hard\_branch\_law}), the \texttt{proposal\_floor}
+parameter, and the local \texttt{floored\_choose\_branch} in \texttt{mers\_guided.jl} have all
+been deleted. Every MERS kernel now uses the same unfloored proposal pattern that the SEIR
+kernels (\texttt{seir\_soft.jl}, \texttt{seir\_guided.jl}, \texttt{seir\_hard.jl}) have always
+used.
+
+\emph{Why it was wrong.} The floor was introduced to ``repair'' the boundary $\pi^\emptyset=0$
+that arises at $I=\ell$. But this is not a bug that needs repairing. The reduced compatibility
+coefficient (KLI Eq.~43) is derived \emph{before} the proposal $\pi$ is chosen, by summing out the
+inline-event indicator $m$: the same-deme swap $\sigma^b_{II}$ and the no-event transition $y'=y$
+both produce the same reduced destination $d'=d$, and their contributions collapse to give
+$(E-\ell_E)/E$ (SEIRS case) or an analogous term for MERS. The $\pi$'s introduced in Eqs.~44--46
+are auxiliary importance-sampling probabilities that \emph{factor} this already-derived
+coefficient into a simulable driver and an importance weight. A zero in the proposal
+$\pi^\emptyset=(I-\ell)/I$ at $I=\ell$ therefore means the driver rate for that branch is zero:
+the Gillespie sampler never selects it, and the boost $\Phi/\pi$ is never evaluated for it. The
+implementation correctly never forms a $0\times\infty$ product. Replacing $\pi$ with
+$\max(\pi,\varepsilon)$ is not a correction demanded by the equations; it defines a different
+importance sampler, and it was never derived or justified as such.
+
+A detailed derivation of why Eqs.~43--46 do not license the $\varepsilon$-floor is given in
+the companion note \texttt{kli\_seirs\_pi\_note.tex}
+(\texttt{/home/dislam/Videos/phylopomp\_session\_generated\_tex\_pdf/}).
+
+\emph{What replaces it.} Soft uses the plain naive split $\pi^\emptyset=(I-\ell)/I$,
+$\pi^b=\ell/(I\cdot\ell)\cdot r_b/\sum r_{b'}$ (guide-weighted within the tracked group, no
+floor), with the branch draw via \texttt{rcateg} on the raw relative hazards, exactly as SEIR
+Soft uses \texttt{choose\_branch}. Guided uses \texttt{choose\_branch} directly for the joint
+identity/branch categorical. Hard uses the raw unfloored auxiliary intensities
+$\kappa^0=(I-\ell)/I$, $\kappa^b=r_b/I$ (or $\sum r_b/I$ for the aggregate), with the same
+compensating-decay structure as SEIR Hard.
+
+The root and singular-fork proposals now use guide-weighted \texttt{rcateg} without a feasibility
+mask or floor: when all rates are zero, \texttt{rcateg} returns $k=0$ (all-zero-weight fallback)
+and the particle receives $-\infty$ weight, which is the correct penalty.
+
+The \S\ref{sec:proposal-kernel} text below has been left intact so the reader can see
+what was previously written and understand exactly what has been retracted.
 \end{notebox}
 
 \section{Plain-Language Overview}
@@ -865,6 +908,15 @@ $\phi$: $B_{\mathrm{TCC}}=\phi_{\mathrm{TCC}}=2/[I_C(I_C-1)]$ (THH mirror). A \e
 $\pi=\tfrac12$ per orientation and $B_{\mathrm{THC}}=\phi_{\mathrm{THC}}/\tfrac12=2/(I_CI_H)$ (TCH
 mirror). KLI's SEIRS branch-point proposal uses the same \textonehalf{}+\textonehalf{} orientation split.
 
+\begin{notebox}
+\textbf{Retracted in v31.} The material from ``Full-support proposal'' through the end of
+``Aggregate-plus-conditional equivalence'' below, and all references to the $\varepsilon$-floor
+helpers, are retained for historical reference but \textbf{no longer describe the implemented
+code}. The $\varepsilon$-floor mechanism has been removed from every MERS kernel (see the v31
+changelog above for the mathematical argument). The current implementation uses unfloored
+proposals throughout, identical in structure to the SEIR kernels.
+\end{notebox}
+
 \paragraph{Full-support proposal for the weighted process.} The na\"{i}ve relative-abundance
 proposal above is not support-safe: when $I_C=\ell_C(y^-)$ (all camels tracked),
 $\pi^\emptyset_{\mathrm{THC}}=0$, while the collapsed identity-coloring weight
@@ -1086,77 +1138,59 @@ exists to connect \S\ref{sec:proposal-kernel} to the actual implementation, deli
 after the derivation and the summary rather than alongside the math.
 
 \paragraph{Shared code.} \texttt{src/examples/mers\_funs.jl} holds everything shared by all three
-guided-family kernels: \texttt{knowledge!} and \texttt{singular\_part!} (the root- and
-fork-coloring proposals of the last paragraph of \S\ref{sec:proposal-kernel}, and the shared
-\texttt{filter\_pomp} constructor with its \texttt{proposal\_floor} parameter, i.e.\
-$\varepsilon$), together with the epsilon-floor building blocks used by the three kernels below:
-\texttt{floored\_shares} and \texttt{floored\_shares\_feasible} implement $\pi_\varepsilon(j)=
-(1-\varepsilon)\pi_0(j)+\varepsilon/n$ over a feasible outcome set of size $n$;
-\texttt{cross\_proposal} implements the na\"{i}ve/Soft identity-vs-tracked-group split
-$(\pi_0(0),\sum_{j\ge1}\pi_0(j))$; \texttt{floored\_branch\_law} implements Soft's per-branch
-$\pi_\varepsilon(b)$; \texttt{hard\_branch\_law} implements Hard's $\kappa_\varepsilon(b)$.
+guided-family kernels: \texttt{knowledge!}, \texttt{singular\_part!} (the root- and
+fork-coloring proposals), and the shared \texttt{filter\_pomp} constructor.
+
+\begin{notebox}
+\textbf{v31 update.} As of v31, the five epsilon-floor helpers
+(\texttt{floored\_shares}, \texttt{floored\_shares\_feasible}, \texttt{cross\_proposal},
+\texttt{floored\_branch\_law}, \texttt{hard\_branch\_law}), the \texttt{proposal\_floor}
+parameter, and the local \texttt{floored\_choose\_branch} in \texttt{mers\_guided.jl} have all
+been removed. The implementation now uses unfloored proposals throughout, matching the SEIR
+kernels' existing pattern.
+\end{notebox}
 
 \paragraph{Relation to this repository's SEIR implementation.} The three guided-family kernels
-were designed by generalizing this repository's existing single-deme-swap SEIR implementation
+generalize this repository's existing single-deme-swap SEIR implementation
 (\texttt{seir\_soft.jl}, \texttt{seir\_guided.jl}, \texttt{seir\_hard.jl}, and their shared
-\texttt{seir\_funs.jl}) to MERS's two-host, two-direction cross-deme structure, and by adding the
-$\varepsilon$-floor, which the SEIR implementation does not have at all (every SEIR kernel is
-support-\emph{unsafe} in the same way the na\"{i}ve MERS kernel was before this floor was added).
-Concretely:
+\texttt{seir\_funs.jl}) to MERS's two-host, two-direction cross-deme structure. As of v31,
+MERS and SEIR use the same unfloored proposal pattern:
 \begin{itemize}
 \item \textbf{Soft} (\texttt{mers\_soft.jl}) mirrors \texttt{seir\_soft.jl}'s architecture: an
-aggregate identity/tracked-group split (there, via \texttt{seir\_funs.jl}'s generic
-\texttt{transmission!}, parameterized by \texttt{onI=ellI}) followed by a conditional branch draw
-via \texttt{PhyloPOMP.choose\_branch(rh, n, cols, i, j)} (the low-level, precomputed-hazard
-overload in \texttt{guide.jl}, populated once per interval by \texttt{relhaz\_alloc}/
-\texttt{relhaz!}). MERS's version keeps the same two-stage shape but replaces the split and the
-conditional draw with the floored \texttt{cross\_proposal}/\texttt{floored\_branch\_law} above, and
-generalizes from one swap direction to two (camel$\to$human and human$\to$camel).
+aggregate identity/tracked-group split via the naive $\pi^\emptyset=(I-\ell)/I$,
+$\pi^{\mathrm{swap}}=\ell/I$, followed by a conditional branch draw using
+\texttt{rcateg} on the raw relative hazards from \texttt{relhaz}.
 \item \textbf{Guided} (\texttt{mers\_guided.jl}) mirrors \texttt{seir\_guided.jl}'s architecture: a
 single combined transmission rate per direction, with the identity-vs-branch choice made in one
 joint draw via \texttt{PhyloPOMP.choose\_branch(t, guide, node, n, cols, i, j)} (the higher-level
-overload in \texttt{guide.jl} that recomputes the hazard on demand). Because that function has no
-floor, and \texttt{guide.jl} is shared code that \texttt{seir\_guided.jl}/\texttt{seir\_hard.jl}
-depend on unfloored, \texttt{mers\_guided.jl} does not edit it; instead it defines a local,
-floored analogue, \texttt{floored\_choose\_branch}, built from the shared \texttt{floored\_shares}
-helper.
+overload in \texttt{guide.jl} that recomputes the hazard on demand).
 \item \textbf{Hard} (\texttt{mers\_hard.jl}) mirrors \texttt{seir\_hard.jl}'s architecture: the
-same \texttt{seir\_funs.jl} generic \texttt{transmission!}, but parameterized by
-\texttt{onI=sum\_relhaz(...)} (the raw hazard sum, not the tracked-lineage count), and the same
-\texttt{choose\_branch(rh, n, cols, i, j)} for the conditional branch draw. MERS's version replaces
-the unnormalized rate split with the floored \texttt{cross\_proposal}/\texttt{hard\_branch\_law}
-above, and keeps the compensating-decay term (\texttt{decay} accumulating
-\texttt{rate\ -\ alpha[identity]\ -\ alpha[swap-group]}) that \texttt{seir\_hard.jl} already uses
-for the same purpose.
+unnormalized auxiliary intensities $\kappa^0=(I-\ell)/I$, $\kappa^b=r_b/I$ (via
+\texttt{sum\_relhaz} for the aggregate), with the conditional branch draw via
+\texttt{rcateg} on the raw relative hazards, and the compensating-decay term
+(\texttt{decay} accumulating \texttt{rate - alpha[identity] - alpha[swap-group]}).
 \end{itemize}
-One structural difference from the SEIR baseline: \texttt{seir\_guided.jl} does not
-\texttt{include("seir\_funs.jl")} (it duplicates \texttt{singular\_part!} instead), whereas all
-three MERS kernels \texttt{include("mers\_funs.jl")}, since the epsilon-floored root/fork proposal
-is shared identically across all three here.
+All three MERS kernels \texttt{include("mers\_funs.jl")} for the shared
+\texttt{singular\_part!} and \texttt{filter\_pomp} constructor.
 
 \paragraph{Tests.} \texttt{test/mers\_soft.jl}, \texttt{test/mers\_guided.jl}, and
 \texttt{test/mers\_hard.jl} each check: construction, the zero-initial-infected $-\infty$
 likelihood, simulation, and a finite-likelihood particle filter on a small hand-built fixture (the
 real 270-tip Dudas et al.\ genealogy used elsewhere in this document is too large for a modest
 particle count to reliably match every observed tip deme, so it is used only for the
-zero-infected and constructor checks). Beyond that:
-\begin{itemize}
-\item \texttt{test/mers\_soft.jl} additionally checks $\ell=0\Rightarrow\pi_\varepsilon(0)=1$;
-strict positivity of every outcome at the $I=\ell$ boundary; that
-$\sum_{b\ge1}\pi_\varepsilon(b)$ from \texttt{floored\_branch\_law} agrees with
-\texttt{cross\_proposal}'s tracked-group mass (the aggregate-plus-conditional equivalence,
-numerically); and that Soft's and Guided's log-likelihood estimates on the same genealogy and a
-deliberately nonuniform guide differ by more than Monte Carlo noise (the Soft-vs-Guided
-distinction argued in \S\ref{sec:proposal-kernel}).
-\item \texttt{test/mers\_hard.jl} additionally checks the same boundary/positivity properties for
-\texttt{hard\_branch\_law}, the aggregate-plus-conditional equivalence for $\kappa_\varepsilon$,
-and the rate/weight identity $\beta_j=\alpha\,\kappa_\varepsilon(j)$ together with
-$\log(\alpha\Phi_j/\beta_j)=\log(\Phi_j/\kappa_\varepsilon(j))$ from \S\ref{sec:proposal-kernel}.
-\item \texttt{test/mers\_guided.jl} checks the joint-normalization boundary/positivity properties
-directly on \texttt{floored\_shares} (the building block of \texttt{floored\_choose\_branch}), and
-that a dominant relative hazard pushes the joint identity share below the fixed na\"{i}ve ratio
-$(I-\ell)/I$, as \S\ref{sec:proposal-kernel} argues.
-\end{itemize}
+zero-infected check). \texttt{test/mers\_soft.jl} additionally checks that Soft's and Guided's
+log-likelihood estimates on the same genealogy and a deliberately nonuniform guide differ by
+more than Monte Carlo noise (the Soft-vs-Guided distinction argued in
+\S\ref{sec:proposal-kernel}).
+
+\begin{notebox}
+\textbf{v31 update.} The $\varepsilon$-floor unit tests (boundary positivity checks on
+\texttt{floored\_shares}, \texttt{floored\_branch\_law}, \texttt{hard\_branch\_law},
+\texttt{cross\_proposal}; the $\varepsilon=0$ vs.\ $\varepsilon>0$ comparisons; and the
+\texttt{proposal\_floor} \texttt{ArgumentError} tests) have all been removed, since the
+underlying helpers no longer exist. The structural tests (construction, simulation, pfilter,
+benchmark) are unchanged.
+\end{notebox}
 \texttt{test/mers\_naive.jl} cannot follow this pattern: unlike the three guided-family kernels,
 \texttt{NaiveMERS.filter\_pomp} (v28, resynced to upstream) takes no genealogy argument at all and
 always filters the full \texttt{mers\_tree}, so there is no way to substitute a small fixture. Its

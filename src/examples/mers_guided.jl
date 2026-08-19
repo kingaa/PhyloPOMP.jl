@@ -6,17 +6,13 @@ MERS-CoV two-host (Camel/Human) model, using "guided" proposals. Unlike
 `SoftMERS`, which preserves the naive identity/tracked-branch mass split
 and only guides the choice *within* the tracked-branch group, `GuidedMERS`
 jointly normalizes the identity weight (the untracked source-host count)
-together with every tracked branch's relative hazard, then applies a single
-epsilon-floored categorical draw over all of them at once. The
-identity/tracked split itself is therefore guide-driven here, not fixed to
-the naive ratio -- this is what makes `GuidedMERS` mathematically distinct
-from `SoftMERS`.
+together with every tracked branch's relative hazard, then draws from
+a single categorical over all of them at once. The identity/tracked split
+itself is therefore guide-driven here, not fixed to the naive ratio --
+this is what makes `GuidedMERS` mathematically distinct from `SoftMERS`.
 
 This is the MERS analogue of `GuidedSEIR` (seir_guided.jl); the joint
-chooser below is a locally floored analogue of
-`PhyloPOMP.choose_branch(t, guide, node, n, cols, i, j)` (`guide.jl`),
-which is left untouched because `GuidedSEIR`/`HardSEIR` rely on its
-unfloored behavior.
+chooser uses `choose_branch` from `guide.jl`.
 """
 module GuidedMERS
 
@@ -32,45 +28,6 @@ const mers_tree = parse_newick(first(mers_trees), t0=0, demes=Demes)
 
 include("mers_funs.jl")
 
-"""
-    floored_choose_branch(t, guide, node, n, cols, i, j, epsilon)
-
-Jointly guide-weight the identity outcome (weight `n - ell(cols,i)`, the
-number of untracked source hosts) and the tracked-branch outcomes (weights
-the relative hazards of lineages in `cols[i]`) by normalizing them
-together and mixing with a uniform floor of mass `epsilon` over all
-`ell(cols,i)+1` outcomes, so every target-compatible outcome (in
-particular the identity outcome at the `I == ell` boundary, and every
-branch when relative hazards vanish or are non-finite) keeps strictly
-positive proposal mass. Returns `(b, p)`: `b == zero(Name)` selects the
-identity outcome, otherwise `b` is the lineage chosen to swap; `p` is its
-floored, jointly-normalized selection probability.
-"""
-floored_choose_branch(
-    t::Time, guide, node::Integer, n, cols, i, j, epsilon::Real,
-) = begin
-    ellI = ell(cols, i)
-    lins = [guide[node].linmap[b] for b ∈ cols[i]]
-    rh = ellI > 0 ? relhaz(t, guide, node, i, j, lins) : Float64[]
-    cleaned = map(r -> (isfinite(r) && r > 0) ? Float64(r) : 0.0, rh)
-    w = vcat(Float64(n - ellI), cleaned)
-    shares = floored_shares(w, epsilon)
-    k, s, p = rcateg(shares, true)
-    if k==1
-        zero(Name), p
-    else
-        guide[node].alllins[lins[k-1]], p
-    end
-end
-
-## Ten events: cc, hh, camel→human (single jointly-guided identity/swap
-## choice), human→camel (ditto), camel removal, human removal, and the four
-## demography events. Unlike `SoftMERS`/`HardMERS`, there is no separate
-## identity-vs-tracked-group `pi` split at the rate level: the joint
-## normalization inside `floored_choose_branch` performs that split itself,
-## guided by the relative hazards, so the overall camel→human/human→camel
-## rate here is the single population rate `β_hc S_h I_c/N_c` (resp.
-## `β_ch S_c I_h/N_h`), never boosted or reduced (contrast `HardMERS`).
 event_rates!(
     alpha, ellC, ellH,
     S_c, I_c, S_h, I_h;
@@ -105,7 +62,6 @@ regular_part!(
         alpha = similar(Vector{Prob}, 10)
         step::Time = zero(Time)
         decay::Prob = zero(Prob)
-        proposal_floor = get(kwargs, :proposal_floor, 0.05)
         ellC, ellH = ell(cols)
         while t < tf
             decay = event_rates!(
@@ -126,7 +82,7 @@ regular_part!(
                     I_h += 1
                     ll += log(1 - ellH*(ellH-1)/I_h/(I_h-1))
                 elseif k==3                                 # camel → human
-                    b, p = floored_choose_branch(t, guide, node, I_c, cols, Camel, Human, proposal_floor)
+                    b, p = choose_branch(t, guide, node, I_c, cols, Camel, Human)
                     ll -= log(p)
                     S_h -= 1
                     I_h += 1
@@ -137,7 +93,7 @@ regular_part!(
                         ll += log(1 - ellC/I_c) - log(I_h)
                     end
                 elseif k==4                                 # human → camel
-                    b, p = floored_choose_branch(t, guide, node, I_h, cols, Human, Camel, proposal_floor)
+                    b, p = choose_branch(t, guide, node, I_h, cols, Human, Camel)
                     ll -= log(p)
                     S_c -= 1
                     I_c += 1
