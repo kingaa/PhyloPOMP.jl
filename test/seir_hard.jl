@@ -25,6 +25,10 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
+    p = HardSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0,ψ=0)
+    @test p isa POMP.PompObject
+    @test logLik(pfilter(p,Np=100))==-Inf
+
     p = HardSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0.01)
     @test p isa POMP.PompObject
 

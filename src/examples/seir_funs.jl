@@ -19,6 +19,22 @@ knowledge!(
     end
 end
 
+check(
+    gen::Genealogy,
+) = begin
+    for node ∈ eachindex(gen)
+        n = gen[node]
+        if n.type == Root
+            @assert length(n.children)==1 "wrong number of children ($(length(n.children)) != 1) at root $(n.name), t=$(n.slate)"
+        elseif n.type == Sample
+            @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
+        elseif n.type == Node
+            @assert length(n.children)==2 "wrong number of children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
+        end
+    end
+    nothing
+end
+
 transmission!(
     alpha, pi;
     β, S, I, pop,
@@ -100,81 +116,71 @@ event_rates!(alpha, pi; kwargs...) = begin
 end
 
 singular_part!(
-    cols, guide, node, ll,
+    cols, guide, node, ll, live,
     S, E, I, R;
     pop, β, ψ, χ,
     _...,
 ) = begin
     ellE, ellI = ell(cols)
-    n = guide[node]
-    @assert I ≥ ellI && E ≥ ellE
-    if n.type==Root
-        @assert length(n.chillins)==1 "wrong number of children ($(length(n.chillins)) != 1) at root $(n.name), t=$(n.time)"
-        i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
-        ll -= log(p)
-        if ismissing(i)
-            ## even though this realization is incompatible with the data,
-            ## it is necessary to correct the coloring to avoid downstream errors.
-            ll = Prob(-Inf)
-            ellE, ellI = plant!(cols,Infec,n.chillins[1])
-            I += 1
-        else
-            ellE, ellI = plant!(cols,i,n.chillins[1])
-        end
-    elseif n.type==Sample
-        @assert length(n.chillins)<2 "too many children ($(length(n.chillins)) > 1) at sample $(n.name), t=$(n.time)"
-        if n.parlin ∉ cols[Infec]
-            ## even though this realization is incompatible with the data,
-            ## it is necessary to correct the coloring to avoid downstream errors.
-            ll = Prob(-Inf)
-            ellE, ellI = swap!(cols,Expos,Infec,n.parlin)
-            E -= 1
-            I += 1
-        end
-        if length(n.chillins) == 0
-            k,_,p = rcateg([ψ, χ],true)
-            ll -= log(p)
-            ellE, ellI = chop!(cols,Infec,n.parlin)
-            if k==0
-                ll = Prob(-Inf)
-            elseif k==1         # non-destructive sample
-                ll += log(ψ*(I-ellI));
-            elseif k==2         # destructive sample
-                ll += log(χ*I)
-                I -= 1
-            end
-        elseif length(n.chillins) == 1
-            ellE, ellI = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
-            ll += log(ψ)
-        end
-    elseif n.type==Node
-        @assert length(n.chillins)==2 "wrong number of children ($(length(n.chillins)) ≠ 2) at node $(n.name), t=$(n.time)"
-        if n.parlin ∉ cols[Infec]
-            ## even though this realization is incompatible with the data,
-            ## it is necessary to correct the coloring to avoid downstream errors.
-            ll = Prob(-Inf)
-            ellE, ellI = swap!(cols,Expos,Infec,n.parlin)
-            E -= 1
-            I += 1
-        end
-        ll += log(β*S*I/pop)
-        k, _, p = rcateg([n.present[1,1]*n.present[2,2], n.present[1,2]*n.present[2,1]], true)
-        ll -= log(p)
-        @assert k ≠ 0
-        if k==1
-            ellE, ellI = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
-        else
-            ellE, ellI = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
-        end
-        if S > 0
-            S -= 1
-        end
-        E += 1
-        ll -= log(E*I)
-    else
-        @assert false "impossible node type" # COV_EXCL_LINE
+    if I < ellI || E < ellE
+        live = false
     end
-    ll, S, E, I, R
+    if live
+        n = guide[node]
+        if n.type==Root
+            i, _, p = rcateg(n.present[:,1].*[E-ellE, I-ellI], DemeSet, true)
+            ll -= log(p)
+            if ismissing(i)
+                live = false
+            else
+                ellE, ellI = plant!(cols,i,n.chillins[1])
+            end
+        elseif n.type==Sample
+            if n.parlin ∉ cols[Infec]
+                live = false
+            elseif length(n.chillins) == 0
+                k,_,p = rcateg([ψ, χ],true)
+                ll -= log(p)
+                ellE, ellI = chop!(cols,Infec,n.parlin)
+                if k==0
+                    live = false
+                elseif k==1         # non-destructive sample
+                    ll += log(ψ*(I-ellI));
+                elseif k==2         # destructive sample
+                    ll += log(χ*I)
+                    I -= 1
+                end
+            elseif length(n.chillins) == 1
+                ellE, ellI = chop!(cols,Infec,n.parlin,Infec,n.chillins[1])
+                ll += log(ψ)
+            end
+        elseif n.type==Node
+            if n.parlin ∉ cols[Infec]
+                live = false
+            else
+                ll += log(β*S*I/pop)
+                k, _, p = rcateg([n.present[1,1]*n.present[2,2], n.present[1,2]*n.present[2,1]], true)
+                ll -= log(p)
+                @assert k ≠ 0
+                if k==1
+                    ellE, ellI = fork!(cols,Infec,n.parlin,(Expos,Infec),n.chillins)
+                else
+                    ellE, ellI = fork!(cols,Infec,n.parlin,(Infec,Expos),n.chillins)
+                end
+                if S > 0
+                    S -= 1
+                end
+                E += 1
+                ll -= log(E*I)
+            end
+        else
+            @assert false "impossible node type" # COV_EXCL_LINE
+        end
+    end
+    if !live
+        ll = Prob(-Inf)
+    end
+    ll, S, E, I, R, live
 end
 
 """
@@ -190,6 +196,7 @@ filter_pomp(
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
     pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
 ) = begin
+    check(gen)
     guidegen = guide(gen,m,knowledge!)
     pomp(
         params = (
@@ -211,32 +218,32 @@ filter_pomp(
                 E = round(Int64, m*Float64(E0)),
                 I = round(Int64, m*Float64(I0)),
                 R = round(Int64, m*Float64(R0)),
+                live = true
             )
         end,
         rprocess = onestep(
             function (
                 ; t, dt,
                 node, ll, cols, guide,
-                S, E, I, R,
+                S, E, I, R, live,
                 kwargs...,
                 )
                 tf = t+dt
                 cols = copy(cols)
                 ll = zero(Prob)
-                ll, S, E, I, R = singular_part!(
-                    cols, guide, node, ll,
+                ll, S, E, I, R, live = singular_part!(
+                    cols, guide, node, ll, live,
                     S, E, I, R;
                     kwargs...,
                 )
-                if t < tf && isfinite(ll)
+                if live && t < tf && isfinite(ll)
                     ll, S, E, I, R = regular_part!(
                         cols, guide, node, ll,
                         t, tf, S, E, I, R;
                         kwargs...,
                     )
                 end
-                (; node = node+1, ll = ll, cols = cols,
-                 S = S, E = E, I = I, R = R)
+                (;node = node+1, ll, cols, S, E, I, R, live)
             end,
         ),
         logdmeasure = function (; ll, _...)

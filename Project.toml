@@ -15,7 +15,7 @@ PartiallyObservedMarkovProcesses = { url = "https://github.com/kingaa/PartiallyO
 [compat]
 EnumX = "1.0.7"
 LinearAlgebra = "1.12"
-PartiallyObservedMarkovProcesses = "0.7"
+PartiallyObservedMarkovProcesses = "0.8"
 Reexport = "1.2.2"
 julia = "1.12"
 
