@@ -25,6 +25,10 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
+    p = GuidedSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0,ψ=0)
+    @test p isa POMP.PompObject
+    @test logLik(pfilter(p,Np=100))==-Inf
+
     p = GuidedSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0.01)
     @test p isa POMP.PompObject
 
@@ -43,7 +47,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
         @info h2("pfilter benchmark")
         @btime pfilter($p, Np = 1000)
 
-        ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
+        @time ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
         llest,llse = logmeanexp(ll,se=true)
         @info "logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
     end
