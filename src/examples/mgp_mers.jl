@@ -19,6 +19,6 @@
 
     @event birth_c rate=B_c pop=(S_c=+1) move=none kind=regular
     @event birth_h rate=B_h pop=(S_h=+1) move=none kind=regular
-    @event death_c rate=(S_c > 0 ? B_c : 0.0) pop=(S_c=-1) move=none kind=regular
-    @event death_h rate=(S_h > 0 ? B_h : 0.0) pop=(S_h=-1) move=none kind=regular
+    @event death_c rate=B_c*S_c/N_c pop=(S_c=-1) move=none kind=regular
+    @event death_h rate=B_h*S_h/N_h pop=(S_h=-1) move=none kind=regular
 end

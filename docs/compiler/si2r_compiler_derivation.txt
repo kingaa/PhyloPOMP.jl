@@ -1,0 +1,201 @@
+SI2R — compiler-generated derivation
+Produced by mgpaudit()/explain() (src/examples/mgp_mgpaudit.jl, mgp_explain.jl)
+State used: ell=[2,2] (2 tracked I_L, 2 tracked I_H), n=[5,5] (5 total I_L, 5 total I_H)
+==============================================================================
+
+### mgpaudit(SI2R) — full model report ###
+
+MgpAuditReport(SI2R)  state: ℓ=[2, 2]  n=[5, 5]
+  marks (9):
+  * TL  [BIRTH, r=[2, 0]]  -- IN SCOPE (BIRTH/MIGRATION derivation)
+      state: ℓ=[2, 2]  n=[5, 5]
+      reduced transitions (M04): 2
+        - noop  key=(:noop, 1)  Φ_u=3//5  (2 full transition(s) collapsed)
+        - fork  key=(:fork, 1, (1, 1))  Φ_u=1//10  (1 full transition(s) collapsed)
+      classification (M05/M06): RegularFlow=1  SingularFlow=0  OutflowImbalanceTerm=1
+        - [regular_flow] Φ=3//5
+        - [outflow_imbalance] Φ=1//10  mechanism=inflow_outflow_imbalance reason=fork_unobserved_at_regular_time (NOT λ)
+  * TH  [BIRTH, r=[1, 1]]  -- IN SCOPE (BIRTH/MIGRATION derivation)
+      state: ℓ=[2, 2]  n=[5, 5]
+      reduced transitions (M04): 3
+        - noop  key=(:noop, 2)  Φ_u=12//25  (2 full transition(s) collapsed)
+        - cross  key=(:cross, 2, 1)  Φ_u=3//25  (1 full transition(s) collapsed)
+        - fork  key=(:fork, 2, (1, 2))  Φ_u=1//25  (1 full transition(s) collapsed)
+      classification (M05/M06): RegularFlow=2  SingularFlow=0  OutflowImbalanceTerm=1
+        - [regular_flow] Φ=12//25
+        - [regular_flow] Φ=3//25
+        - [outflow_imbalance] Φ=1//25  mechanism=inflow_outflow_imbalance reason=fork_unobserved_at_regular_time (NOT λ)
+  * L  [MIGRATION, r=[0, 1]]  -- IN SCOPE (BIRTH/MIGRATION derivation)
+      state: ℓ=[2, 2]  n=[5, 5]
+      reduced transitions (M04): 2
+        - noop  key=(:noop, 1)  Φ_u=3//5  (1 full transition(s) collapsed)
+        - cross  key=(:cross, 1, 2)  Φ_u=1//5  (1 full transition(s) collapsed)
+      classification (M05/M06): RegularFlow=2  SingularFlow=0  OutflowImbalanceTerm=0
+        - [regular_flow] Φ=3//5
+        - [regular_flow] Φ=1//5
+  * H  [MIGRATION, r=[1, 0]]  -- IN SCOPE (BIRTH/MIGRATION derivation)
+      state: ℓ=[2, 2]  n=[5, 5]
+      reduced transitions (M04): 2
+        - noop  key=(:noop, 2)  Φ_u=3//5  (1 full transition(s) collapsed)
+        - cross  key=(:cross, 2, 1)  Φ_u=1//5  (1 full transition(s) collapsed)
+      classification (M05/M06): RegularFlow=2  SingularFlow=0  OutflowImbalanceTerm=0
+        - [regular_flow] Φ=3//5
+        - [regular_flow] Φ=1//5
+  * RL  [DEATH]  -- OUT OF SCOPE
+      out of scope for the saturation/φ_u derivation chain (M03-M06): DEATH events' compatibility is decay/rate-driven, not saturation-driven, regardless of whether r_u happens to be zero -- see `full_transitions`'s ArgumentError message and `ChopTransition`'s docstring in src/examples/mgp_transitions.jl (M03), and mers_filter_suite.tex lines 511-539 (removal's I_d-1>=ell_d outflow condition and the sub-threshold decay term; sampling's split between an observed-leaf singular update and a lambda-contributing background rate). Working out this event's actual decay/driver contribution is explicitly deferred to the later driver/boost/decay milestone (M07 per the master project plan); mgpaudit does not invent a parallel derivation for it.
+  * RH  [DEATH]  -- OUT OF SCOPE
+      out of scope for the saturation/φ_u derivation chain (M03-M06): DEATH events' compatibility is decay/rate-driven, not saturation-driven, regardless of whether r_u happens to be zero -- see `full_transitions`'s ArgumentError message and `ChopTransition`'s docstring in src/examples/mgp_transitions.jl (M03), and mers_filter_suite.tex lines 511-539 (removal's I_d-1>=ell_d outflow condition and the sub-threshold decay term; sampling's split between an observed-leaf singular update and a lambda-contributing background rate). Working out this event's actual decay/driver contribution is explicitly deferred to the later driver/boost/decay milestone (M07 per the master project plan); mgpaudit does not invent a parallel derivation for it.
+  * W  [NEUTRAL]  -- OUT OF SCOPE
+      out of scope for the saturation/φ_u derivation chain (M03-M06): NEUTRAL events' compatibility is decay/rate-driven, not saturation-driven, regardless of whether r_u happens to be zero -- see `full_transitions`'s ArgumentError message and `ChopTransition`'s docstring in src/examples/mgp_transitions.jl (M03), and mers_filter_suite.tex lines 511-539 (removal's I_d-1>=ell_d outflow condition and the sub-threshold decay term; sampling's split between an observed-leaf singular update and a lambda-contributing background rate). Working out this event's actual decay/driver contribution is explicitly deferred to the later driver/boost/decay milestone (M07 per the master project plan); mgpaudit does not invent a parallel derivation for it.
+  * SL  [SAMPLE]  -- OUT OF SCOPE
+      out of scope for the saturation/φ_u derivation chain (M03-M06): SAMPLE events' compatibility is decay/rate-driven, not saturation-driven, regardless of whether r_u happens to be zero -- see `full_transitions`'s ArgumentError message and `ChopTransition`'s docstring in src/examples/mgp_transitions.jl (M03), and mers_filter_suite.tex lines 511-539 (removal's I_d-1>=ell_d outflow condition and the sub-threshold decay term; sampling's split between an observed-leaf singular update and a lambda-contributing background rate). Working out this event's actual decay/driver contribution is explicitly deferred to the later driver/boost/decay milestone (M07 per the master project plan); mgpaudit does not invent a parallel derivation for it.
+  * SH  [SAMPLE]  -- OUT OF SCOPE
+      out of scope for the saturation/φ_u derivation chain (M03-M06): SAMPLE events' compatibility is decay/rate-driven, not saturation-driven, regardless of whether r_u happens to be zero -- see `full_transitions`'s ArgumentError message and `ChopTransition`'s docstring in src/examples/mgp_transitions.jl (M03), and mers_filter_suite.tex lines 511-539 (removal's I_d-1>=ell_d outflow condition and the sub-threshold decay term; sampling's split between an observed-leaf singular update and a lambda-contributing background rate). Working out this event's actual decay/driver contribution is explicitly deferred to the later driver/boost/decay milestone (M07 per the master project plan); mgpaudit does not invent a parallel derivation for it.
+
+
+==============================================================================
+### Mark TL  (BIRTH, r=[2, 0], from=1) ###
+==============================================================================
+-- full_transitions (M03): every (Q_u, phi_u) at each saturation s --
+TransitionExplanation for mark `TL` (BIRTH, r=[2, 0])
+  full-transition kind: Identity
+  saturation s:         [0, 0]
+  φ_u(s):               3//10
+  detail:               no production slot occupied (y'=y)
+
+TransitionExplanation for mark `TL` (BIRTH, r=[2, 0])
+  full-transition kind: InlineSameDeme
+  saturation s:         [1, 0]
+  φ_u(s):               3//10
+  detail:               1 slot occupied, ancestral deme == post-event deme (deme #1); reduced no-op (y'=y), but a distinct full transition (m changes)
+
+TransitionExplanation for mark `TL` (BIRTH, r=[2, 0])
+  full-transition kind: Fork
+  saturation s:         [2, 0]
+  φ_u(s):               1//10
+  detail:               2 slots occupied from ancestral deme #1, landing in demes [1, 1] (branch point)
+
+-- reduce_event_indicator (M04): collapsed onto the REDUCED coloring --
+ReducedExplanation for mark `TL` (BIRTH)
+  reduced kind: noop   key: (:noop, 1)
+  Φ_u (summed): 3//5
+  collapsed from 2 full transition(s):
+    - Identity  s=[0, 0]  φ_u=3//10  (no production slot occupied (y'=y))
+    - InlineSameDeme  s=[1, 0]  φ_u=3//10  (1 slot occupied, ancestral deme == post-event deme (deme #1); reduced no-op (y'=y), but a distinct full transition (m changes))
+
+ReducedExplanation for mark `TL` (BIRTH)
+  reduced kind: fork   key: (:fork, 1, (1, 1))
+  Φ_u (summed): 1//10
+  collapsed from 1 full transition(s):
+    - Fork  s=[2, 0]  φ_u=1//10  (2 slots occupied from ancestral deme #1, landing in demes [1, 1] (branch point))
+
+
+==============================================================================
+### Mark TH  (BIRTH, r=[1, 1], from=2) ###
+==============================================================================
+-- full_transitions (M03): every (Q_u, phi_u) at each saturation s --
+TransitionExplanation for mark `TH` (BIRTH, r=[1, 1])
+  full-transition kind: Identity
+  saturation s:         [0, 0]
+  φ_u(s):               9//25
+  detail:               no production slot occupied (y'=y)
+
+TransitionExplanation for mark `TH` (BIRTH, r=[1, 1])
+  full-transition kind: CrossDeme
+  saturation s:         [1, 0]
+  φ_u(s):               3//25
+  detail:               1 slot occupied, moves deme #2 -> deme #1
+
+TransitionExplanation for mark `TH` (BIRTH, r=[1, 1])
+  full-transition kind: InlineSameDeme
+  saturation s:         [0, 1]
+  φ_u(s):               3//25
+  detail:               1 slot occupied, ancestral deme == post-event deme (deme #2); reduced no-op (y'=y), but a distinct full transition (m changes)
+
+TransitionExplanation for mark `TH` (BIRTH, r=[1, 1])
+  full-transition kind: Fork
+  saturation s:         [1, 1]
+  φ_u(s):               1//25
+  detail:               2 slots occupied from ancestral deme #2, landing in demes [1, 2] (branch point)
+
+-- reduce_event_indicator (M04): collapsed onto the REDUCED coloring --
+ReducedExplanation for mark `TH` (BIRTH)
+  reduced kind: noop   key: (:noop, 2)
+  Φ_u (summed): 12//25
+  collapsed from 2 full transition(s):
+    - Identity  s=[0, 0]  φ_u=9//25  (no production slot occupied (y'=y))
+    - InlineSameDeme  s=[0, 1]  φ_u=3//25  (1 slot occupied, ancestral deme == post-event deme (deme #2); reduced no-op (y'=y), but a distinct full transition (m changes))
+
+ReducedExplanation for mark `TH` (BIRTH)
+  reduced kind: cross   key: (:cross, 2, 1)
+  Φ_u (summed): 3//25
+  collapsed from 1 full transition(s):
+    - CrossDeme  s=[1, 0]  φ_u=3//25  (1 slot occupied, moves deme #2 -> deme #1)
+
+ReducedExplanation for mark `TH` (BIRTH)
+  reduced kind: fork   key: (:fork, 2, (1, 2))
+  Φ_u (summed): 1//25
+  collapsed from 1 full transition(s):
+    - Fork  s=[1, 1]  φ_u=1//25  (2 slots occupied from ancestral deme #2, landing in demes [1, 2] (branch point))
+
+
+==============================================================================
+### Mark L  (MIGRATION, r=[0, 1], from=1) ###
+==============================================================================
+-- full_transitions (M03): every (Q_u, phi_u) at each saturation s --
+TransitionExplanation for mark `L` (MIGRATION, r=[0, 1])
+  full-transition kind: Identity
+  saturation s:         [0, 0]
+  φ_u(s):               3//5
+  detail:               no production slot occupied (y'=y)
+
+TransitionExplanation for mark `L` (MIGRATION, r=[0, 1])
+  full-transition kind: CrossDeme
+  saturation s:         [0, 1]
+  φ_u(s):               1//5
+  detail:               1 slot occupied, moves deme #1 -> deme #2
+
+-- reduce_event_indicator (M04): collapsed onto the REDUCED coloring --
+ReducedExplanation for mark `L` (MIGRATION)
+  reduced kind: noop   key: (:noop, 1)
+  Φ_u (summed): 3//5
+  collapsed from 1 full transition(s):
+    - Identity  s=[0, 0]  φ_u=3//5  (no production slot occupied (y'=y))
+
+ReducedExplanation for mark `L` (MIGRATION)
+  reduced kind: cross   key: (:cross, 1, 2)
+  Φ_u (summed): 1//5
+  collapsed from 1 full transition(s):
+    - CrossDeme  s=[0, 1]  φ_u=1//5  (1 slot occupied, moves deme #1 -> deme #2)
+
+
+==============================================================================
+### Mark H  (MIGRATION, r=[1, 0], from=2) ###
+==============================================================================
+-- full_transitions (M03): every (Q_u, phi_u) at each saturation s --
+TransitionExplanation for mark `H` (MIGRATION, r=[1, 0])
+  full-transition kind: Identity
+  saturation s:         [0, 0]
+  φ_u(s):               3//5
+  detail:               no production slot occupied (y'=y)
+
+TransitionExplanation for mark `H` (MIGRATION, r=[1, 0])
+  full-transition kind: CrossDeme
+  saturation s:         [1, 0]
+  φ_u(s):               1//5
+  detail:               1 slot occupied, moves deme #2 -> deme #1
+
+-- reduce_event_indicator (M04): collapsed onto the REDUCED coloring --
+ReducedExplanation for mark `H` (MIGRATION)
+  reduced kind: noop   key: (:noop, 2)
+  Φ_u (summed): 3//5
+  collapsed from 1 full transition(s):
+    - Identity  s=[0, 0]  φ_u=3//5  (no production slot occupied (y'=y))
+
+ReducedExplanation for mark `H` (MIGRATION)
+  reduced kind: cross   key: (:cross, 2, 1)
+  Φ_u (summed): 1//5
+  collapsed from 1 full transition(s):
+    - CrossDeme  s=[1, 0]  φ_u=1//5  (1 slot occupied, moves deme #2 -> deme #1)
+
+

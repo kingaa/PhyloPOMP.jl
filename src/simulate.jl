@@ -117,17 +117,24 @@ acted upon is chosen uniformly at random (via `rng`) from the currently-live
 lineages in deme `ev.from` -- the forward-simulation analogue of R's
 `random_ball(i)` (`src/inventory.h`).
 
-- `BIRTH`: the chosen lineage's current node gets one child continuing the
-  same lineage (same deme) plus one new child lineage per deme in
-  `ev.into` -- e.g. SEIR's `infection` event bifurcates an infectious
-  lineage into "stays infectious" + "newly exposed". EXCEPTION: if the
-  current node is itself `Sample`-typed (this lineage's most recent event
-  was a non-destructive sample, and its very next event is this birth), an
-  extra plain `Node` is interposed first to hold the bifurcation --
-  `NaiveSEIR.singular_part!` (and R phylopomp's own output convention;
-  verified empirically, no R-emitted `Sample` node ever has 2 children)
-  requires a `Sample` node to have at most 1 child, so the 2 new children
-  cannot be attached to it directly.
+- `BIRTH`: a SINGLE new node is created (as `cur`'s child) at time `t`, and
+  BOTH resulting lineages -- the continuation (same deme) and one new
+  lineage per deme in `ev.into` -- become open at that ONE node, each
+  getting its own child only when its own next event fires. This mirrors
+  R's `birth()` (`src/master.h`) exactly: `make_node()` allocates one fresh
+  node at the current time, the new ball is inserted into it, and the
+  continuing ball is moved into it too (`add(p,a)`) -- neither lineage gets
+  a node of its own until it has its own next event. A prior version of
+  this function instead attached two freshly-timestamped children directly
+  to the STALE `cur` (whose slate is the time of the lineage's *previous*
+  event, not this birth), which put the fork itself at the wrong time in
+  every case where `cur` wasn't already about to be pruned -- the same bug
+  class the SAMPLE branch below was fixed for, missed here because it
+  affects branch lengths and internal-node ranking, not sample counts or
+  filter-acceptance (see `check_milestone4.md`). Because a `Sample`-typed
+  `cur` now also gets exactly one new child either way, the old special
+  case for "birth firing on a just-sampled lineage" is no longer needed --
+  this is just the general rule.
 - `MIGRATION`: relabels the chosen lineage's deme membership; no new node
   (mirrors `swap!` in `src/coloring.jl` -- a migration is not itself an
   observable genealogy feature).
@@ -148,8 +155,8 @@ lineages in deme `ev.from` -- the forward-simulation analogue of R's
   zero-length edge below a `Sample` node, and `parse_newick`'s `clip_zlb!`
   refuses to collapse exactly that case, by design, since collapsing it
   would silently overwrite the `Sample` type; a zero-length edge below a
-  plain `Node`, as created by the BIRTH exception above, collapses cleanly
-  instead -- verified directly, see `check_milestone3.md`).
+  plain `Node`, as created when BIRTH later fires on this lineage, collapses
+  cleanly instead -- verified directly, see `check_milestone3.md`).
 - `NEUTRAL`: no lineage is involved at all (`ev.from == 0`); only `ev.Δ`
   (already applied by the caller) has any effect.
 """
@@ -168,19 +175,11 @@ apply_event!(
     cur = G[findfirst(n -> n.name==b, G.nodes)]
     if ev.type == BIRTH
         remove!(inv,d,b)
-        parent = cur
-        if cur.type == Sample
-            mid = push_node!(G,t,Node,b)
-            push!(cur.children,mid)
-            parent = G.nodes[end]
-        end
-        c1 = push_node!(G,t,Node,parent.name)
-        push!(parent.children,c1)
-        add!(inv,d,c1)
+        p = push_node!(G,t,Node,b)
+        push!(cur.children,p)
+        add!(inv,d,p)
         for j ∈ ev.into
-            cj = push_node!(G,t,Node,parent.name)
-            push!(parent.children,cj)
-            add!(inv,j,cj)
+            add!(inv,j,p)
         end
     elseif ev.type == MIGRATION
         j = only(ev.into)
