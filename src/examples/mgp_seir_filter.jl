@@ -380,23 +380,24 @@ compiled_filter_pomp(
                 E = round(Int64, m*Float64(E0)),
                 I = round(Int64, m*Float64(I0)),
                 R = round(Int64, m*Float64(R0)),
+                live = true,
             )
         end,
         rprocess = onestep(
             function (
                 ; node, ll, cols, geneal,
                 t, dt,
-                S, E, I, R,
+                S, E, I, R, live,
                 args...,
                 )
                 cols = copy(cols)
                 ll = zero(Prob)
-                ll, S, E, I, R = NaiveSEIR.singular_part!(
-                    cols, geneal, node, ll,
+                ll, S, E, I, R, live = NaiveSEIR.singular_part!(
+                    cols, geneal, node, ll, live,
                     S, E, I, R;
                     args...,
                 )
-                if dt > 0 && isfinite(ll)
+                if live && dt > 0 && isfinite(ll)
                     ll, S, E, I, R = compiled_regular_part!(
                         cols, ll, t, dt,
                         S, E, I, R;
@@ -404,7 +405,7 @@ compiled_filter_pomp(
                     )
                 end
                 (; node = node+1, ll = ll, cols = cols,
-                 S = S, E = E, I = I, R = R)
+                 S = S, E = E, I = I, R = R, live = live)
             end,
         ),
         logdmeasure = function (; ll, _...)
