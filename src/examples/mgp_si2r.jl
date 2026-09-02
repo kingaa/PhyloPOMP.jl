@@ -52,3 +52,5 @@
     # SH: sampling of super-spreader. SAMPLE from I_H.
     @event SH rate=ψ*I_H  pop=() move=sample(I_H) kind=singular
 end
+
+# we are assuming the integer vector is added to the population vector since the state can be more complicated than a vector of integers. 
