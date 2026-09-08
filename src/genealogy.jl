@@ -13,7 +13,7 @@ Genealogical nodes (see [`GenealNode`](@ref)) can be one of three types: Root, N
     GenealNode{E}
 
 Implements a *genealogical node*.
-The type `E` is an enumeration of the demes (see [`@demes`](@ref)).
+The type `E` is an enumeration of the demes (see [`@demes`](@ref `@demes`)).
 """
 mutable struct GenealNode{E<:Enum}
     "Type of node: Root, Sample, or Node."
@@ -46,7 +46,7 @@ end
 
 Implements a genealogy over a time interval `[t0,t]`.
 The module `D` enumerates the demes and should be constructed
-via a call to [`@demes`](@ref).
+via a call to [`@demes`](@ref `@demes`).
 Internally, a genealogy is represented as a time-ordered sequence
 of *genealogical nodes* (represented by [`GenealNode`](@ref) objects).
 """

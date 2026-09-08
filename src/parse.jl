@@ -7,7 +7,7 @@ All tips are assumed to be samples.
 Zero-length branches are dropped.
 
 Optional arguments:
-- `demes` is a `Module` enumerating the demes (see [`@demes`](@ref)).
+- `demes` is a `Module` enumerating the demes (see [`@demes`](@ref `@demes`)).
   By default, `demes = Unstructured`.
 - `t0` is the assumed root-time. By default, `t0 = 0`.
 - `time` is the (optional) final-time.

@@ -57,7 +57,7 @@ end
 """
     rcateg(p, e, prob = false)
 
-This call returns a draw from the categorical distribution on the enumeration `e`.  `e` should be an enumeration-type created, e.g., by `@demes`.
+This call returns a draw from the categorical distribution on the enumeration `e`.  `e` should be an enumeration-type created, e.g., by [`@demes`](@ref `@demes`).
 """
 rcateg(
     p::AbstractVector{<:Real},
