@@ -6,7 +6,7 @@ import Base: eachindex, length, getindex, eachindex, show
 A `GuideNode` contains the information needed to guide a phylodynamic
 Monte Carlo filter on a particular interval between genealogical
 events.  `F` is an `AbstractFloat` type, `N` is the number of demes,
-and `D` is the enumeration of the demes (see [`@demes`](@ref)).
+and `D` is the enumeration of the demes (see [`@demes`](@ref `@demes`)).
 
 A `GuideNode` contains:
 - the time interval to which it pertains

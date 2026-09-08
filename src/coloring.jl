@@ -5,7 +5,7 @@ import Base: getindex, copy
 
 The `Coloring` struct holds information on the local coloring of a
 genealogy.  Construct it with the call `Coloring(d)`, where `d` is
-a demeset (see [@demes](@ref)).
+a demeset (see [@demes](@ref `@demes`)).
 """
 mutable struct Coloring{D <: Enum, N}
     cols::NTuple{N,BitSet}
