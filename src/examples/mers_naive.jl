@@ -255,18 +255,9 @@ filter_pomp(
     chi_c = 1.0, chi_h = 0.0,
     Bc = 0.1, Bh = 0.03,
     Sc0 = 1.0, Sh0 = 1.0,
-    Ic0 = nothing, Ih0 = nothing,
-    I_c0 = nothing, I_h0 = nothing,
+    Ic0 = 0.01, Ih0 = 0.0,
     Nc = 10000, Nh = 10000,
 ) = begin
-    if !isnothing(Ic0) && !isnothing(I_c0) && Ic0 != I_c0
-        throw(ArgumentError("conflicting keyword arguments `Ic0` and `I_c0`"))
-    end
-    if !isnothing(Ih0) && !isnothing(I_h0) && Ih0 != I_h0
-        throw(ArgumentError("conflicting keyword arguments `Ih0` and `I_h0`"))
-    end
-    Ic0 = something(I_c0, Ic0, 0.01)
-    Ih0 = something(I_h0, Ih0, 0.0)
     gen = mers_tree
     pomp(
         params = (
