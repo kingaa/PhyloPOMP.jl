@@ -23,6 +23,12 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     g = parse_newick(GuidedMERS.mers_newick, demes=GuidedMERS.Demes)
     p = GuidedMERS.filter_pomp(g, m0)
     @time pf = pfilter(p,Np=1000,trigger=0.2,target=0.8)
+    @test pf isa POMP.PfilterdPompObject
+
+    ## Iterated filtering on the full 274-tip tree: ~170 mif iterations at
+    ## Np=1000 dominates the test suite's runtime, so it only runs when
+    ## RUN_HEAVY_TESTS is set (the default).
+    if heavy
     @time mf = mif(
         pf,Nmif=100,Np=1000,trigger=0.2,target=0.8,
         cooling_schedule=geometric_cooling(1.0),
@@ -53,5 +59,9 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     )
     @time mf = mif(mf,Nmif=20)
     @time mf = mif(mf,Nmif=50,cooling_schedule=geometric_cooling(0.8))
+    @test mf isa POMP.AbstractPompObject
+    end
+
+end
 
 end

@@ -9,6 +9,13 @@ the same SEIR rate structure; agreement is far stronger evidence of
 correctness than a Newick/CBLV round trip alone (which would faithfully
 serialize a structurally wrong tree). Round-trip checks are included too,
 but only as supporting, non-sufficient evidence.
+
+A second, independently-written filter over the same rate structure --
+`GuidedSEIR.filter_pomp(gen, m; ...)` (`src/examples/seir_guided.jl`) -- is
+exercised at the end of the file. It is the stricter of the two: it runs
+`GuidedSEIR.check` on the genealogy (root degree 1, internal-node degree 2,
+sample degree < 2) before building the pomp object, and it needs a guiding
+finite-state Markov process (`fsmarkov`) as well as the genealogy.
 """
 module SEIRSimulateTest
 
@@ -17,10 +24,12 @@ import ..Main: h1, h2
 @info h1("SEIR forward simulator")
 
 using Test
-using Random: MersenneTwister
+using Random: MersenneTwister, seed!
 using PhyloPOMP
 using PhyloPOMP: Sample
 using PhyloPOMP.NaiveSEIR
+using PhyloPOMP.GuidedSEIR
+using PhyloPOMP.GuidedSEIR.Demes: Expos, Infec
 import PartiallyObservedMarkovProcesses as POMP
 
 @testset verbose=true "SEIR forward simulator" begin
@@ -88,6 +97,62 @@ import PartiallyObservedMarkovProcesses as POMP
     pf = pfilter(p, Np=1000)
     @test pf isa POMP.PfilterdPompObject
     @test isfinite(logLik(pf))
+
+    @testset "simulate -> GuidedSEIR: check passes and logLik finite" begin
+        @info h2("simulate -> GuidedSEIR: check passes and logLik finite")
+        ## The SEIR `sampling` event (`src/examples/mgp_macro.jl:197`) is
+        ## NON-destructive -- `pop=()`, so `simulate` leaves the sampled
+        ## lineage open (src/simulate.jl:197-198) and a later transmission
+        ## can hang a child off the Sample node itself. Such "inline"
+        ## samples are exactly what `GuidedSEIR.check` permits (`< 2`
+        ## children, seir_guided.jl:46) and what
+        ## `GuidedSEIR.inline_sample!` (seir_guided.jl:140) handles, so the
+        ## loop below insists on a realization that contains at least one:
+        ## it is the case a destructive-sampling simulator would get wrong.
+        ## Independently seeded from the headline `g` above, so this is a
+        ## second realization rather than a re-run on one lucky tree.
+        rng2 = MersenneTwister(20260901)
+        local gs
+        ok2 = false
+        inline2 = false
+        for _ ∈ 1:300
+            gs = simulate(PhyloPOMP.SEIR, θ; x0=x0, graft=[0,1], tmax=20.0, rng=rng2)
+            inline2 = any(length(gs[i].children)==1 for i ∈ samples(gs))
+            ## cap the sample count to keep the pfilter below cheap
+            if 5 ≤ nsample(gs) ≤ 40 && inline2
+                ok2 = true
+                break
+            end
+        end
+        @test ok2
+        @test inline2
+        ## `check` returns `nothing` and throws on failure, so calling it at
+        ## all is the assertion; `=== nothing` records it as a passing test.
+        @test GuidedSEIR.check(gs) === nothing
+        ## ...and the invariants it asserts, spelled out, so a regression
+        ## names the broken one instead of just firing an @assert:
+        @test all(length(gs[i].children)==1 for i ∈ roots(gs))
+        @test all(length(gs[i].children)<2 for i ∈ samples(gs))
+        @test all(length(gs[i].children)==2 for i ∈ nodes(gs))
+
+        ## same numbers as the simulation: `seir_rinit`
+        ## (src/examples/seir_guided.jl:298) rescales by pop/(S0+E0+I0+R0),
+        ## so fractions of `pop` reproduce x0 exactly. NOTE θ.N ↔ `pop`, and
+        ## χ must be 0: the `@mgp SEIR` table has no χ-event at all, its only
+        ## sampling event being `rate=ψ*I` (mgp_macro.jl:197).
+        pg = GuidedSEIR.filter_pomp(
+            gs, fsmarkov(Expos=>0.1, Infec=>1, (Expos,Infec)=>1);
+            β=β, σ=σ, γ=γ, ω=ω, ψ=ψ, χ=χ, pop=pop,
+            S0=x0.S/pop, E0=x0.E/pop, I0=x0.I/pop, R0=x0.R/pop,
+        )
+        @test pg isa POMP.PompObject
+        ## pfilter draws from the global RNG, so seed for reproducibility
+        ## independent of whatever ran earlier in the suite.
+        seed!(20260815)
+        pfg = pfilter(pg, Np=1000)
+        @test pfg isa POMP.PfilterdPompObject
+        @test isfinite(logLik(pfg))
+    end
 
 end
 

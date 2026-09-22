@@ -50,18 +50,62 @@ const small_tree = "(([&&PhyloPOMP deme=camel]1:1.0,[&&PhyloPOMP deme=camel]2:1.
     @test pf isa POMP.PfilterdPompObject
     @test isfinite(logLik(pf))
 
-    @info h2("soft vs guided: mathematically distinct kernels")
-    gG = parse_newick(small_tree, demes=PhyloPOMP.GuidedMERS.Demes)
-    CamelG, HumanG = PhyloPOMP.GuidedMERS.Camel, PhyloPOMP.GuidedMERS.Human
-    mG = fsmarkov(CamelG=>0.01, HumanG=>0.99, (CamelG,HumanG)=>0.01)
-    mS = fsmarkov(Camel=>0.01, Human=>0.99, (Camel,Human)=>0.01)
-    seed!(7)
-    pS2 = SoftMERS.filter_pomp(g, mS; common...)
-    llS = [logLik(pfilter(pS2,Np=300)) for _ ∈ 1:5]
-    seed!(7)
-    pG2 = PhyloPOMP.GuidedMERS.filter_pomp(gG, mG; common...)
-    llG = [logLik(pfilter(pG2,Np=300)) for _ ∈ 1:5]
-    @test !all(isapprox.(llS, llG; atol=0.5))
+    @info h2("default parameters give a finite logLik")
+    ## SoftMERS now shares GuidedMERS's defaults (mers_funs.jl). The
+    ## pre-refactor defaults had χ_h = 0 (and β_hc = β_ch = 0), which
+    ## forced -Inf at the first human tip of any mixed-deme tree; the
+    ## shared defaults do not.
+    ##
+    ## Those defaults use N_c = N_h = 10000, which makes a 3-tip tree a
+    ## severe filtering problem: a single Np=2000 run survives to the last
+    ## tip only about half the time (measured over 13 seeds). The estimate
+    ## over 5 replicates is -Inf only if every one of them collapses, and
+    ## that is the property asserted here --- that the new defaults are not
+    ## *structurally* degenerate, as the old ones were.
+    seed!(1)
+    pdef = SoftMERS.filter_pomp(g, m)
+    lldef,_ = logmeanexp([logLik(pfilter(pdef,Np=2000)) for _ ∈ 1:5], se=true)
+    @info "defaults: logLik = $(round(lldef,digits=2))"
+    @test isfinite(lldef)
+
+    @info h2("soft, hard and guided agree on the likelihood")
+    ## SoftMERS, HardMERS and GuidedMERS are three importance-sampling
+    ## proposals for the SAME genealogy likelihood, so their pfilter
+    ## *estimates* must agree (up to Monte Carlo error), even though their
+    ## per-replicate values never do.  (The test that used to live here
+    ## compared per-replicate logLiks under a shared seed and asserted they
+    ## differ -- true of any two distinct kernels, and so no evidence of
+    ## anything.)
+    ##
+    ## The logmeanexp estimator is heavy-tailed on this fixture, so the
+    ## replicate count was chosen for margin rather than minimality: over a
+    ## 12-seed sweep at Np=2000, R=15 gave a worst-case pairwise
+    ## |Δ| / sqrt(se₁²+se₂²) of 2.27, with no seed reaching 3.
+    kernels = (
+        ("soft",   PhyloPOMP.SoftMERS),
+        ("hard",   PhyloPOMP.HardMERS),
+        ("guided", PhyloPOMP.GuidedMERS),
+    )
+    agree = map(kernels) do (nm, M)
+        gK = parse_newick(small_tree, demes=M.Demes)
+        mK = fsmarkov(M.Camel=>0.3, M.Human=>0.7, (M.Camel,M.Human)=>1)
+        seed!(101)
+        pK = M.filter_pomp(gK, mK; common...)
+        llest, llse = logmeanexp(
+            [logLik(pfilter(pK,Np=2000)) for _ ∈ 1:15], se=true,
+        )
+        @info "$nm: logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
+        (nm, llest, llse)
+    end
+    for r ∈ agree
+        @test isfinite(r[2]) && isfinite(r[3])
+    end
+    for i ∈ 1:length(agree), j ∈ (i+1):length(agree)
+        a, b = agree[i], agree[j]
+        z = abs(a[2]-b[2])/sqrt(a[3]^2+b[3]^2)
+        @info "$(a[1]) vs $(b[1]): Δ = $(round(a[2]-b[2],digits=2)), z = $(round(z,digits=2))"
+        @test z < 3
+    end
 
     if heavy
         @info h2("pfilter benchmark")

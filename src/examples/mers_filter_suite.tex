@@ -170,6 +170,33 @@ and the particle receives $-\infty$ weight, which is the correct penalty.
 
 The \S\ref{sec:proposal-kernel} text below has been left intact so the reader can see
 what was previously written and understand exactly what has been retracted.
+
+\smallskip
+\textbf{Changes (18 September 2026).} Upstream rewrote \texttt{mers\_guided.jl} (module
+\texttt{GuidedMERS}) to be \emph{self-contained}, mirroring \texttt{seir\_guided.jl}'s
+architecture: it no longer \texttt{include}s \texttt{mers\_funs.jl}, defining its own
+\texttt{knowledge!}, \texttt{singular\_part!}, and \texttt{event\_rates!} directly.
+\texttt{mers\_funs.jl} is now shared only by \texttt{SoftMERS} and \texttt{HardMERS}, which
+have been refactored to the same nested-state (\texttt{live::Bool}) architecture as the
+new \texttt{GuidedMERS}. \S\ref{sec:implementation-map} below is updated accordingly.
+Separately, Aaron's rewritten \texttt{singular\_branch!} initially dropped the $/2$ from the
+within-host fork factor, charging $-\log(I_C(I_C-1))$ (resp.\ $I_H$) rather than
+$-\log(I_C(I_C-1)/2)$; this repository's copy restores the $2/[I_C(I_C-1)]$ factor already
+derived in \S\ref{sec:proposal-kernel}'s singular fork proposals and used throughout this
+document since v25. A second, independent bug was also found and fixed:
+\texttt{regular\_transmission\_cc!}/\texttt{regular\_transmission\_hh!} (regular-time within-host
+births) returned a zero log-weight, omitting the ``no visible fork'' factor
+$1-\binom{\ell_d}{2}/\binom{I_d}{2}$ that \texttt{mers\_naive.jl}, Soft/Hard, and the
+Chu--Vandermonde aggregate $\Phi_{\mathrm{identity}}+\ell\Phi_{\mathrm{inline}}=1-\binom{\ell}{2}\Phi_{\mathrm{fork}}$
+of \S\ref{sec:kli} all charge on a within-deme birth that does not coalesce two tracked lineages.
+This one is \emph{state-dependent} even when every node's host assignment is forced by the data
+(it scales with the number of within-host births while $\ell_d\ge2$), so it biases parameter
+inference strongly; the $\log 2$ fork-term bug is a pure offset only in that forced case and
+otherwise tilts the likelihood toward cross-host explanations. Numerically: on a 4-camel-tip tree with long coexisting branches ($\beta_{cc}=3$,
+$N_c=40$, $I_{c0}=0.25$; 30 reps of $N_p=4000$), the pre-rewrite guided kernel gave
+$-28.63\pm0.04$, Aaron's version with only the $\log 2$ fix gave $-22.58\pm0.30$, and Aaron's
+version with both fixes restored gave $-28.58\pm0.05$. This repository's copy now carries both
+fixes; both are to be relayed to Aaron as upstream fixes.
 \end{notebox}
 
 \section{Plain-Language Overview}
@@ -1137,9 +1164,13 @@ This section is the only place in this document that names Julia files, function
 exists to connect \S\ref{sec:proposal-kernel} to the actual implementation, deliberately placed
 after the derivation and the summary rather than alongside the math.
 
-\paragraph{Shared code.} \texttt{src/examples/mers\_funs.jl} holds everything shared by all three
-guided-family kernels: \texttt{knowledge!}, \texttt{singular\_part!} (the root- and
-fork-coloring proposals), and the shared \texttt{filter\_pomp} constructor.
+\paragraph{Shared code.} As of the 18 September 2026 upstream rewrite (see the changelog above),
+\texttt{src/examples/mers\_funs.jl} holds \texttt{knowledge!}, \texttt{singular\_part!} (the root-
+and fork-coloring proposals), and the shared \texttt{filter\_pomp} constructor for
+\texttt{SoftMERS} and \texttt{HardMERS} only. \texttt{GuidedMERS} (\texttt{mers\_guided.jl}) is
+now self-contained: it defines its own \texttt{knowledge!}, \texttt{singular\_part!}, and
+\texttt{event\_rates!}, mirroring \texttt{seir\_guided.jl}'s architecture rather than including
+\texttt{mers\_funs.jl}.
 
 \begin{notebox}
 \textbf{v31 update.} As of v31, the five epsilon-floor helpers
@@ -1170,8 +1201,9 @@ unnormalized auxiliary intensities $\kappa^0=(I-\ell)/I$, $\kappa^b=r_b/I$ (via
 \texttt{rcateg} on the raw relative hazards, and the compensating-decay term
 (\texttt{decay} accumulating \texttt{rate - alpha[identity] - alpha[swap-group]}).
 \end{itemize}
-All three MERS kernels \texttt{include("mers\_funs.jl")} for the shared
-\texttt{singular\_part!} and \texttt{filter\_pomp} constructor.
+\texttt{mers\_soft.jl} and \texttt{mers\_hard.jl} \texttt{include("mers\_funs.jl")} for the
+shared \texttt{singular\_part!} and \texttt{filter\_pomp} constructor; \texttt{mers\_guided.jl}
+no longer does (see the changelog above).
 
 \paragraph{Tests.} \texttt{test/mers\_soft.jl}, \texttt{test/mers\_guided.jl}, and
 \texttt{test/mers\_hard.jl} each check: construction, the zero-initial-infected $-\infty$

@@ -1,0 +1,809 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\newcommand{\col}{\operatorname{col}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+% Indicator: package-free double-struck 1, matching mers_filter_suite.tex
+% (dsfont/mdframed are avoided here even where present, to keep this note
+% self-contained in the same style as its companion document).
+\newcommand{\ind}{1\!\!1}
+\newcommand{\dd}{\mathrm{d}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{remark}{Remark}[section]
+
+\definecolor{chline}{RGB}{30,90,160}
+\newenvironment{notebox}{%
+  \par\addvspace{8pt}\noindent%
+  {\color{chline}\rule{\linewidth}{0.8pt}}\par\smallskip%
+  \begingroup\color{chline!40!black}%
+  \leftskip=1em\relax
+}{%
+  \par\endgroup\smallskip%
+  {\color{chline}\rule{\linewidth}{0.8pt}}\par\addvspace{8pt}%
+}
+
+\title{The Guided Filter Stack for SEIRS and MERS: a KLI Assessment}
+\author{PhyloPOMP.jl development notes}
+\date{7 September 2026}
+
+\begin{document}
+\maketitle
+
+\medskip
+\noindent\textit{Disclosure.} Prepared with assistance from Claude (Anthropic) for \LaTeX\
+typesetting, code cross-referencing, and exposition. All claims about the implementation are
+checked directly against the source files cited throughout (\texttt{src/guide.jl},
+\texttt{src/examples/seir\_guided.jl}, \texttt{src/examples/mers\_guided.jl},
+\texttt{src/examples/mers\_funs.jl}, \texttt{src/coloring.jl}, \texttt{src/fsmarkov.jl}) and
+against \texttt{src/examples/mers\_filter\_suite.tex}, from which this note borrows notation and,
+where marked, prose.
+\bigskip
+
+\tableofcontents
+\bigskip
+
+\section{Introduction and scope}
+\label{sec:intro}
+
+PhyloPOMP.jl filters phylodynamic data by treating an observed genealogy (typed tips, internal
+coalescent nodes, and a root) as the obscured/latent-coloring data of a structured Markov
+genealogy process (SMGP), in the sense of King, Lin \& Ionides (KLI), \emph{Exact Phylodynamic
+Likelihood via Structured Markov Genealogy Processes}, arXiv:2405.17032 \cite{KLI}. A particle
+filter simulates the underlying population process forward in time and, whenever the simulated
+event structure must be reconciled with the observed genealogy, proposes a \emph{coloring} of the
+lineages consistent with population membership; KLI Theorem~5 (with Lemma~3) guarantees that
+\emph{any} proposal $\pi_u$ that is positive wherever the target's reduced compatibility factor
+$\alpha_u\Phi_u$ is positive yields an unbiased likelihood estimator once each proposed outcome is
+reweighted by the boost $B_u=\Phi_u/\pi_u$. This is the single fact underwriting everything below:
+kernel choice is a variance question, not a correctness question, and the repository's four
+proposal kernels are four different answers to ``how should $\pi$ be chosen'' for the \emph{same}
+target filter.
+
+This repository's own vocabulary --- \textbf{naive}, \textbf{soft}, \textbf{guided}, and
+\textbf{hard} --- names an escalating ladder of proposals built on a \emph{filter guide}: a
+reverse-time, finite-state Markov process over the demes that can carry a lineage, run backward
+over the genealogy to produce, at every branch point, a belief about which deme each lineage
+occupies. Naive never consults the guide. Soft, guided, and hard all do, with three different
+mathematical relationships between the guide's information and the resulting proposal law. This
+note has two purposes:
+
+\begin{enumerate}
+\item \textbf{Explain the stack} for the two worked models in this repository --- the single-host
+SEIR(S) model (\texttt{seir\_guided.jl}) and the two-host Camel/Human MERS-CoV model
+(\texttt{mers\_guided.jl}) --- at the level of the guide construction (\S\ref{sec:guide}), the
+SEIRS filter's singular and regular parts (\S\ref{sec:seir}), the MERS filter's singular and
+regular parts (\S\ref{sec:mers}), and the four kernels' formal definitions
+(\S\ref{sec:kernels}).
+\item \textbf{Assess the kernel choice for MERS} (\S\ref{sec:assessment}--\S\ref{sec:verdict}) in
+KLI's own framework: what each kernel is doing to the variance of the likelihood estimator, what
+approximation the guide itself introduces relative to the (intractable) locally optimal proposal,
+and whether \texttt{GuidedMERS} --- the repository's working MERS kernel --- is in fact the right
+default. The short answer, defended in \S\ref{sec:verdict}, is yes, with two qualifications that
+are about the \emph{target model's parameters}, not the proposal.
+\end{enumerate}
+
+\begin{notebox}
+\textbf{On borrowed material.} Some notation and some formulas in \S\ref{sec:kernels} are
+reproduced, with credit, from \texttt{mers\_filter\_suite.tex} \S9.1 (``Guided-family
+particle-filter kernels: soft, guided, and hard''), the companion derivation document for the MERS
+filter. As that document's own v31 changelog explains (and as \S\ref{sec:kernels} below reflects),
+part of \S9.1's original text has since been \emph{retracted}: this note is careful to mark
+retracted material as such rather than presenting it as current.
+\end{notebox}
+
+\section{The guide construction}
+\label{sec:guide}
+
+Both worked models place the filter guide over a small deme set: $\{\text{Expos},\text{Infec}\}$
+for SEIRS (only $E$ and $I$ individuals can be the ancestor of a sampled lineage or a coalescent
+event; $S$ and $R$ never appear as a lineage's deme), and $\{\text{Camel},\text{Human}\}$ for MERS.
+The guide itself is a continuous-time finite-state Markov process on this deme set,
+\texttt{FSMarkovProc} (\texttt{src/fsmarkov.jl}), constructed by \texttt{fsmarkov(\ldots)} from a
+user-specified stationary distribution $\pi$ (one weight per deme) and a set of pairwise
+conductances; internally it stores the generator $Q=\Pi(\text{conductances})$ (rows summing to
+zero) together with a symmetrized eigendecomposition ($L$, $R$, eigenvalues $\Lambda$) so that the
+transition semigroup at elapsed time $s$ is available in closed form,
+\[
+P(s) = L\,\operatorname{diag}(e^{\Lambda s})\,R,
+\]
+and \texttt{forward\_action(m,s,X)} applies $P(s)$ to a matrix of column-beliefs $X$ (one column
+per lineage). This is the guide's own dynamics; it does \emph{not} depend on the population state
+$(S,E,I,R)$ or $(S_c,I_c,S_h,I_h)$ --- a point that matters for the assessment in
+\S\ref{sec:assessment}.
+
+\begin{notebox}
+\textbf{Vocabulary and two symbol collisions.} This note uses KLI's own symbols
+$\alpha_u,\Phi_u,\pi_u,B_u,\ell,\col_d$ (jump mark $u\in\mathcal U$, hazard $\alpha_u$, reduced
+factor $\Phi_u$, proposal $\pi_u$, boost $B_u=\Phi_u/\pi_u$) exactly as in
+\texttt{mers\_filter\_suite.tex}; KLI's own coloring operators are $\sigma$ (recolor/swap a
+lineage), $\chi$ (chop a lineage out of the tracked set), and $\kappa$ (fork one lineage into two
+colored children) --- this repository's \texttt{swap!}, \texttt{chop!}, and \texttt{fork!}
+implement exactly these three, and \texttt{plant!} is the corresponding operation for introducing a
+fresh root lineage. Where \texttt{filter\_pomp} plumbing is described, ``$X(t)$,'' ``$Y_n$,''
+\texttt{rprocess}, \texttt{rinit}, \texttt{dmeasure}/\texttt{logdmeasure}'' are \texttt{pomp}'s own
+vocabulary (King, Nguyen \& Ionides \cite{KNI}). ``Naive,'' ``soft,'' ``guided,'' ``hard,'' the
+relative hazard $r_b$, and (in \S\ref{sec:floor-retracted}) the retracted floor's
+$\varepsilon,\kappa_\varepsilon$ are this repository's own coinages, appearing in none of KLI or
+\texttt{pomp}. Two collisions are unavoidable and worth flagging once, here, rather than
+re-disambiguating at every occurrence: (a) KLI's chop operator $\chi$ is a different object from
+this same model's destructive-sampling \emph{rate parameter} $\chi$ (SEIRS) / $\chi_c,\chi_h$
+(MERS) --- both are standard in their respective sources, and which is meant is always clear from
+context (an operator acts on a coloring; a rate multiplies a count); (b) KLI's driver is written
+$\beta_u$, distinct from the MERS/SEIR transmission-rate parameters $\beta,\beta_{cc},\beta_{hh},
+\beta_{hc},\beta_{ch}$ --- this note, like \texttt{mers\_filter\_suite.tex}, never needs $\beta_u$
+directly and so avoids the collision by not introducing that symbol at all. A third collision,
+specific to the retracted floor mechanism, is flagged where it arises in
+\S\ref{sec:floor-retracted}.
+\end{notebox}
+
+\paragraph{The backward sweep.} \texttt{Guide(g::Genealogy, m::FSMarkovProc, knowledge!)}
+(\texttt{src/guide.jl}) builds one \texttt{GuideNode} per genealogy node by walking the nodes in
+\emph{reverse} order --- from the most recent tip backward toward the root, i.e.\ running the
+finite-state chain backward in calendar time from the present into the past. A vector
+\texttt{probs[:,ells]} of per-lineage deme-beliefs is carried across the sweep. At each node $n$
+(interval $[\,t_n,\,t_{\mathrm{end}}\,)$, with $t_{\mathrm{end}}$ the time of the previously
+processed, more recent node):
+\begin{enumerate}
+\item \textbf{Right-endpoint snapshot.} \texttt{target = probs[:,ells]} records the current beliefs
+about every lineage present on the interval, as they stand at the interval's right (more recent)
+endpoint, \emph{before} they are propagated across the interval; \texttt{dtarget = m.right\_trans *
+target} pre-rotates this snapshot into the guide process's eigenbasis (the $R$ factor above), so
+that later hazard evaluations (below) need only multiply by $\operatorname{diag}(e^{\Lambda t})$
+and left-multiply by $A := L/\pi$ (elementwise), rather than repeating the rotation at every query
+time.
+\item \textbf{Forward-propagate to the left endpoint.} \texttt{probs[:,ells] =
+forward\_action(m, tend - t\_n, probs[:,ells])} advances every present lineage's belief backward
+across the interval's duration, landing at $t_n$ (the interval's left, i.e.\ older, endpoint).
+\texttt{present = probs[:,chillins]} then records this propagated belief restricted to $n$'s
+\emph{children} --- exactly the ``forward-propagated left-endpoint beliefs'' used by the singular
+(branch-point) proposals in \S\ref{sec:seir}--\S\ref{sec:mers}.
+\item \textbf{Resolve or fuse the parent.} \texttt{knowledge!(probs[:,parlin]; deme, type, time)}
+is asked whether the genealogy \emph{pins} the parent lineage's deme outright. For SEIRS
+(\texttt{seir\_guided.jl}'s \texttt{knowledge!}), this is true exactly at a \texttt{Sample} or an
+internal \texttt{Node}: both event types certify that the ancestral lineage was in \texttt{Infec}
+at that instant, since only infectious individuals are ever sampled and only infectious individuals
+transmit. When pinned, \texttt{demekron!} overwrites the belief with a Kronecker delta on that
+deme. For MERS (\texttt{GuidedMERS}'s own \texttt{knowledge!} in \texttt{mers\_guided.jl}, and
+the equivalent \texttt{knowledge!} that \texttt{mers\_funs.jl} shares with \texttt{SoftMERS} and
+\texttt{HardMERS}), only a typed \texttt{Sample} pins the deme (to whichever
+host the metadata records); an internal \texttt{Node} does \emph{not} pin, because a MERS
+coalescence can equally be a within-host transmission or a cross-host spillover, so the parent's
+host is generally uncertain even once both children's beliefs are known. When \texttt{knowledge!}
+returns false, \texttt{assimil!} instead \emph{fuses} the children's (already left-endpoint
+propagated) beliefs:
+\[
+\texttt{parprob}[i] \;\propto\; \pi(i)\prod_{c\in\text{children}}\frac{\texttt{chilprobs}[i,c]}{\pi(i)},
+\]
+normalized over $i$. This is a product-of-experts (independent-evidence) pooling rule: each
+child's belief is treated as an independent likelihood for the parent's deme, expressed relative to
+the guide's own stationary distribution $\pi$ so that $\pi$ is not multiply counted as a prior once
+per child. (When a node has no children under this scheme --- \texttt{isempty(chilprobs)} --- the
+parent belief simply defaults to $\pi$ itself.)
+\item The node's four data fields --- \texttt{type}, \texttt{tbeg=$t_n$}, \texttt{tend},
+\texttt{parlin}, \texttt{chillins}, \texttt{alllins=ells}, \texttt{present}, \texttt{target},
+\texttt{dtarget} --- are stored in \texttt{GuideNode}. \texttt{tend} is then reset to $t_n$ and the
+tracked-lineage set \texttt{lins} has the children removed and the parent added, continuing the
+sweep one node further into the past.
+\end{enumerate}
+
+\paragraph{Relative hazards.} Between nodes, \texttt{relhaz}/\texttt{relhaz!} evaluate, at a query
+time $t$ inside a \texttt{GuideNode}'s interval, the guide's \emph{relative} hazard of recoloring a
+given lineage $b$ from deme $i$ to deme $j$, relative to the hazard that the \emph{same}
+transition would have at stationarity:
+\[
+r_b \;=\; \frac{p_j(b)}{p_i(b)}, \qquad p(b) = A\bigl(\operatorname{diag}(e^{\Lambda(t_{\mathrm{end}}-t)})\, \texttt{dtarget}[:,b]\bigr),
+\]
+i.e.\ the guide's belief about lineage $b$'s eventual (right-endpoint) deme, pushed backward to
+time $t$ through the eigenbasis and rescaled by $A=L/\pi$. $r_b\approx 1$ when the guide carries no
+information about $b$ beyond stationarity, and by construction $\sum_b r_b = \ell$ exactly at
+stationarity (each of the $\ell$ tracked lineages contributing a hazard of $1$ relative to itself).
+These $r_b$ are exactly the quantities the guided-family kernels of \S\ref{sec:kernels} use to
+steer proposals; \texttt{choose\_branch} is the function that turns a vector of $r_b$'s (together
+with an ``identity'' weight for the untracked population) into an actual categorical draw, and it
+has two overloads used differently by the three guided-family kernels (\S\ref{sec:kernels}).
+
+\section{The SEIRS guided filter}
+\label{sec:seir}
+
+The model implemented in \texttt{seir\_guided.jl} is SEIR with a waning term $\omega R\to S$, i.e.\
+effectively SEIRS (the module's own \texttt{event\_rates!} sums transmission, progression,
+recovery, waning, and sampling; \texttt{waning!} contributes $\omega R$ moving one $R$ back to
+$S$). GuidedSEIR shares its architecture directly with GuidedMERS: a \texttt{singular\_part!} that
+fires exactly at genealogy nodes (root, sample, internal coalescence) and a \texttt{regular\_part!}
+Gillespie loop that fires strictly between them.
+
+\begin{notebox}
+\textbf{Documentation bug.} \texttt{GuidedSEIR}'s module docstring reads: ``\ldots using a filter
+guide and `soft' proposals. That is, when population-process events occur, the guide can steer
+those events preferentially onto (or away from) particular branches, but the overall event rate
+remains equal to that of the underlying population process.'' This sentence is copied verbatim
+from \texttt{SoftSEIR}'s module docstring and is \emph{stale} in \texttt{seir\_guided.jl}: the code
+does not implement the naive-aggregate-preserving Soft law at all. \texttt{regular\_transmission!}
+and \texttt{regular\_progression!} call \texttt{choose\_branch(t, guide, node, n, cols, i, j)}
+(the \texttt{guide.jl} overload that recomputes hazards and normalizes the identity weight
+\emph{jointly} with every branch's $r_b$ in a single categorical draw), which is precisely the
+Guided law of \S\ref{sec:kernels}, and is described that way, correctly, in
+\texttt{mers\_filter\_suite.tex}'s implementation map (``Guided (\texttt{mers\_guided.jl}) mirrors
+\texttt{seir\_guided.jl}'s architecture: \ldots the identity-vs-branch choice made in one joint draw
+via \texttt{choose\_branch}''). \texttt{GuidedSEIR} is, mathematically, the SEIR analogue of
+\texttt{GuidedMERS}, not of \texttt{SoftMERS}; only its module docstring says otherwise.
+\end{notebox}
+
+\subsection{Singular part}
+
+\texttt{singular\_root!} draws the root lineage's deme from
+$\texttt{node.present}[:,1]\odot(n-\ell)$, where $n=(E,I)$ are the current population counts and
+$\ell=(\ell_E,\ell_I)$ the already-tracked counts: the guide's belief is mixed with the
+\emph{untracked capacity} of each deme, so a deme with zero free capacity ($E=\ell_E$ or
+$I=\ell_I$) can never be chosen for the root regardless of the guide's opinion. If the draw
+succeeds with probability $p$, $\texttt{ll} = -\log p$ and the lineage is \texttt{plant!}-ed into
+the chosen deme; if every weight is zero, the particle dies ($\texttt{ll}=-\infty$).
+
+At a sample node, \texttt{terminal\_sample!} (no children) draws between non-destructive ($\psi$)
+and destructive ($\chi$) sampling via $\texttt{rcateg}([\psi,\chi])$, contributing
+$\log(\psi(I-\ell_I))$ or $\log(\chi I)$ respectively (post-\texttt{chop!} counts) plus the
+$-\log p$ draw cost, and decrementing $I$ on a destructive draw; \texttt{inline\_sample!} (one
+child, a non-destructive sample mid-lineage) contributes $\log\psi$ and re-labels the surviving
+child into \texttt{Infec} via \texttt{chop!(cols,Infec,parlin,Infec,chillin)}. At a coalescent node
+(\texttt{singular\_branch!}, a birth event with $\beta S I/N$), the two children's demes are drawn
+from
+\[
+\texttt{branch\_options}(x) = \bigl[x_{1,1}x_{2,2},\; x_{1,2}x_{2,1}\bigr],
+\]
+the two products of children's present-probabilities corresponding to the two ways of assigning
+$(\text{Expos},\text{Infec})$ across the two children --- this \emph{is} the guided two-child
+labeling proposal for a fork. With draw probability $p$,
+\[
+\texttt{ll} \;=\; \log\!\left(\frac{\beta S I}{N}\right) - \log p - \log(E\cdot I),
+\]
+(counts $E,I$ taken \emph{after} $S{-}{=}1,\,E{+}{=}1$): the final $-\log(E\cdot I)$ term is the
+KLI reduced compatibility factor $\phi_u$ for a birth whose production vector is $r=(1,1)$ with
+\emph{both} slots landing on already-tracked (observed) lineages --- i.e.\ the observed children
+are two specific individuals out of $E$ total exposed and $I$ total infectious, respectively, with
+no free/untracked slot left over. As noted in \S\ref{sec:guide}'s vocabulary remark,
+\texttt{chop!}, \texttt{fork!}, and \texttt{swap!} here implement KLI's coloring operators $\chi$,
+$\kappa$, and $\sigma$ respectively (\texttt{plant!} introduces a fresh root lineage); the KLI chop
+operator $\chi$ appearing in this sentence is not the sampling-rate parameter $\chi$ used two
+paragraphs above.
+
+\subsection{Regular part}
+
+Between nodes, \texttt{regular\_part!} runs an ordinary Gillespie loop over four population-rate
+events (transmission, progression, recovery, waning) plus a fifth, purely-decay contribution from
+sampling ($(\psi+\chi)I$, which is never itself realized as a regular jump --- sampling only
+happens at data nodes --- so its entire rate is folded into $\lambda$ continuously).
+Transmission and progression are proposed \emph{jointly} with a possible lineage recoloring via
+\texttt{choose\_branch}: e.g.\ \texttt{regular\_transmission!} draws among ``no recolor'' (an
+untracked $S$ individual is infected) and ``recolor tracked branch $b$ from Infec to Expos''
+(interpreting the observed transmission as, in reverse time, exactly the moment one of the
+currently-tracked infectious lineages was itself created), with
+\[
+\texttt{ll} = -\log p + \begin{cases}
+\log\!\bigl(1-\ell_E/E\bigr), & b=0,\\[2pt]
+\log\!\bigl(1-\ell_I/I\bigr) - \log E, & b\neq 0,
+\end{cases}
+\]
+(post-update $E,I$). Recovery is proposed at the \emph{reduced} rate $\gamma I(1-\ell_I/I)$ ---
+i.e.\ only an untracked infectious individual may be proposed to recover, since recovering a
+tracked (sampled/internal) lineage is not observed --- with the corresponding leftover rate
+$\gamma\ell_I$ returned to the decay $\lambda$ rather than ever driving a jump; waning ($\omega R$)
+carries no coloring consequence and no boost. The running log-likelihood accumulates $-\lambda\,\Delta t$
+continuously between jumps, exactly the KLI decay term $-\int\lambda\,\dd t$.
+
+\begin{notebox}
+\textbf{This is not a plug-and-play \texttt{pomp} filter.} \texttt{filter\_pomp} assembles a
+\texttt{pomp} object (King, Nguyen \& Ionides \cite{KNI}) with the latent state process $X(t) =
+(S,E,I,R)$, observations $Y_n$ implicit in the genealogy's node times, and the usual
+\texttt{rinit}/\texttt{rprocess}/\texttt{logdmeasure} components, so a plain bootstrap
+\texttt{pfilter} call runs on it exactly as on any other \texttt{pomp} model. But the guide that
+\texttt{rprocess} consults through \texttt{userdata} is built by a call to \texttt{guide(gen,m,\ldots)}
+that needs the population's full rate structure (which events pin which demes, via
+\texttt{knowledge!}) to construct \texttt{present}/\texttt{target}, not merely a black-box
+simulator for $X(t)$. The filter is therefore \emph{not} plug-and-play in \texttt{pomp}'s sense:
+swapping in a new SEIRS-like model requires re-deriving \texttt{knowledge!}, the singular
+coloring operators, and the guide's own deme set, not just supplying a new \texttt{rprocess}.
+\end{notebox}
+
+\section{The MERS guided filter}
+\label{sec:mers}
+
+\texttt{mers\_guided.jl} implements the two-host analogue; it is now self-contained (it no longer
+includes \texttt{mers\_funs.jl}), mirroring \texttt{seir\_guided.jl}'s architecture. The regular
+process (\texttt{event\_rates!} in \texttt{mers\_guided.jl}) carries ten hazards: within-camel and
+within-human transmission (cc, hh), the two cross-host spillover directions (camel$\to$human,
+human$\to$camel), the two removal events (gated on $I_d>\ell_d$, exactly as SEIRS's recovery),
+and four demography events ($S_c$/$S_h$ births and deaths). The decay collects
+\[
+\lambda \;=\; \chi_c I_c + \chi_h I_h \;+\; \gamma_c \ell_C + \gamma_c(I_c-\ell_C)\ind_{I_c\le \ell_C}
+\;+\; \gamma_h \ell_H + \gamma_h(I_h-\ell_H)\ind_{I_h\le \ell_H},
+\]
+matching the SEIRS pattern of ``sampling always decays, removal above threshold drives, removal at
+threshold decays.''
+
+\paragraph{Spillover as a guided branch choice.} The two spillover directions are exactly the
+guided \texttt{choose\_branch} draws of \S\ref{sec:guide}: a camel$\to$human event
+(\texttt{choose\_branch(t,guide,node,I\_c,cols,Camel,Human)}) either recolors no tracked camel
+lineage ($b=0$, contributing $\log(1-\ell_H/I_h)$ post-update) or recolors a specific tracked camel
+lineage into Human ($b\neq0$, contributing $\log(1-\ell_C/I_c)-\log(I_h)$ via
+\texttt{swap!(cols,Camel,Human,b)}); the human$\to$camel direction is the mirror image. This is the
+MERS instance of the same joint identity/branch categorical used by SEIRS transmission and
+progression.
+
+\paragraph{Within-deme transmission: the pair-exclusion correction.} Unlike SEIRS transmission
+(which recolors an $S$ individual, a deme with no tracked lineages), a within-camel birth (cc) can
+coalesce \emph{two already-tracked} camel lineages, so its boost is not a single-slot ratio but the
+pair-exclusion factor
+\[
+\log\!\left(1 - \frac{\ell_C(\ell_C-1)}{I_c(I_c-1)}\right),
+\]
+the probability that neither of the two individuals involved in this particular birth is one of
+the $\binom{\ell_C}{2}$ already-tracked pairs (the hh case is the mirror). This is exactly
+$\log B_{\mathrm{TCC}}$ from \texttt{mers\_filter\_suite.tex}'s worked filter equations.
+
+\paragraph{Singular part.} \texttt{mers\_guided.jl}'s own \texttt{singular\_part!} handles the root (a
+guide-and-free-capacity--weighted choice of Camel vs.\ Human, exactly analogous to SEIRS's root
+draw, but over $(I_c-\ell_C,\,I_h-\ell_H)$), destructive sampling (\texttt{chop!}, i.e.\ KLI's
+$\chi$ operator, plus the rate-parameter contribution $\log(\chi_d I_d)$, $d\in\{c,h\}$ --- the two
+$\chi$'s here are the operator/parameter collision flagged in \S\ref{sec:guide} --- read from the
+genealogy's own \texttt{deme} metadata, since a
+\texttt{GuideNode} carries no deme field of its own), and coalescent forks. At a fork whose parent
+is currently colored Camel, the three feasible outcomes --- both children Camel (rate $\beta_{cc}
+S_cI_c/N_c$, guide weight $g_1=\texttt{present}[1,1]\texttt{present}[1,2]$), or a cross-host
+spillover with either orientation (rate $\beta_{hc}S_hI_c/N_c$, guide weights
+$g_2=\texttt{present}[1,1]\texttt{present}[2,2]$, $g_3=\texttt{present}[2,1]\texttt{present}[1,2]$)
+--- are drawn from $\texttt{rcateg}([\text{rate}_{cc}g_1,\ \text{rate}_{hc}g_2,\
+\text{rate}_{hc}g_3])$, mirroring the human-parent case with the roles exchanged. As in SEIRS, the
+final log-likelihood increment for the realized outcome is $\log(\text{rate}) -
+\log(I_c(I_c{-}1)/2)$ (same-deme) or $\log(\text{rate}) - \log(I_cI_h)$ (cross-deme), the KLI
+reduced compatibility factors for, respectively, a same-deme pair and a cross-deme pair of
+already-tracked lineages.
+
+\section{The four kernels, formally}
+\label{sec:kernels}
+
+All four kernels --- naive, soft, guided, hard --- simulate the \emph{same} target population
+process and are reweighted against the \emph{same} target filter; only the proposal $\pi_u$ (for
+soft/guided) or the auxiliary intensity $\kappa_u$ (for hard) differs. Throughout, fix a source
+deme $d$ with $I=I_d(y^-)$, $\ell=\ell_d(y^-)$ tracked lineages, and relative hazards $r_b\ge0$,
+$b\in\col_d(y^-)$, from \S\ref{sec:guide}.
+
+\begin{notebox}
+\textbf{Terminology.} ``Naive,'' ``soft,'' ``guided,'' and ``hard,'' as before, are this
+repository's own names; $\pi_u,\Phi_u,B_u,\alpha_u,\ell_d,I_d,\col_d$ are KLI's, used as in
+\texttt{mers\_filter\_suite.tex} \S1/\S4/\S9.1.
+\end{notebox}
+
+\subsection{Current (unfloored) kernels}
+\label{sec:unfloored}
+
+As of the \texttt{mers\_filter\_suite.tex} v31 revision (17 August 2026), \emph{every} MERS kernel
+--- and, as confirmed directly against \texttt{seir\_soft.jl}/\texttt{seir\_guided.jl}/
+\texttt{seir\_hard.jl}, every SEIR kernel, which never had a floor to begin with --- uses
+\emph{unfloored} base laws. There is no \texttt{proposal\_floor} parameter, no
+\texttt{floored\_shares}/\texttt{floored\_branch\_law}/\texttt{hard\_branch\_law} helper, and no
+local \texttt{floored\_choose\_branch} in \texttt{mers\_guided.jl}; a direct grep of
+\texttt{src/examples/*.jl} and \texttt{src/*.jl} for \texttt{proposal\_floor}/\texttt{epsilon}
+returns nothing. The three base laws are:
+
+\paragraph{Soft.} Preserves the naive aggregate identity/tracked split exactly,
+\[
+\pi(0) = \frac{I-\ell}{I}, \qquad \pi(b) = \frac{\ell}{I}\cdot\frac{r_b}{\sum_{b'}r_{b'}}
+\quad (b\in\col_d(y^-)),
+\]
+falling back to a uniform $1/\ell$ share within the tracked group when $\sum_{b'}r_{b'}=0$. The
+guide changes \emph{which} tracked branch is proposed; it never changes \emph{how likely} the
+tracked group is as a whole. Implemented via \texttt{rcateg} on the raw \texttt{relhaz} outputs
+(\texttt{mers\_soft.jl}/\texttt{seir\_soft.jl}).
+
+\paragraph{Guided.} Normalizes the identity weight and every branch's hazard \emph{jointly}, in one
+categorical:
+\[
+\pi(j) = \frac{w_j}{\sum_k w_k}, \qquad (w_0,w_1,\ldots,w_\ell) = (I-\ell,\,r_1,\ldots,r_\ell).
+\]
+This is exactly \texttt{choose\_branch(t,guide,node,n,cols,i,j)} in \texttt{guide.jl}
+(\S\ref{sec:guide}): the identity weight $s_1=n-\ell$ and the branch sum $s_2=\sum_b r_b$ are
+combined into one total $s=s_1+s_2$ before a single uniform draw on $[0,s)$ selects either the
+identity outcome (probability $s_1/s$) or a specific branch $b$ (probability $p_b/s$). Because the
+identity weight competes directly against \emph{every} $r_b$ in one normalization, a single
+dominant guide hazard can push $\pi(0)$ far below the naive ratio $(I-\ell)/I$ --- the guide
+reallocates mass \emph{between} identity and tracked outcomes here, not only \emph{within} the
+tracked group as in Soft. This is the mathematical distinction between Soft and Guided (stated the
+same way in \texttt{mers\_filter\_suite.tex}'s module docstrings for \texttt{SoftMERS} and
+\texttt{GuidedMERS}, quoted in \S\ref{sec:mers}'s introduction).
+
+\paragraph{Hard.} Uses the raw, unnormalized relative hazards as \emph{auxiliary intensity}
+multipliers, so the auxiliary process need not carry the population process's total rate. Following
+\texttt{mers\_filter\_suite.tex}, this note writes the auxiliary intensity as $\kappa(\cdot)$; this
+$\kappa$ is \emph{this repository's own vocabulary for Hard}, unrelated to (and an unfortunate
+collision with) KLI's fork operator $\kappa$ of \S\ref{sec:guide} --- the two never appear in the
+same formula, but a reader moving between sections should not conflate them:
+\[
+\kappa(0) = \frac{I-\ell}{I}, \qquad \kappa(b) = \frac{r_b}{I} \quad (b\in\col_d(y^-)).
+\]
+$\kappa(0)$ agrees with Soft's identity term, but $\sum_{b\ge1}\kappa(b)$ need \emph{not} equal
+$\ell/I$ --- equality holds only at stationarity, $\sum_b r_b=\ell$. Writing $\alpha$ for the
+population-process rate of the transmission, the auxiliary rates are $\beta_j=\alpha\kappa(j)$, and
+\[
+\Delta\lambda = \alpha\Bigl(1-\kappa(0)-\textstyle\sum_{b\ge1}\kappa(b)\Bigr)
+\]
+is returned to the decay $\lambda$; this may be \emph{negative}, since Hard can propose color
+changes faster than the population process actually produces them. The realized correction for a
+drawn outcome $j$ is $\log(\Phi_j/\kappa(j))$ --- the $\alpha$ factor cancels, so only the base-law
+difference from Soft/naive enters the weight. Implemented in \texttt{mers\_hard.jl}/
+\texttt{seir\_hard.jl} via the \texttt{sum\_relhaz}/\texttt{relhaz} accessors on a precomputed
+hazard table (\texttt{relhaz\_alloc}), with the compensating decay accumulated as
+\texttt{rate - alpha[identity] - alpha[swap-group]}.
+
+\subsection{The retracted $\varepsilon$-floor (historical)}
+\label{sec:floor-retracted}
+
+\begin{notebox}
+\textbf{This subsection describes a mechanism that is no longer part of the code.} It is included,
+clearly marked, because \texttt{mers\_filter\_suite.tex} \S9.1 (which this note otherwise follows
+closely) presents it at length, and because understanding \emph{why} it was removed is itself part
+of the mathematical assessment in \S\ref{sec:assessment}(v). \textbf{Third symbol collision.} The
+retracted literature's auxiliary-intensity symbol $\kappa_\varepsilon$ below is, like Hard's
+unfloored $\kappa$ of \S\ref{sec:unfloored}, \emph{this repository's own vocabulary} --- it appears
+in neither KLI nor \texttt{pomp} --- and collides in the same way with KLI's fork operator $\kappa$
+(\S\ref{sec:guide}); \texttt{mers\_filter\_suite.tex}'s own \S9.1 terminology notebox makes the same
+point about $\kappa_\varepsilon$ being repository vocabulary.
+\end{notebox}
+
+Prior to v31, all three guided-family kernels mixed their base law $\pi_0$ (or $\kappa_{0,\varepsilon}$, for
+Hard) with a uniform floor over the $\ell+1$ outcomes,
+\[
+\pi_\varepsilon(j) = (1-\varepsilon)\pi_0(j) + \frac{\varepsilon}{\ell+1}, \qquad 0\le\varepsilon\le1,
+\]
+with \texttt{proposal\_floor} ($=\varepsilon$) defaulting to $0.05$. The motivation, as
+\texttt{mers\_filter\_suite.tex}'s pre-v31 ``Full-support proposal'' paragraph argued, was a
+boundary case: at $I=\ell$ (every individual in the source deme already tracked), the naive/Soft
+identity term $\pi^\emptyset=(I-\ell)/I$ vanishes, and that paragraph asserted that the
+\emph{target}'s collapsed identity weight $\Phi^\emptyset$ remains positive there, so
+$B^\emptyset=\Phi^\emptyset/\pi^\emptyset$ would divide by zero --- an apparent violation of KLI
+Theorem~4/5's requirement that $\pi_u>0$ wherever $\alpha_u\Phi_u>0$.
+
+The v31 changelog in \texttt{mers\_filter\_suite.tex} retracts this argument. The reduced
+compatibility coefficient (KLI Eq.~43) is derived \emph{before} any proposal is chosen, by summing
+out the inline no-event indicator: the same-deme swap $\sigma^b_{II}$ \emph{and} the trivial
+transition $y'=y$ both produce the same reduced destination, and their contributions collapse to
+give exactly $(I-\ell)/I$ on both the driver and the target side --- so at $I=\ell$, $\Phi^\emptyset$
+is \emph{also} zero, not positive as the retracted paragraph claimed. The boundary is therefore a
+harmless $0/0$: \texttt{rcateg} never selects a zero-weight outcome, so the boost $\Phi/\pi$ is
+never evaluated there and no $0\times\infty$ product ever forms; the corresponding rate mass is
+charged, exactly, to the decay $\lambda$. Replacing $\pi_0$ with $\max(\pi_0,\varepsilon/(\ell{+}1))$
+was accordingly never a correction demanded by Eqs.~43--46; it silently defines a
+\emph{different} importance sampler, one that was never derived or justified as such. (A detailed
+algebraic derivation of this point is given in the companion note \texttt{kli\_seirs\_pi\_note.tex},
+referenced by the v31 changelog; this note does not attempt to reproduce that derivation and cites
+it by name only.) Consequently, as of v31, Soft uses the plain naive split with a guide-weighted
+\emph{unfloored} tracked-group draw, Guided uses \texttt{choose\_branch} directly, and Hard uses
+the raw unfloored auxiliary intensities of \S\ref{sec:unfloored} --- and the root/fork proposals
+use guide-weighted \texttt{rcateg} with no feasibility mask: when every weight is genuinely zero,
+\texttt{rcateg} returns the all-zero-weight fallback and the particle receives $-\infty$, which is
+the correct penalty for a target-incompatible outcome, not a proposal defect.
+
+\section{Mathematical assessment in KLI terms}
+\label{sec:assessment}
+
+\begin{enumerate}
+
+\item[(i)] \textbf{Exactness invariance; the ladder is a variance experiment.} $\Phi_u$ is a
+property of the \emph{target} MGP alone --- it does not know which of the four kernels is
+simulating. By KLI Theorem~5/Lemma~3, for \emph{any} $\pi$ with $\pi_u>0$ wherever
+$\alpha_u\Phi_u>0$, $B_u=\Phi_u/\pi_u$ restores an unbiased estimator of the exact likelihood.
+Naive, Soft, Guided, and Hard therefore all estimate the same $L(\theta)$; nothing in
+\S\ref{sec:kernels} changes $\hat L$'s expectation. The entire ladder is a pure variance
+experiment: which $\pi$ concentrates its mass closest to where $\Phi$ is large.
+
+\item[(ii)] \textbf{Guided is the plug-in of the locally optimal proposal.} The one-step optimal
+proposal at a branch point is $\pi^*(j)\propto\Phi_u(j)\,g(j)$, where $g$ is the exact backward
+information filter --- the probability of the \emph{entire remaining, unobserved genealogy and
+population trajectory} given the post-event coloring $j$. $g$ is not computable in general (it is
+exactly the object KLI's own recursion computes only in aggregate, via $\Phi$, not per-coloring
+detail conditioned on the future). The finite-state Markov guide of \S\ref{sec:guide} is a
+\emph{computable mean-field surrogate} for $g$: it treats each lineage's deme as evolving
+independently under a fixed, linear, population-state-\emph{blind} reverse-time process (the guide
+never reads $S,E,I,R$ or $S_c,I_c,S_h,I_h$), with no inter-lineage competition for hosts. The
+relative hazards $r_b$ of \S\ref{sec:guide} are, precisely, the likelihood ratio the surrogate
+assigns to ``recolor $b$'' versus ``leave $b$ alone'' at that instant --- a plug-in estimate of
+$g(\text{swap }b)/g(\text{identity})$. Guided's joint law $\pi(j)\propto w_j$,
+$(w_0,r_1,\ldots,r_\ell)$, is exactly $\pi^*$ with this surrogate substituted for $g$: it is the
+kernel that takes the guide's information most literally and uses \emph{all} of it, jointly, in one
+normalization.
+
+\item[(iii)] \textbf{Soft is a KL-suboptimal projection with a variance guarantee.} Soft can be
+seen as Guided's law projected onto the constraint set $\{\pi : \pi(\text{tracked group}) =
+\ell/I\}$ --- i.e.\ Guided, minus its freedom to move mass between the identity and tracked
+outcomes. Whenever the guide is informative about \emph{which} branch to favor but the aggregate
+identity/tracked split it implies materially differs from the naive $\ell/I$, this projection
+throws away first-order (KL) efficiency relative to $\pi^*$: Soft cannot approach $\pi^*$ as
+closely as Guided can, in general. What Soft buys back is a variance \emph{guarantee}: because the
+tracked-group aggregate is pinned to its naive value regardless of how badly the guide
+mis-estimates $g$, the identity/tracked split's contribution to weight dispersion is capped at
+exactly the naive kernel's own level --- Soft cannot make that particular source of variance worse
+than doing nothing, only the within-group allocation can improve on it.
+
+\item[(iv)] \textbf{Hard is intensity twisting; it is the only kernel that can fix timing.} Soft
+and Guided only reallocate proposal mass \emph{at} population-event times that the Gillespie clock
+already produces at the population rate $\alpha$; they cannot change \emph{when} an event fires.
+Hard can: because its auxiliary intensities $\kappa(j)$ need not sum to the population rate, a
+strongly favored branch can be made to fire \emph{sooner} than the population process alone would
+produce it, and less-favored branches later. This is the intensity-twisting idea familiar from
+Feynman--Kac particle methods (Del Moral \cite{DelMoral}) and auxiliary particle filters (Pitt \&
+Shephard \cite{PittShephard}): re-weight not just outcomes but the clock itself. The cost is that
+Hard's scaling relies on $\sum_b r_b\approx \ell$ (near-stationarity) to keep $\Delta\lambda$ small
+and well-behaved; this approximation is weakest exactly when $I(t)$ is small relative to $\ell$
+--- precisely the regime (few untracked individuals, guide information most decisive) where
+guidance matters most and where $\Delta\lambda$ can be large and negative, inflating the weight
+variance Hard was meant to reduce. Hard's bookkeeping is always exact (the negative $\Delta\lambda$
+is a correct accounting of a real intensity shortfall, not an error), but the resulting weights are
+not thereby lower-variance in this regime.
+
+\item[(v)] \textbf{Corrected: absolute continuity holds structurally here, without any floor.} A
+generic defensive-mixing argument would say: an unfloored proposal risks assigning exact zero
+probability to a target-feasible outcome, breaking the $\pi_u>0$-wherever-$\alpha_u\Phi_u>0$
+hypothesis of KLI Theorem~5 and biasing $\hat L$ downward. \textbf{This argument does not apply to
+the guide architecture of \S\ref{sec:guide}/\ref{sec:unfloored}.} Trace where an exact zero can
+actually arise in this code:
+\begin{itemize}
+\item \emph{Data pins.} \texttt{demekron!} writes an exact Kronecker delta at a genealogy node
+where \texttt{knowledge!} certifies the deme (a MERS sample's host, an SEIRS sample or internal
+node's Infec membership). These are zero-elapsed-time certificates, not approximations: they assert
+that this specific lineage \emph{is}, with probability one, in this deme at this instant, because
+the data say so. If this pin later makes some branch-choice weight exactly zero, that outcome is
+already excluded by the data itself --- a particle that reached it would die at the very next
+data-consistency check regardless of how it got there. Flooring such a weight would not rescue a
+salvageable particle; it would spend proposal mass reviving one that the data have already
+condemned.
+\item \emph{Guide-chain reducibility.} If the user-supplied \texttt{fsmarkov} conductances make the
+guide process reducible (e.g.\ a zero Camel$\leftrightarrow$Human conductance, mirroring
+$\beta_{ch}=0$ in the population model), some transition's relative hazard is identically zero on
+structural grounds. Here too the zero is a certificate about the \emph{guide's own} model, not
+noise: an informative guide should be built to reflect which cross-deme moves are reachable, and a
+genuinely irreducible target with a reducible guide is a guide \emph{misspecification} to fix by
+choosing better conductances, not a case for defensive mixing at the proposal stage.
+\item \emph{Everywhere else: strictly positive by construction.} Away from a pin and away from
+guide-chain reducibility, \texttt{forward\_action} applies $P(s)=L\operatorname{diag}(e^{\Lambda
+s})R$ to a nonnegative belief vector for $s>0$; for an irreducible generator this transition
+semigroup is strictly positive for every $s>0$ (the standard positivity property of an irreducible
+continuous-time chain's transition matrix), so every belief propagated across a positive-length
+interval, and every relative hazard $r_b$ derived from it, is strictly positive. Absolute continuity
+therefore holds \emph{structurally}, node by node, without any floor to enforce it.
+\end{itemize}
+The only residual caveat is numerical, not statistical: on an extremely long, strongly pinned
+interval, $e^{\Lambda s}$ can underflow in double precision before it reaches a genuine zero,
+producing a proposal weight indistinguishable from zero in floating point. This is a
+log-space/numerical-stability concern to monitor (e.g.\ working in log-hazards on long branches),
+not a mixing concern to paper over with $\varepsilon$-floor mass. The SEIRS kernels have never had
+a floor and are not observed to need one; the MERS kernels' v31 removal (\S\ref{sec:floor-retracted})
+brings MERS into the same, already-validated pattern.
+
+\item[(vi)] \textbf{Two structural approximation limits of the guide itself.} Two places where the
+guide's mean-field construction departs from the true backward filter $g$, independent of which of
+the four kernels is used to consult it:
+\begin{itemize}
+\item[(a)] \emph{Conditional independence at a fork.} The fork proposal's product form
+$\texttt{branch\_options}(x)=[x_{1,1}x_{2,2},\,x_{1,2}x_{2,1}]$ (SEIRS) and the analogous
+$g_1,g_2,g_3$ products (MERS, \S\ref{sec:mers}) assume the two children's subtree beliefs are
+conditionally independent given the parent's deme. This is \emph{exact} for the linear guide
+process itself (each lineage genuinely evolves independently under \texttt{FSMarkovProc}), but only
+\emph{approximate} for the true target conditional law, in which the two subtrees can share
+information through the shared, density-dependent population trajectory (e.g.\ a large $I_c$
+implied by one subtree's sampling pattern is informative about the other subtree's plausible
+colorings too, a coupling the guide cannot see).
+\item[(b)] \emph{State-homogeneous guide vs.\ state-dependent target.} The guide is
+genealogy-\emph{inhomogeneous} (it depends on tree topology and node times through the backward
+sweep) but population-\emph{state-homogeneous}: its transition rates are fixed constants, chosen
+once via \texttt{fsmarkov(\ldots)}, and never see the live $I_c(t)$, $I_h(t)$. For MERS, the
+decision the true backward filter would weight most heavily --- how much more likely a lineage's
+ancestor was Camel versus Human --- properly depends on the \emph{current} reservoir sizes $I_c(t)$
+and $I_h(t)$, which are strongly asymmetric and time-varying in the epidemic (e.g.\ a large,
+long-lived camel reservoir versus small, short spillover clusters in humans). The guide's fixed
+conductances capture this asymmetry only \emph{on average}, over the whole trajectory, not at the
+specific $t$ where a decision is being made.
+\end{itemize}
+Both (a) and (b) are exactly the residual $\mathrm{KL}(\pi^*\,\|\,\pi_{\mathrm{Guided}})$ left over
+after the mean-field plug-in of point (ii): the guide reproduces $\pi^*$'s \emph{first-moment}
+structure (which branch is favored, on average) but not its state-dependent covariance structure.
+This residual governs the estimator's variance only at \emph{second} order: the weight variance
+under a proposal $\pi$ relative to the $\Phi$-twisted target is controlled by the $\chi^2$-divergence
+$\chi^2\bigl(\Phi\cdot\|\,\pi\bigr) = \E_\pi[(\Phi/\pi)^2] - 1$ (a standard importance-sampling
+identity), of which the KL divergence used above is the natural \emph{first-order} surrogate near
+$\pi\approx\Phi$-proportional; both diagnose the same mean-field gap, but $\chi^2$, not KL, is the
+quantity that actually sets $\operatorname{Var}(\hat L)$ to leading order.
+\end{enumerate}
+
+\section{Verdict on the MERS kernel choice}
+\label{sec:verdict}
+
+\textbf{We agree that the repository's current default --- \texttt{GuidedMERS}, unfloored, matching
+the SEIRS pattern --- is the right choice, and that the v31 removal of the $\varepsilon$-floor was
+mathematically correct.}
+
+\paragraph{Why Guided.} Point (ii) makes this the principled choice among the three guided-family
+kernels: Guided is the direct plug-in of the locally optimal proposal $\pi^*$ using the guide as a
+surrogate for the intractable backward filter $g$, using \emph{all} of the guide's information
+jointly rather than only its within-group ranking (Soft) or its raw, unnormalized intensities
+(Hard). Whenever the guide is informative, Guided dominates Soft in KL terms by construction (point
+iii); Hard's intensity-twisting freedom (point iv) is a genuine additional capability but one whose
+benefit is undermined exactly where it would matter most (small $I(t)$, near-stationarity assumption
+weakest), so it does not obviously dominate Guided on this model.
+
+\paragraph{Why unfloored.} Point (v) is not a hedge: the removal is not merely tolerable, it is the
+mathematically justified state, given how this guide is built. Every exact zero in a
+\texttt{seir\_guided.jl}/\texttt{mers\_guided.jl} proposal traces to a data pin or a guide-chain
+reducibility, both of which are certificates that the corresponding outcome is already
+target-incompatible or already doomed, not artifacts of an approximate surrogate running short of
+support. Paying variance for a floor that resurrects only already-doomed particles has no
+compensating benefit.
+
+\paragraph{Kernel choice is not, in fact, the binding constraint on the real MERS tree.} The
+empirical diagnostic recorded in \texttt{mers\_kernel\_diagnostic\_findings.md} confirms this
+directly, and independently of the theory above: on the full 274-tip Dudas et al.\ \cite{Dudas}
+genealogy, \emph{all four kernels collapse identically} --- Naive, Soft, Guided, and Hard each give
+exactly 100 of 548 filtering steps equal to $-\infty$, the first at step 144, for every seed and
+every parameter variation tested. Every one of the 100 failures is a Camel-deme sample; direct
+state inspection confirms the simulated camel-infected count $I_c$ has already gone stochastically
+extinct beforehand, and stays there permanently because $\beta_{ch}=0$ and $B_c=0$ leave no way to
+regenerate a camel infection once $I_c=0$ --- a true absorbing state under Table~2 parameters. A
+second, simpler collapse mode occurs under the module's bare defaults ($\chi_h=0$): the very first
+Human sample node forces $\log(\chi_h I_h)=\log 0=-\infty$ unconditionally, before extinction or
+any other dynamics get a chance to matter. Both are $\Phi=0$, target-level incompatibilities ---
+exactly the boundary KLI Theorem~5 draws around what \emph{any} admissible proposal kernel may and
+may not repair. No amount of guide sophistication, and no re-litigation of Soft vs.\ Guided vs.\
+Hard, changes a target-level $\Phi=0$; paying Hard's variance premium in particular buys nothing on
+this tree, since the binding constraint is upstream of the proposal entirely.
+
+\paragraph{Honest caveats and a concrete next step.} None of the above should be read as ``the
+current setup already filters the real tree.'' It does not, for the reason just given, and fixing
+that is a prerequisite for any kernel comparison to be meaningful on real data:
+\begin{enumerate}
+\item \textbf{Fix the parameter-support issues first.} A nonzero $\chi_h$ (so the first human
+sample is not an automatic $-\infty$) and a regeneration path for camel infection --- $\beta_{ch}>0$
+or $B_c>0$, either of which breaks the $I_c=0$ absorbing state --- are prerequisites for \emph{any}
+kernel to filter the real tree at all. This is parameter/model-regime work, not proposal-design
+work (\texttt{mers\_kernel\_diagnostic\_findings.md} reaches the same conclusion and further
+suggests a non-destructive-sampling or waning-immunity camel variant, e.g.\ Yang's SIRS
+formulation, as a structural alternative to an endemic reservoir that goes extinct on a multi-year
+tree).
+\item \textbf{If ESS is still poor near camel-sample clusters at low $I_c$ once support is fixed,
+the next rung is not Hard-as-implemented.} Point (vi)(b) identifies the dominant residual: the
+guide's fixed conductances average over the whole trajectory instead of reflecting the
+\emph{current} $I_c(t),I_h(t)$. The natural fix attacks that gap directly, rather than reaching for
+Hard's timing freedom: a \textbf{state-dependent guide function} correcting the FSMarkov guide's
+stationarity normalization $\sum_b r_b=\ell$ by the current deme occupancies $I_d(t)$, in the sense
+of the guided intermediate resampling filter (GIRF; Park \& Ionides \cite{ParkIonides}) --- a
+GIRF-type twist localized to the next sample event's known host, rather than a generic lookahead.
+(``State-adaptive guided kernel'' is only this note's shorthand for the same idea; GIRF's guide
+function is the established term and is preferred.) This narrows the mean-field gap of point
+(vi)(b) directly, rather than trading it for Hard's timing-freedom variance premium of point (iv);
+the general idea of twisting a filter by a lookahead correction is shared with the auxiliary
+particle filter (Pitt \& Shephard \cite{PittShephard}) and, in a fully iterated form, with the
+iterated auxiliary particle filter (Guarniero, Johansen \& Lee \cite{GuarnieroJL}) and controlled
+SMC (Heng et al.\ \cite{HengEtAl}).
+\item \textbf{Keep Hard as a diagnostic instrument, not a production kernel.} Hard's weight variance
+localizes precisely where the guide's timing information is poor (point iv); that makes it a useful
+probe for finding such regions during development, but not a kernel to prefer for production
+likelihood estimates on this model.
+\end{enumerate}
+
+\section{Summary table}
+\label{sec:summary}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{1.7cm}p{3.6cm}p{4.0cm}p{4.4cm}@{}}
+\toprule
+Kernel & Base law & What the guide controls & Weight-variance mechanism / when preferred \\
+\midrule
+Naive & $\pi(0)=(I-\ell)/I$, $\pi(b)=1/I$ uniform & Nothing --- guide not consulted & Baseline;
+correct but leaves all guide information on the table. \\
+\addlinespace
+Soft & $\pi(0)=(I-\ell)/I$ fixed; within-group $\pi(b)\propto r_b$ & Which tracked branch, not the
+identity/tracked split & Caps the identity/tracked split's variance contribution at the naive level;
+KL-suboptimal relative to $\pi^*$ whenever the guide implies a different split. \\
+\addlinespace
+Guided & Joint $\pi(j)\propto(I-\ell,r_1,\ldots,r_\ell)$ & Identity vs.\ tracked \emph{and} which
+branch, jointly & Plug-in of the locally optimal $\pi^*=\Phi\cdot g$ with the guide as surrogate for
+$g$; dominates Soft in KL whenever the guide is informative. \emph{Repository's MERS default.} \\
+\addlinespace
+Hard & $\kappa(0)=(I-\ell)/I$, $\kappa(b)=r_b/I$, unnormalized; $\Delta\lambda$ to decay & Event
+\emph{timing} as well as outcome, via auxiliary intensity twisting & Only kernel that can move
+event times, not just reallocate at fixed times; benefit degrades where $\sum_b r_b\not\approx\ell$
+(small $I(t)$), which is exactly where guidance matters most. Useful diagnostically. \\
+\bottomrule
+\end{tabular}
+\caption{The four-kernel ladder. All four target the same $\Phi$ and are unbiased for $L(\theta)$
+by KLI Theorem~5/Lemma~3; only the proposal-induced variance differs. \emph{Retracted (v31):} all
+three guided-family kernels previously mixed their base law with a uniform $\varepsilon$-floor,
+$\varepsilon=0.05$ by default (\S\ref{sec:floor-retracted}); this mechanism has been deleted from
+every MERS kernel and is not reflected in this table.}
+\end{table}
+
+\section*{Addendum (18 September 2026)}
+
+Four developments since the analysis above, none of which changes the verdict of
+\S\ref{sec:verdict}:
+
+\begin{enumerate}
+\item \textbf{\texttt{mers\_guided.jl} rewritten upstream, now self-contained.} Aaron King
+rewrote \texttt{mers\_guided.jl} (module \texttt{GuidedMERS}) so that it no longer
+\texttt{include}s \texttt{mers\_funs.jl}; its architecture now mirrors
+\texttt{seir\_guided.jl}'s directly, with its own \texttt{knowledge!}, \texttt{singular\_part!},
+and modular rate pieces (\texttt{transmission!}, \texttt{removal!}, \texttt{demography!},
+\texttt{sampling}) composed by \texttt{event\_rates!}. The proposal remains ``semisoft'': at a
+fork the orientation and within/cross-host type are drawn jointly from guide-weighted rates, and
+regular-time cross-host events use \texttt{choose\_branch} exactly as described in
+\S\ref{sec:mers}. References to \texttt{mers\_funs.jl} in \S\ref{sec:guide} and \S\ref{sec:mers}
+above have been updated accordingly.
+\item \textbf{\texttt{mers\_funs.jl} now shared only by \texttt{SoftMERS}/\texttt{HardMERS}.}
+These two are being refactored toward \texttt{GuidedMERS}'s nested-state
+(\texttt{state=(;S\_c,I\_c,S\_h,I\_h)}, \texttt{live::Bool}) architecture, differing from it only
+in \texttt{regular\_part!}/\texttt{event\_rates!}.
+\item \textbf{An upstream fork-term bug, since patched in this repository's copy.} Aaron's
+rewritten \texttt{singular\_branch!} charged $-\log(I_C(I_C-1))$ (resp.\ $I_H$) at a same-deme
+fork; the correct factor, matching \texttt{mers\_naive.jl}, the pre-rewrite \texttt{mers\_funs.jl},
+and the compiler IR's \texttt{ForkTransition} $\varphi=2/(I(I-1))$, is $-\log(I_C(I_C-1)/2)$ ---
+exactly the factor already used in \S\ref{sec:mers} above and derived throughout
+\texttt{mers\_filter\_suite.tex}. The missing $/2$ contributes a constant $\log 2$ per within-host
+coalescence; on an all-camel 4-tip tree (3 internal nodes) the unpatched and patched
+log-likelihood estimates differed by $2.04\pm0.43$, against the predicted $3\log 2=2.08$. When
+the data force the host assignment at every internal node (as on that all-camel tree) this is a
+pure offset; on a mixed tree the likelihood sums over colorings and the missing $/2$ halves the
+within-host component ($\propto\beta_{CC},\beta_{HH}$) while leaving the cross-host components
+($\propto\beta_{HC},\beta_{CH}$) intact, tilting the surface toward cross-host explanations. It is
+to be relayed to Aaron as an upstream fix.
+\item \textbf{Dependency updates.} The package now depends on registered
+\texttt{PartiallyObservedMarkovProcesses} v0.10 (previously a \texttt{0.8.1-dev} pin to the
+\texttt{devel} branch); \texttt{Distributions} is now a direct dependency; \texttt{mif},
+\texttt{geometric\_cooling}, and \texttt{traces} are new POMP exports exercised by
+\texttt{test/mers\_guided.jl}. \texttt{guide.jl} dropped its \texttt{@inbounds} annotations to
+match upstream, and \texttt{mers\_tree.jl} no longer defines \texttt{mers\_trees} (only
+\texttt{mers\_newick}).
+\item \textbf{A second upstream bug, since patched in this repository's copy.} Aaron's
+\texttt{regular\_transmission\_cc!}/\texttt{regular\_transmission\_hh!} (regular-time
+within-host births) returned a zero log-weight, omitting the ``no visible fork'' factor
+$1-\binom{\ell_d}{2}/\binom{I_d}{2}$ that \texttt{mers\_naive.jl}, Soft/Hard, and the compiler's
+Chu--Vandermonde aggregate ($\Phi_{\mathrm{identity}}+\ell\Phi_{\mathrm{inline}}=1-\binom{\ell}{2}\Phi_{\mathrm{fork}}$)
+all charge on a within-deme birth that does not coalesce two tracked lineages. This one is
+\emph{state-dependent} even when every node's host assignment is forced by the data --- it scales
+with the number of within-host births while $\ell_d\ge2$ --- so it biases parameter inference
+strongly (the $\log 2$ fork-term bug, item 3 above, is a pure offset only in that forced case), not merely the absolute
+likelihood. Verified on a 4-camel-tip tree with long coexisting branches ($\beta_{cc}=3$,
+$N_c=40$, $I_{c0}=0.25$; 30 reps of $N_p=4000$ each): the pre-rewrite guided kernel gave
+$-28.63\pm0.04$, Aaron's version with only the $\log 2$ fix gave $-22.58\pm0.30$, and Aaron's
+version with both fixes restored gave $-28.58\pm0.05$. This repository's copy now carries both
+fixes; both are to be relayed to Aaron as upstream fixes.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem{KLI} King, A.~A., Lin, Q., and Ionides, E.~L. \emph{Exact phylodynamic likelihood via
+structured Markov genealogy processes.} arXiv:2405.17032 (posted 2024, revised 2026).
+\bibitem{KNI} King, A.~A., Nguyen, D., and Ionides, E.~L. Statistical inference for partially
+observed Markov processes via the R package \texttt{pomp}. \emph{Journal of Statistical Software}
+69(12):1--43, 2016.
+\bibitem{DelMoral} Del Moral, P. \emph{Feynman--Kac Formulae: Genealogical and Interacting Particle
+Systems with Applications.} Springer, 2004.
+\bibitem{PittShephard} Pitt, M.~K., and Shephard, N. Filtering via simulation: auxiliary particle
+filters. \emph{Journal of the American Statistical Association} 94(446):590--599, 1999.
+\bibitem{ParkIonides} Park, J., and Ionides, E.~L. Inference on high-dimensional implicit dynamic
+models using a guided intermediate resampling filter. \emph{Statistics and Computing}
+30:1497--1522, 2020.
+\bibitem{GuarnieroJL} Guarniero, P., Johansen, A.~M., and Lee, A. The iterated auxiliary particle
+filter. \emph{Journal of the American Statistical Association} 112(520):1636--1647, 2017.
+\bibitem{HengEtAl} Heng, J., Bishop, A.~N., Deligiannidis, G., and Doucet, A. Controlled sequential
+Monte Carlo. \emph{Annals of Statistics} 48(5):2904--2929, 2020.
+\bibitem{Dudas} Dudas, G., Carvalho, L.~M., Rambaut, A., and Bedford, T. MERS-CoV spillover at the
+camel-human interface. \emph{eLife} 7:e31257, 2018.
+\end{thebibliography}
+
+\end{document}
