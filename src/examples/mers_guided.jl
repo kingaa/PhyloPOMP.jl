@@ -184,7 +184,7 @@ singular_branch!(
             fork!(cols,Camel,guidenode.parlin,(Camel,Camel),guidenode.chillins)
             S_c -= 1
             I_c += 1
-            ll -= log(I_c*(I_c-1))
+            ll -= log(I_c*(I_c-1)/2)  # 1/binomial(I_c,2): unordered pair of camel lineages
         elseif k==2
             ll = log(β_hc*S_h*I_c/N_c)-log(p)
             fork!(cols,Camel,guidenode.parlin,(Camel,Human),guidenode.chillins)
@@ -216,7 +216,7 @@ singular_branch!(
             fork!(cols,Human,guidenode.parlin,(Human,Human),guidenode.chillins)
             S_h -= 1
             I_h += 1
-            ll -= log(I_h*(I_h-1))
+            ll -= log(I_h*(I_h-1)/2)  # 1/binomial(I_h,2): unordered pair of human lineages
         elseif k==2
             ll = log(β_ch*S_c*I_h/N_h)-log(p)
             fork!(cols,Human,guidenode.parlin,(Camel,Human),guidenode.chillins)
@@ -266,18 +266,24 @@ regular_transmission_cc!(
     t, guide, node, cols, (;S_c, I_c, S_h, I_h),
     kwargs...,
 ) = begin
+    ellC = ell(cols,Camel)
     S_c -= 1
     I_c += 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    ## No branch point is observed here, so the birth must not have
+    ## joined two of the ellC tracked camel lineages: weight by
+    ## 1 - binomial(ellC,2)/binomial(I_c,2).
+    log(1-ellC*(ellC-1)/I_c/(I_c-1)), (;S_c, I_c, S_h, I_h)
 end
 
 regular_transmission_hh!(
     t, guide, node, cols, (;S_c, I_c, S_h, I_h),
     kwargs...,
 ) = begin
+    ellH = ell(cols,Human)
     S_h -= 1
     I_h += 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    ## As for camel-camel: weight by 1 - binomial(ellH,2)/binomial(I_h,2).
+    log(1-ellH*(ellH-1)/I_h/(I_h-1)), (;S_c, I_c, S_h, I_h)
 end
 
 regular_transmission_hc!(
