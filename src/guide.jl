@@ -6,7 +6,7 @@ import Base: eachindex, length, getindex, eachindex, show
 A `GuideNode` contains the information needed to guide a phylodynamic
 Monte Carlo filter on a particular interval between genealogical
 events.  `F` is an `AbstractFloat` type, `N` is the number of demes,
-and `D` is the enumeration of the demes (see [`@demes`](@ref)).
+and `D` is the enumeration of the demes (see [`@demes`](@ref `@demes`)).
 
 A `GuideNode` contains:
 - the time interval to which it pertains
@@ -95,9 +95,9 @@ struct Guide{F<:AbstractFloat,N,D<:Enum}
                 time=g[n].slate,
             )
             if known
-                @inbounds probs[:,parlin] = probs[:,parlin]./sum(probs[:,parlin])
+                probs[:,parlin] = probs[:,parlin]./sum(probs[:,parlin])
             else
-                @inbounds assimil!(
+                assimil!(
                     @view(probs[:,parlin]),
                     @view(probs[:,chillins]),
                     statdist(m)
@@ -278,16 +278,16 @@ assimil!(
     else
         for i ∈ axes(chilprobs,1)
             for j ∈ axes(chilprobs,2)
-                @inbounds chilprobs[i,j] /= pi[i]
+                chilprobs[i,j] /= pi[i]
             end
         end
         s = zero(F)
         for i ∈ axes(chilprobs,1)
-            @inbounds parprob[i] = pi[i]*prod(chilprobs[i,:])
-            @inbounds s += parprob[i]
+            parprob[i] = pi[i]*prod(chilprobs[i,:])
+            s += parprob[i]
         end
         for i ∈ eachindex(parprob)
-            @inbounds parprob[i] /= s
+            parprob[i] /= s
         end
     end
     nothing
