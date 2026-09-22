@@ -184,7 +184,7 @@ singular_branch!(
             fork!(cols,Camel,guidenode.parlin,(Camel,Camel),guidenode.chillins)
             Sc -= 1
             Ic += 1
-            ll -= log(Ic*(Ic-1))
+            ll -= log(Ic*(Ic-1)/2)
         elseif k==2
             ll = log(βhc*Sh*Ic/Nc)-log(p)
             fork!(cols,Camel,guidenode.parlin,(Camel,Human),guidenode.chillins)
@@ -216,7 +216,7 @@ singular_branch!(
             fork!(cols,Human,guidenode.parlin,(Human,Human),guidenode.chillins)
             Sh -= 1
             Ih += 1
-            ll -= log(Ih*(Ih-1))
+            ll -= log(Ih*(Ih-1)/2)
         elseif k==2
             ll = log(βch*Sc*Ih/Nh)-log(p)
             fork!(cols,Human,guidenode.parlin,(Camel,Human),guidenode.chillins)

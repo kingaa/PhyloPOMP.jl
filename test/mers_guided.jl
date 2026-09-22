@@ -28,7 +28,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
     @test pf isa POMP.PfilterdPompObject
     mf = mif(
         pf,Nmif=3,Np=1000,trigger=0.2,target=0.8,
-        cooling_schedule=geometric_cooling(1.0),
+        cooling=geometric_cooling(1.0),
         perturbations=function(
             s, lag;
             βcc, βhh, βch, βhc,
@@ -58,9 +58,10 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
     if heavy
         @time mf = mif(mf,Nmif=100)
-        @time mf1 = mif(mf,Nmif=50,cooling_schedule=geometric_cooling(0.8))
-        @time mf2 = mif(mf1,Nmif=100,cooling_schedule=geometric_cooling(0.1))
-        @info "$(coef(mf2))"
+        @time mf1 = mif(mf,Nmif=50,cooling=geometric_cooling(0.8))
+        @time mf2 = mif(mf1,Nmif=100,cooling=geometric_cooling(0.1))
+        @info "estimates: $(map(x->round(x,sigdigits=3),coef(mf2)))"
+        @info "logLik estimate = $(logLik(mf2))"
     end
 
 end
