@@ -58,47 +58,47 @@ check(
 end
 
 transmission!(
-    alpha, (;S_c, I_c, S_h, I_h), cols;
-    β_cc, β_hh, β_ch, β_hc, N_c, N_h,
+    alpha, (;Sc, Ic, Sh, Ih), cols;
+    βcc, βhh, βch, βhc, Nc, Nh,
     _...,
 ) = begin
-    alpha[1] = β_cc*S_c*I_c/N_c
-    alpha[2] = β_hh*S_h*I_h/N_h
-    alpha[3] = β_hc*S_h*I_c/N_c
-    alpha[4] = β_ch*S_c*I_h/N_h
+    alpha[1] = βcc*Sc*Ic/Nc
+    alpha[2] = βhh*Sh*Ih/Nh
+    alpha[3] = βhc*Sh*Ic/Nc
+    alpha[4] = βch*Sc*Ih/Nh
     zero(Prob)
 end
 
 removal!(
-    alpha, (;S_c, I_c, S_h, I_h), cols;
-    γ_c, γ_h,
+    alpha, (;Sc, Ic, Sh, Ih), cols;
+    γc, γh,
     _...,
 ) = begin
-    rate_c = γ_c*I_c
-    rate_h = γ_h*I_h
+    ratec = γc*Ic
+    rateh = γh*Ih
     ellC = ell(cols,Camel)
     ellH = ell(cols,Human)
-    alpha[1] = @indicator(I_c > ellC, rate_c*(1-ellC/I_c))
-    alpha[2] = @indicator(I_h > ellH, rate_h*(1-ellH/I_h))
-    rate_c + rate_h - sum(alpha)
+    alpha[1] = @indicator(Ic > ellC, ratec*(1-ellC/Ic))
+    alpha[2] = @indicator(Ih > ellH, rateh*(1-ellH/Ih))
+    ratec + rateh - sum(alpha)
 end
 
 demography!(
-    alpha, (;S_c, I_c, S_h, I_h), cols;
-    B_c, B_h, N_c, N_h, _...
+    alpha, (;Sc, Ic, Sh, Ih), cols;
+    Bc, Bh, Nc, Nh, _...
         ) = begin
-            alpha[1] = B_c
-            alpha[2] = B_h
-            alpha[3] = B_c*S_c/N_c
-            alpha[4] = B_h*S_h/N_h
+            alpha[1] = Bc
+            alpha[2] = Bh
+            alpha[3] = Bc*Sc/Nc
+            alpha[4] = Bh*Sh/Nh
             zero(Prob)
         end
 
 sampling(
-    (;S_c, I_c, S_h, I_h), cols;
-    χ_c, χ_h, _...,
+    (;Sc, Ic, Sh, Ih), cols;
+    χc, χh, _...,
 ) = begin
-    χ_c*I_c + χ_h*I_h
+    χc*Ic + χh*Ih
 end
 
 event_rates!(alpha, state, cols; kwargs...) = begin
@@ -110,13 +110,13 @@ event_rates!(alpha, state, cols; kwargs...) = begin
     decay
 end
 
-deme_occupancy(;I_c, I_h, _...,) = begin
-    ;I_c, I_h
+deme_occupancy(;Ic, Ih, _...,) = begin
+    ;Ic, Ih
 end
 
-live_condition((;S_c, I_c, S_h, I_h), cols) = begin
+livecondition((;Sc, Ic, Sh, Ih), cols) = begin
     ellC, ellH = ell(cols)
-    I_c ≥ ellC && I_h ≥ ellH
+    Ic ≥ ellC && Ih ≥ ellH
 end
 
 singular_root!(
@@ -138,18 +138,18 @@ singular_root!(
 end
 
 terminal_sample!(
-    gennode, guidenode, cols, (;S_c, I_c, S_h, I_h); χ_c, χ_h, _...,
+    gennode, guidenode, cols, (;Sc, Ic, Sh, Ih); χc, χh, _...,
 ) = begin
     deme = gennode.deme
     if guidenode.parlin ∈ cols[deme]
         live = true
         chop!(cols, deme, guidenode.parlin)
         if deme == Camel
-            ll = log(χ_c*I_c)
-            I_c -= 1
+            ll = log(χc*Ic)
+            Ic -= 1
         elseif deme == Human
-            ll = log(χ_h*I_h)
-            I_h -= 1
+            ll = log(χh*Ih)
+            Ih -= 1
         else
             @assert false "impossible!"
         end
@@ -157,7 +157,7 @@ terminal_sample!(
         live = false
         ll = Prob(-Inf)
     end
-    ;live, ll, (;S_c, I_c, S_h, I_h)
+    ;live, ll, (;Sc, Ic, Sh, Ih)
 end
 
 singular_sample!(gennode, guidenode, cols, state; kwargs...) = begin
@@ -165,38 +165,38 @@ singular_sample!(gennode, guidenode, cols, state; kwargs...) = begin
 end
 
 singular_branch!(
-    gennode, guidenode, cols, (;S_c, I_c, S_h, I_h);
-    β_cc, β_hh, β_hc, β_ch, N_c, N_h,
+    gennode, guidenode, cols, (;Sc, Ic, Sh, Ih);
+    βcc, βhh, βhc, βch, Nc, Nh,
     _...,
 ) = begin
     if guidenode.parlin ∈ cols[Camel]
         live = true
         k, _, p = rcateg(
             [
-                β_cc*S_c*I_c * guidenode.present[1,1]*guidenode.present[1,2],
-                β_hc*S_h*I_c * guidenode.present[1,1]*guidenode.present[2,2],
-                β_hc*S_h*I_c * guidenode.present[2,1]*guidenode.present[1,2],
+                βcc*Sc*Ic * guidenode.present[1,1]*guidenode.present[1,2],
+                βhc*Sh*Ic * guidenode.present[1,1]*guidenode.present[2,2],
+                βhc*Sh*Ic * guidenode.present[2,1]*guidenode.present[1,2],
             ],
             true,
         )
         if k==1
-            ll = log(β_cc*S_c*I_c/N_c)-log(p)
+            ll = log(βcc*Sc*Ic/Nc)-log(p)
             fork!(cols,Camel,guidenode.parlin,(Camel,Camel),guidenode.chillins)
-            S_c -= 1
-            I_c += 1
-            ll -= log(I_c*(I_c-1))
+            Sc -= 1
+            Ic += 1
+            ll -= log(Ic*(Ic-1))
         elseif k==2
-            ll = log(β_hc*S_h*I_c/N_c)-log(p)
+            ll = log(βhc*Sh*Ic/Nc)-log(p)
             fork!(cols,Camel,guidenode.parlin,(Camel,Human),guidenode.chillins)
-            S_h -= 1
-            I_h += 1
-            ll -= log(I_c*I_h)
+            Sh -= 1
+            Ih += 1
+            ll -= log(Ic*Ih)
         elseif k==3
-            ll = log(β_hc*S_h*I_c/N_c)-log(p)
+            ll = log(βhc*Sh*Ic/Nc)-log(p)
             fork!(cols,Camel,guidenode.parlin,(Human,Camel),guidenode.chillins)
-            S_h -= 1
-            I_h += 1
-            ll -= log(I_c*I_h)
+            Sh -= 1
+            Ih += 1
+            ll -= log(Ic*Ih)
         else
             live = false
             ll = Prob(-Inf)
@@ -205,30 +205,30 @@ singular_branch!(
         live = true
         k, _, p = rcateg(
             [
-                β_hh*S_h*I_h * guidenode.present[2,1]*guidenode.present[2,2],
-                β_ch*S_c*I_h * guidenode.present[1,1]*guidenode.present[2,2],
-                β_ch*S_c*I_h * guidenode.present[2,1]*guidenode.present[1,2],
+                βhh*Sh*Ih * guidenode.present[2,1]*guidenode.present[2,2],
+                βch*Sc*Ih * guidenode.present[1,1]*guidenode.present[2,2],
+                βch*Sc*Ih * guidenode.present[2,1]*guidenode.present[1,2],
             ],
             true,
         )
         if k==1
-            ll = log(β_hh*S_h*I_h/N_h)-log(p)
+            ll = log(βhh*Sh*Ih/Nh)-log(p)
             fork!(cols,Human,guidenode.parlin,(Human,Human),guidenode.chillins)
-            S_h -= 1
-            I_h += 1
-            ll -= log(I_h*(I_h-1))
+            Sh -= 1
+            Ih += 1
+            ll -= log(Ih*(Ih-1))
         elseif k==2
-            ll = log(β_ch*S_c*I_h/N_h)-log(p)
+            ll = log(βch*Sc*Ih/Nh)-log(p)
             fork!(cols,Human,guidenode.parlin,(Camel,Human),guidenode.chillins)
-            S_c -= 1
-            I_c += 1
-            ll -= log(I_c*I_h)
+            Sc -= 1
+            Ic += 1
+            ll -= log(Ic*Ih)
         elseif k==3
-            ll = log(β_ch*S_c*I_h/N_h)-log(p)
+            ll = log(βch*Sc*Ih/Nh)-log(p)
             fork!(cols,Human,guidenode.parlin,(Human,Camel),guidenode.chillins)
-            S_c -= 1
-            I_c += 1
-            ll -= log(I_c*I_h)
+            Sc -= 1
+            Ic += 1
+            ll -= log(Ic*Ih)
         else
             live = false
             ll = Prob(-Inf)
@@ -237,7 +237,7 @@ singular_branch!(
         live = false
         ll = Prob(-Inf)
     end
-    ;live, ll, (;S_c, I_c, S_h, I_h)
+    ;live, ll, (;Sc, Ic, Sh, Ih)
 end
 
 singular_part!(
@@ -245,7 +245,7 @@ singular_part!(
     kwargs...,
 ) = begin
     ells = ell(cols)
-    live = live_condition(state, cols)
+    live = livecondition(state, cols)
     if live
         gennode = genealogy[n]
         guidenode = guide[n]
@@ -263,109 +263,109 @@ singular_part!(
 end
 
 regular_transmission_cc!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    S_c -= 1
-    I_c += 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    Sc -= 1
+    Ic += 1
+    zero(Prob), (;Sc, Ic, Sh, Ih)
 end
 
 regular_transmission_hh!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    S_h -= 1
-    I_h += 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    Sh -= 1
+    Ih += 1
+    zero(Prob), (;Sc, Ic, Sh, Ih)
 end
 
 regular_transmission_hc!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    b,p = choose_branch(t,guide,node,I_c,cols,Camel,Human)
+    b,p = choose_branch(t,guide,node,Ic,cols,Camel,Human)
     ll = -log(p)
-    S_h -= 1
-    I_h += 1
+    Sh -= 1
+    Ih += 1
     if b == 0
         ellH = ell(cols,Human)
-        ll += log(1-ellH/I_h)
+        ll += log(1-ellH/Ih)
     else
         ellC, ellH = swap!(cols,Camel,Human,b)
-        ll += log(1-ellC/I_c) - log(I_h)
+        ll += log(1-ellC/Ic) - log(Ih)
     end
-    ll, (;S_c, I_c, S_h, I_h)
+    ll, (;Sc, Ic, Sh, Ih)
 end
 
 regular_transmission_ch!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    b,p = choose_branch(t,guide,node,I_h,cols,Human,Camel)
+    b,p = choose_branch(t,guide,node,Ih,cols,Human,Camel)
     ll = -log(p)
-    S_c -= 1
-    I_c += 1
+    Sc -= 1
+    Ic += 1
     if b == 0
         ellC = ell(cols,Camel)
-        ll += log(1-ellC/I_c)
+        ll += log(1-ellC/Ic)
     else
         ellC, ellH = swap!(cols,Human,Camel,b)
-        ll += log(1-ellH/I_h) - log(I_c)
+        ll += log(1-ellH/Ih) - log(Ic)
     end
-    ll, (;S_c, I_c, S_h, I_h)
+    ll, (;Sc, Ic, Sh, Ih)
 end
 
 regular_removal_c!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
     ellC = ell(cols,Camel)
-    ll = -log(1-ellC/I_c)       # preboost
-    I_c -= 1
-    ll, (;S_c, I_c, S_h, I_h)
+    ll = -log(1-ellC/Ic)       # preboost
+    Ic -= 1
+    ll, (;Sc, Ic, Sh, Ih)
 end
 
 regular_removal_h!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
     ellH = ell(cols,Human)
-    ll = -log(1-ellH/I_h)       # preboost
-    I_h -= 1
-    ll, (;S_c, I_c, S_h, I_h)
+    ll = -log(1-ellH/Ih)       # preboost
+    Ih -= 1
+    ll, (;Sc, Ic, Sh, Ih)
 end
 
 regular_birth_c!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    S_c += 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    Sc += 1
+    zero(Prob), (;Sc, Ic, Sh, Ih)
 end
 
 regular_birth_h!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    S_h += 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    Sh += 1
+    zero(Prob), (;Sc, Ic, Sh, Ih)
 end
 
 regular_death_c!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    S_c -= 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    Sc -= 1
+    zero(Prob), (;Sc, Ic, Sh, Ih)
 end
 
 regular_death_h!(
-    t, guide, node, cols, (;S_c, I_c, S_h, I_h),
+    t, guide, node, cols, (;Sc, Ic, Sh, Ih),
     kwargs...,
 ) = begin
-    S_h -= 1
-    zero(Prob), (;S_c, I_c, S_h, I_h)
+    Sh -= 1
+    zero(Prob), (;Sc, Ic, Sh, Ih)
 end
 
 regular_part!(
@@ -413,19 +413,19 @@ regular_part!(
     ll, state
 end
 
-mers_rinit(; S_c0, S_h0, I_c0, I_h0, N_c, N_h, _...,) = begin
-    m_c = N_c / (S_c0 + I_c0)
-    m_h = N_h / (S_h0 + I_h0)
+mers_rinit(; Sc0, Sh0, Ic0, Ih0, Nc, Nh, _...,) = begin
+    mc = Nc / (Sc0 + Ic0)
+    mh = Nh / (Sh0 + Ih0)
     (
-        S_c = round(Int64, m_c*Float64(S_c0)),
-        I_c = round(Int64, m_c*Float64(I_c0)),
-        S_h = round(Int64, m_h*Float64(S_h0)),
-        I_h = round(Int64, m_h*Float64(I_h0)),
+        Sc = round(Int64, mc*Float64(Sc0)),
+        Ic = round(Int64, mc*Float64(Ic0)),
+        Sh = round(Int64, mh*Float64(Sh0)),
+        Ih = round(Int64, mh*Float64(Ih0)),
     )
 end
 
 """
-    filter_pomp(gen, m; β_cc = 4.0, ...)
+    filter_pomp(gen, m; ...)
 
 Constructs a pomp object for the MERS genealogy-conditioned filter, based on
 the filter guide built from genealogy `gen` and the guiding finite-state
@@ -437,26 +437,23 @@ Pass the built-in `mers_tree` as `gen` to reproduce the default data set; a call
 filter_pomp(
     gen::Genealogy,
     m::FSMarkovProc;
-    β_cc = 4.0, β_ch = 1.0, β_hc = 1.0, β_hh = 4.0,
-    γ_c = 1.0, γ_h = 1.0,
-    χ_c = 1.0, χ_h = 1.0,
-    B_c = 10.0, B_h = 10.0,
-    S_c0 = 1.0, S_h0 = 1.0,
-    I_c0 = 0.01, I_h0 = 0.0,
-    N_c = 10000, N_h = 10000,
+    βcc = 4.0, βch = 1.0, βhc = 1.0, βhh = 4.0,
+    γc = 1.0, γh = 1.0,
+    χc = 1.0, χh = 1.0,
+    Bc = 10.0, Bh = 10.0,
+    Sc0 = 1.0, Sh0 = 1.0,
+    Ic0 = 0.01, Ih0 = 0.0,
+    Nc = 10000, Nh = 10000,
 ) = begin
     check(gen)
     guidegen = guide(gen,m,knowledge!)
     pomp(
-        params = (
-            β_cc = Float64(β_cc), β_ch = Float64(β_ch),
-            β_hc = Float64(β_hc), β_hh = Float64(β_hh),
-            γ_c = Float64(γ_c), γ_h = Float64(γ_h),
-            χ_c = Float64(χ_c), χ_h = Float64(χ_h),
-            B_c = Float64(B_c), B_h = Float64(B_h),
-            S_c0 = Float64(S_c0), S_h0 = Float64(S_h0),
-            I_c0 = Float64(I_c0), I_h0 = Float64(I_h0),
-            N_c = Float64(N_c), N_h = Float64(N_h),
+        params = map(
+            Float64,
+            (;βcc, βch, βhc, βhh,
+             γc, γh, χc, χh, Bc, Bh,
+             Sc0, Sh0, Ic0, Ih0, Nc, Nh,
+             )
         ),
         t0 = timezero(guidegen),
         times = times(guidegen),
@@ -466,7 +463,7 @@ filter_pomp(
             ll=zero(Prob),
             live=true,
             cols=Coloring(Demes),
-            state=(S_c=Int64(0), I_c=Int64(0), S_h=Int64(0), I_h=Int64(0)),
+            state=(Sc=Int64(0), Ic=Int64(0), Sh=Int64(0), Ih=Int64(0)),
         ),
         rinit = function (; kwargs...)
             (

@@ -13,8 +13,8 @@ const mers_tree = parse_newick(mers_newick,t0=0,demes=Demes)
 singular_part!(
     cols, ll, geneal, node,
     Sc, Ic, Sh, Ih;
-    Beta_cc, Beta_ch, Beta_hc, Beta_hh,
-    chi_c, chi_h,
+    βcc, βch, βhc, βhh,
+    χc, χh,
     Nc, Nh,
     _...,
 ) = begin
@@ -46,10 +46,10 @@ singular_part!(
         end
         ellc, ellh = chop!(cols, n.deme, n.lineage)
         if n.deme == Camel
-            ll += log(chi_c * Ic)
+            ll += log(χc * Ic)
             Ic -= 1
         elseif n.deme == Human
-            ll += log(chi_h * Ih)
+            ll += log(χh * Ih)
             Ih -= 1
         else
             @assert false "impossible sample deme" # COV_EXCL_LINE
@@ -60,9 +60,9 @@ singular_part!(
             geneal[i].lineage
         end
         if n.lineage ∈ cols[Camel]
-            lambda_cc = Nc > 0 ? Beta_cc * Sc * Ic / Nc : 0.0
-            lambda_hc = Nc > 0 ? Beta_hc * Sh * Ic / Nc : 0.0
-            k,_,p = rcateg([lambda_cc, 0.5*lambda_hc, 0.5*lambda_hc], true)
+            λcc = Nc > 0 ? βcc * Sc * Ic / Nc : 0.0
+            λhc = Nc > 0 ? βhc * Sh * Ic / Nc : 0.0
+            k,_,p = rcateg([λcc, 0.5*λhc, 0.5*λhc], true)
             ll -= log(p)
             if k == 0
                 ll = Prob(-Inf)
@@ -74,7 +74,7 @@ singular_part!(
                     Sc -= 1
                 end
                 Ic += 1
-                ll += log(lambda_cc) - log(Ic * (Ic - 1) / 2)
+                ll += log(λcc) - log(Ic * (Ic - 1) / 2)
             else                # camel-human
                 if k == 2
                     ellc, ellh = fork!(cols, Camel, n.lineage, (Camel, Human), children)
@@ -87,12 +87,12 @@ singular_part!(
                     Sh -= 1
                 end
                 Ih += 1
-                ll += log(lambda_hc) - log(Ic * Ih)
+                ll += log(λhc) - log(Ic * Ih)
             end
         elseif n.lineage ∈ cols[Human]
-            lambda_hh = Nh > 0 ? Beta_hh * Sh * Ih / Nh : 0.0
-            lambda_ch = Nh > 0 ? Beta_ch * Sc * Ih / Nh : 0.0
-            k,_,p = rcateg([lambda_hh, 0.5*lambda_ch, 0.5*lambda_ch], true)
+            λhh = Nh > 0 ? βhh * Sh * Ih / Nh : 0.0
+            λch = Nh > 0 ? βch * Sc * Ih / Nh : 0.0
+            k,_,p = rcateg([λhh, 0.5*λch, 0.5*λch], true)
             ll -= log(p)
             if k == 0
                 ll = Prob(-Inf)
@@ -104,7 +104,7 @@ singular_part!(
                     Sh -= 1
                 end
                 Ih += 1
-                ll += log(lambda_hh) - log(Ih * (Ih - 1) / 2)
+                ll += log(λhh) - log(Ih * (Ih - 1) / 2)
             else                # human-camel
                 if k == 2
                     ellc, ellh = fork!(cols, Human, n.lineage, (Camel, Human), children)
@@ -117,7 +117,7 @@ singular_part!(
                     Sc -= 1
                 end
                 Ic += 1
-                ll += log(lambda_ch) - log(Ic * Ih)
+                ll += log(λch) - log(Ic * Ih)
             end
         else
             @assert false "impossible node deme" # COV_EXCL_LINE
@@ -132,18 +132,18 @@ end
 event_rates!(
     alpha, pi, cols,
     Sc, Ic, Sh, Ih;
-    Beta_cc, Beta_ch, Beta_hc, Beta_hh,
-    gamma_c, gamma_h, chi_c, chi_h, Bc, Bh, Nc, Nh,
+    βcc, βch, βhc, βhh,
+    γc, γh, χc, χh, Bc, Bh, Nc, Nh,
     _...,
 ) = begin
     ellc, ellh = ell(cols)
     @assert Ic ≥ ellc && Ih ≥ ellh
-    alpha[1] = Beta_cc*Sc*Ic/Nc
-    alpha[2] = Beta_hh*Sh*Ih/Nh
-    alpha[3] = alpha[4] = Beta_hc*Sh*Ic/Nc
-    alpha[5] = alpha[6] = Beta_ch*Sc*Ih/Nh
-    alpha[7] = @indicator(Ic > ellc, gamma_c*(Ic-ellc))
-    alpha[8] = @indicator(Ih > ellh, gamma_h*(Ih-ellh))
+    alpha[1] = βcc*Sc*Ic/Nc
+    alpha[2] = βhh*Sh*Ih/Nh
+    alpha[3] = alpha[4] = βhc*Sh*Ic/Nc
+    alpha[5] = alpha[6] = βch*Sc*Ih/Nh
+    alpha[7] = @indicator(Ic > ellc, γc*(Ic-ellc))
+    alpha[8] = @indicator(Ih > ellh, γh*(Ih-ellh))
     alpha[9] = Bc
     alpha[10] = Bh
     alpha[11] = Bc*Sc/Nc
@@ -156,9 +156,9 @@ event_rates!(
     pi[6] = @indicator(Ih > 0, ellh/Ih)
     pi[7:12] .= one(Prob)
 
-    chi_c * Ic + chi_h * Ih +
-        gamma_c*ellc + @indicator(Ic ≤ ellc, gamma_c*(Ic-ellc)) +
-        gamma_h*ellh + @indicator(Ih ≤ ellh, gamma_h*(Ih-ellh))
+    χc * Ic + χh * Ih +
+        γc*ellc + @indicator(Ic ≤ ellc, γc*(Ic-ellc)) +
+        γh*ellh + @indicator(Ih ≤ ellh, γh*(Ih-ellh))
 end
 
 regular_part!(
@@ -250,9 +250,9 @@ Construct a Julia POMP object for the phylopomp MERS genealogy-conditioned
 filter. Parameter names and event order follow R phylopomp's MERS model.
 """
 filter_pomp(
-    ;Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 1.0, Beta_hh = 4.0,
-    gamma_c = 1.0, gamma_h = 1.0,
-    chi_c = 1.0, chi_h = 0.0,
+    ;βcc = 4.0, βch = 0.0, βhc = 1.0, βhh = 4.0,
+    γc = 1.0, γh = 1.0,
+    χc = 1.0, χh = 0.0,
     Bc = 0.1, Bh = 0.03,
     Sc0 = 1.0, Sh0 = 1.0,
     Ic0 = 0.01, Ih0 = 0.0,
@@ -260,15 +260,12 @@ filter_pomp(
 ) = begin
     gen = mers_tree
     pomp(
-        params = (
-            Beta_cc = Float64(Beta_cc), Beta_ch = Float64(Beta_ch),
-            Beta_hc = Float64(Beta_hc), Beta_hh = Float64(Beta_hh),
-            gamma_c = Float64(gamma_c), gamma_h = Float64(gamma_h),
-            chi_c = Float64(chi_c), chi_h = Float64(chi_h),
-            Bc = Float64(Bc), Bh = Float64(Bh),
-            Sc0 = Float64(Sc0), Sh0 = Float64(Sh0),
-            Ic0 = Float64(Ic0), Ih0 = Float64(Ih0),
-            Nc = Float64(Nc), Nh = Float64(Nh),
+        params = map(
+            Float64,
+            (;βcc, βch, βhc, βhh,
+             γc, γh, χc, χh, Bc, Bh,
+             Sc0, Sh0, Ic0, Ih0, Nc, Nh,
+             )
         ),
         t0 = timezero(gen),
         times = times(gen),

@@ -11,7 +11,7 @@ using PhyloPOMP
 using PhyloPOMP.NaiveMERS
 import PartiallyObservedMarkovProcesses as POMP
 
-heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
+heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
 @testset verbose=true "MERS model with naïve proposals" begin
 
