@@ -199,12 +199,9 @@ filter_pomp(
     check(gen)
     guidegen = guide(gen,m,knowledge!)
     pomp(
-        params = (
-            β = Float64(β), σ = Float64(σ), γ = Float64(γ),
-            ω = Float64(ω), ψ = Float64(ψ), χ = Float64(χ),
-            pop = Float64(pop),
-            S0 = Float64(S0), E0 = Float64(E0),
-            I0 = Float64(I0), R0 = Float64(R0),
+        params = map(
+            Float64,
+            (;β,σ,γ,ω,ψ,χ,pop,S0,E0,I0,R0)
         ),
         t0 = timezero(guidegen),
         times = times(guidegen),
