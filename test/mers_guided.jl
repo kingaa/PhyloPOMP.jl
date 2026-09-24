@@ -29,30 +29,14 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
     mf = mif(
         pf,Nmif=3,Np=1000,trigger=0.2,target=0.8,
         cooling=geometric_cooling(1.0),
-        perturbations=function(
-            s, lag;
-            βcc, βhh, βch, βhc,
-            Sc0, Ic0, Sh0, Ih0,
-            _...,
-            )
-            βcc = rand(LogNormal(log(βcc),0.002*s))
-            βhh = rand(LogNormal(log(βhh),0.002*s))
-            βhc = rand(LogNormal(log(βhc),0.002*s))
-            βch = rand(LogNormal(log(βch),0.002*s))
-            if lag == 0
-                Sc0 = rand(LogNormal(log(Sc0),0.2*s))
-                Ic0 = rand(LogNormal(log(Ic0),0.2*s))
-                Sh0 = rand(LogNormal(log(Sh0),0.2*s))
-                Ih0 = rand(LogNormal(log(Ih0),0.2*s))
-                m = Sc0 + Ic0
-                Sc0 /= m
-                Ic0 /= m
-                m = Sh0 + Ih0
-                Sh0 /= m
-                Ih0 /= m
-            end
-            (;βcc,βhh,βch,βhc,Sc0,Ic0,Sh0,Ih0)
-        end,
+        perturbations=@perturbn(
+            @lognormal(βcc,0.002),
+            @lognormal(βhh,0.002),
+            @lognormal(βhc,0.002),
+            @lognormal(βch,0.002),
+            @ivp(@logbarynormal((Sc0,Ic0),0.2)),
+            @ivp(@logbarynormal((Sh0,Ih0),0.2)),
+        )
     )
     @test mf isa POMP.MifdPompObject
 
