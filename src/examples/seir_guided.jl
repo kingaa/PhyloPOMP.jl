@@ -295,15 +295,8 @@ regular_part!(
     ll, state
 end
 
-seir_rinit(; S0, E0, I0, R0, pop, _...) = begin
-    m = pop/(S0+E0+I0+R0)
-    (
-        S=round(Int64, m*Float64(S0)),
-        E=round(Int64, m*Float64(E0)),
-        I=round(Int64, m*Float64(I0)),
-        R=round(Int64, m*Float64(R0)),
-    )
-end
+seir_rinit(; S0, E0, I0, R0, pop, _...) =
+    barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
 
 """
     filter_pomp(g, m; β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02,
@@ -321,12 +314,9 @@ filter_pomp(
     check(gen)
     guidegen = guide(gen,m,knowledge!)
     pomp(
-        params = (
-            β = Float64(β), σ = Float64(σ), γ = Float64(γ),
-            ω = Float64(ω), ψ = Float64(ψ), χ = Float64(χ),
-            pop = Float64(pop),
-            S0 = Float64(S0), E0 = Float64(E0),
-            I0 = Float64(I0), R0 = Float64(R0),
+        params = map(
+            Float64,
+            (;β,σ,γ,ω,ψ,χ,pop,S0,E0,I0,R0)
         ),
         t0 = timezero(guidegen),
         times = times(guidegen),
@@ -336,7 +326,7 @@ filter_pomp(
             ll=zero(Prob),
             live=true,
             cols=Coloring(Demes),
-            state=(S=Float64(0), E=Float64(0), I=Float64(0), R=Float64(0)),
+            state=(S=Int64(0), E=Int64(0), I=Int64(0), R=Int64(0)),
         ),
         rinit = function (; kwargs...)
             (
