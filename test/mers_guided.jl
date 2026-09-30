@@ -30,12 +30,12 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
         pf,Nmif=3,Np=1000,trigger=0.2,target=0.8,
         cooling=geometric_cooling(1.0),
         perturbations=@perturbn(
-            @lognormal(βcc,0.002),
-            @lognormal(βhh,0.002),
-            @lognormal(βhc,0.002),
-            @lognormal(βch,0.002),
-            @ivp(@logbarynormal((Sc0,Ic0),0.2)),
-            @ivp(@logbarynormal((Sh0,Ih0),0.2)),
+            βcc~LogNormal(0.002),
+            βhh~LogNormal(0.002),
+            βhc~LogNormal(0.002),
+            βch~LogNormal(0.002),
+            (Sc0,Ic0) ~ LogBaryNormal(0.2),
+            (Sh0,Ih0) ~ LogBaryNormal(0.2),
         )
     )
     @test mf isa POMP.MifdPompObject
