@@ -205,17 +205,21 @@ filter_pomp(
         ),
         t0 = timezero(guidegen),
         times = times(guidegen),
+        init_state = (
+            node=one(Name),
+            ll=zero(Prob),
+            live=true,
+            cols=Coloring(Demes),
+            S=Int64(0), E=Int64(0), I=Int64(0), R=Int64(0),
+        ),
         rinit = function (; S0, E0, I0, R0, pop, _...)
-            m = pop/(S0+E0+I0+R0)
+            state = barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
             (
                 node = one(Name),
                 ll = zero(Prob),
+                live = true,
                 cols = Coloring(Demes),
-                S = round(Int64, m*Float64(S0)),
-                E = round(Int64, m*Float64(E0)),
-                I = round(Int64, m*Float64(I0)),
-                R = round(Int64, m*Float64(R0)),
-                live = true
+                state...,
             )
         end,
         rprocess = onestep(
