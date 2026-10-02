@@ -34,8 +34,8 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
             βhh~LogNormal(0.002),
             βhc~LogNormal(0.002),
             βch~LogNormal(0.002),
-            (Sc0,Ic0) ~ LogBaryNormal(0.2),
-            (Sh0,Ih0) ~ LogBaryNormal(0.2),
+            (Sc0,Ic0) ~ ivp(LogBaryNormal(0.2)),
+            (Sh0,Ih0) ~ ivp(LogBaryNormal(0.2)),
         )
     )
     @test mf isa POMP.MifdPompObject

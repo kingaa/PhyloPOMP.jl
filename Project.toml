@@ -16,7 +16,7 @@ PartiallyObservedMarkovProcesses = {rev = "devel", url = "https://github.com/kin
 [compat]
 EnumX = "1"
 LinearAlgebra = "1.12"
-PartiallyObservedMarkovProcesses = "0.12"
+PartiallyObservedMarkovProcesses = "0.12.1"
 Reexport = "1.2.2"
 julia = "1.13"
 
