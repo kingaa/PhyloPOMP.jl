@@ -18,7 +18,7 @@
 #   equation references below are to that paper.
 # =============================================================================
 
-export @mgp, @event, EventType, Event, MGPModel, SEIR, MERS, SI2R
+export @mgp, @event, EventType, Event, MGPModel, SEIR, MERS, SI2R, SIR
 
 # -----------------------------------------------------------------------------
 # Event types: the five PURE event types of KLI §3.2.
@@ -119,3 +119,4 @@ const SEIR_REFERENCE = MGPModel(:SEIR, [:S, :E, :I, :R], [:E, :I], [
 include("mgp_macro.jl")
 include("mgp_mers.jl")
 include("mgp_si2r.jl")
+include("mgp_sir.jl")
