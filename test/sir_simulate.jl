@@ -164,6 +164,20 @@ total_branch_length(g) = sum(
     ## non-destructive sampling must produce degree-1 (inline) samples
     @test ninline > 0
 
+    @info h2("scaling: a full N=30,000 epidemic must not be quadratic in nodes")
+    ## Before the O(1) node lookup in `apply_event!` this took 17.8 s
+    ## (`findfirst` over all nodes at every event); after, 0.14 s. The bound is
+    ## loose on purpose so slow CI machines do not fail it, but a return to
+    ## quadratic behaviour (~100x slower) will.
+    let N = 30_000
+        θb = (β=2.0, γ=1.0, ψ=0.05, N=Float64(N))
+        xb = (S=N-10, I=10, R=0)
+        simulate(PhyloPOMP.SIR, θb; x0=xb, graft=[10], tmax=1.0, rng=MersenneTwister(1)) # compile
+        tsec = @elapsed gb = simulate(PhyloPOMP.SIR, θb; x0=xb, graft=[10], tmax=40.0, rng=MersenneTwister(7))
+        @test nsample(gb) > 500
+        @test tsec < 5.0
+    end
+
     @info h2("prune!: unsampled side branch + lineage alive at tmax")
     G = Genealogy{PhyloPOMP.Unstructured}(Time(0.0))
     r  = push_node!(G, 0.0, Root, nothing)

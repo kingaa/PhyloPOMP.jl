@@ -172,7 +172,13 @@ apply_event!(
     ev.type == NEUTRAL && return nothing
     d = ev.from
     b = rand(rng, inv[d])
-    cur = G[findfirst(n -> n.name==b, G.nodes)]
+    ## `push_node!` names nodes 1,2,3,... in insertion order and nothing is
+    ## removed or renamed until `prune!`/`repair!` run after the loop, so the
+    ## node named `b` is `G.nodes[b]`. (A linear `findfirst` here made the
+    ## whole simulation quadratic in the number of nodes: 17.8 s vs 0.12 s at
+    ## N = 30,000.) The assertion guards the naming assumption.
+    cur = G.nodes[Int(b)]
+    @assert cur.name == b "apply_event!: node names are not sequential"
     if ev.type == BIRTH
         remove!(inv,d,b)
         p = push_node!(G,t,Node,b)
