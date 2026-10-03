@@ -19,7 +19,10 @@ finite-state Markov process (`fsmarkov`) as well as the genealogy.
 """
 module SEIRSimulateTest
 
-import ..Main: h1, h2
+## `h1`/`h2` come from runtests.jl; fall back when run standalone.
+const h1 = isdefined(Main, :h1) ? Main.h1 : identity
+const h2 = isdefined(Main, :h2) ? Main.h2 : identity
+isdefined(Main, :SimulateChecks) || Base.include(Main, joinpath(@__DIR__, "simulate_checks.jl"))
 
 @info h1("SEIR forward simulator")
 
@@ -27,6 +30,7 @@ using Test
 using Random: MersenneTwister, seed!
 using PhyloPOMP
 using PhyloPOMP: Sample
+using Main.SimulateChecks
 using PhyloPOMP.NaiveSEIR
 using PhyloPOMP.GuidedSEIR
 using PhyloPOMP.GuidedSEIR.Demes: Expos, Infec
@@ -68,6 +72,14 @@ import PartiallyObservedMarkovProcesses as POMP
     @test all(isempty(g[i].children) == (g[i].type==Sample) for i ∈ tips(g))
     @test timezero(g) == 0.0
     @test g.time == 20.0
+
+    @info h2("per-event timing, structure, round trips (single root and forest)")
+    ## These are the checks that catch the Milestone-3 (sample time) and
+    ## Milestone-4 (fork time) bugs; the filter tests below do not.
+    cov = run_invariants(PhyloPOMP.SEIR, θ, [(x0, [0,1]), ((S=95, E=2, I=3, R=0), [2,3])];
+                         ntree=100, tmax=20.0, sample_max_children=1)
+    @test cov.nonempty > 100
+    @test cov.inline > 0        # ψ-sampling is non-destructive: inline samples must occur
 
     @info h2("newick round trip (necessary, not sufficient)")
     s = newick(g)

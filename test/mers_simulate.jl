@@ -27,7 +27,10 @@ instances must come from `GuidedMERS`'s own `@demes` module, since a
 """
 module MERSSimulateTest
 
-import ..Main: h1, h2
+## `h1`/`h2` come from runtests.jl; fall back when run standalone.
+const h1 = isdefined(Main, :h1) ? Main.h1 : identity
+const h2 = isdefined(Main, :h2) ? Main.h2 : identity
+isdefined(Main, :SimulateChecks) || Base.include(Main, joinpath(@__DIR__, "simulate_checks.jl"))
 
 @info h1("MERS forward simulator")
 
@@ -35,6 +38,7 @@ using Test
 using Random: MersenneTwister, seed!
 using PhyloPOMP
 using PhyloPOMP: Sample
+using Main.SimulateChecks
 using PhyloPOMP.SoftMERS
 using PhyloPOMP.SoftMERS.Demes: Camel, Human
 using PhyloPOMP.GuidedMERS
@@ -143,6 +147,17 @@ import PartiallyObservedMarkovProcesses as POMP
     @test all(isempty(g[i].children) for i ∈ samples(g))
     @test all(!ismissing(g[i].deme) for i ∈ samples(g))
     @test all(ismissing(g[i].deme) for i ∈ eachindex(g) if g[i].type != Sample)
+
+    @info h2("per-event timing, structure, round trips (single root and forest, demography on)")
+    ## Same checks as SEIR, with destructive sampling (Sample degree must be 0)
+    ## and the four NEUTRAL demography events switched on (B_c, B_h > 0).
+    θd = merge(θ, (B_c=0.5, B_h=0.5))
+    cov = run_invariants(PhyloPOMP.MERS, θd,
+                         [(x0, [1,0]), ((S_c=18, I_c=2, S_h=19, I_h=1), [2,1])];
+                         ntree=100, tmax=10.0, demeset=SoftMERS.Demes, samplemap=samplemap,
+                         sample_max_children=0)
+    @test cov.nonempty > 100
+    @test cov.inline == 0       # sample_remove: a Sample node never has a child
 
     @info h2("newick round trip (necessary, not sufficient)")
     s = newick(g)
