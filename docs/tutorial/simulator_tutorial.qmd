@@ -1,0 +1,705 @@
+---
+title: "Simulator tutorial: simulate and @mgp"
+subtitle: "PhyloPOMP.jl, 2026-10-05"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: false
+---
+
+## Run this now
+
+```{.bash}
+quarto render docs/tutorial/simulator_tutorial.qmd
+```
+
+Run it from the PhyloPOMP.jl directory.
+It writes `docs/tutorial/simulator_tutorial.html`.
+Open that file in a browser.
+
+Time to expect:
+
+1. First render on a new machine or after a package update: up to several minutes. Julia compiles the packages once.
+2. Later renders: under 1 minute.
+3. In your own Julia session, `using PhyloPOMP` takes about 20 seconds.
+4. The first call to `simulate` takes about 2 seconds. Later calls take milliseconds.
+
+Every code cell below runs top to bottom.
+Read the output under each cell, then read the text.
+
+## Setup
+
+```{julia}
+import Pkg
+Pkg.activate(@__DIR__)
+Pkg.instantiate()
+
+ENV["GKSwstype"] = "100"  # headless GR, no display needed
+
+using PhyloPOMP
+using Plots
+using Random: MersenneTwister
+
+default(size=(650,300), legend=false)
+```
+
+## 1. What the simulator does
+
+Run this cell first.
+It lists the three events of the built-in `SIR` model and how often each one happens right now.
+
+```{julia}
+θ  = (β = 4.0, γ = 1.0, ψ = 0.3, N = 100.0)
+x0 = (S = 99, I = 1, R = 0)
+
+rates = [(ev.name, ev.hazard(x0, θ)) for ev in SIR.events]
+for (name, rate) in rates
+    println(rpad(string(name), 10), " rate = ", rate)
+end
+
+total = sum(last, rates)
+println("total rate        = ", total)
+println("mean wait         = ", round(1 / total, digits = 3))
+println("P(next = infection) = ", round(rates[1][2] / total, digits = 3))
+```
+
+The picture:
+
+- A **compartment** is a count of hosts in one state. `S` is susceptible (can be infected), `I` is infected, `R` is recovered.
+- An **event** changes the counts. Infection moves one host from `S` to `I`.
+- A **rate** (called `hazard` in the code) says how often an event happens per unit of time. It depends on the current counts.
+- A **genealogy** is a tree. Its leaves are the infected hosts that were sampled. Its branch points are infections.
+
+The simulator plays an epidemic forward and builds that tree.
+It uses the Doob-Gillespie algorithm.
+The cell above did steps 1 and 2 by hand.
+
+1. Compute the rate of every event from the current counts.
+2. Add the rates. Call the sum `total`. If `total` is 0, stop.
+3. Draw a waiting time. Its mean is `1/total`. If it goes past `tmax`, stop.
+4. Pick one event. Event `k` is picked with probability `rate_k / total`.
+5. Change the counts as the event says. Change the tree as the event says. Go to step 1.
+
+## 2. Your first simulation
+
+Run this cell.
+
+```{julia}
+g = simulate(SIR, θ; x0 = x0, graft = [1], tmax = 2.0, rng = MersenneTwister(1))
+
+println("samples: ", nsample(g))
+println(only(newick(g)))
+```
+
+What you gave `simulate`:
+
+| Argument | Meaning |
+|---|---|
+| `SIR` | The model. |
+| `θ` | Parameter values, a `NamedTuple`. Names must match the model's `params`. |
+| `x0` | Starting count in every compartment. |
+| `graft` | Number of founding lineages in each deme. Here one. Section 5 defines deme. |
+| `tmax` | Stop time. Time units are arbitrary. |
+| `rng` | Random number generator. `MersenneTwister(1)` gives the same tree every time. |
+
+What came back:
+
+- `nsample(g)` is the number of sampled hosts in the tree.
+- `newick(g)` writes the tree as text. Newick is a standard text format for trees. Parentheses nest. The number after a colon is the length of the branch above that node.
+- The result is a list with one string per founder. Here there is one founder.
+- The bracket `[&&PhyloPOMP type=sample]` labels each node with its type. Section 3 explains the types.
+
+Now the same model for 20 time units, many runs.
+
+```{julia}
+counts = [nsample(simulate(SIR, θ; x0 = x0, graft = [1], tmax = 20.0,
+                           rng = MersenneTwister(s))) for s in 1:1000]
+
+println("runs:                 ", length(counts))
+println("runs with no samples: ", count(==(0), counts))
+println("mean samples per run: ", round(sum(counts) / length(counts), digits = 1))
+```
+
+An empty tree is a normal result.
+The first infected host can recover before anyone is sampled.
+Then `nsample(g) == 0`.
+
+## 3. Reading the tree
+
+Run this cell.
+It prints every node of the tree from Section 2.
+
+```{julia}
+for i in eachindex(g.nodes)
+    n = g[i]
+    println("node ", i, ": ", rpad(string(n.type), 7),
+            " time=", round(n.slate, digits = 3),
+            "  parent=", n.parent,
+            "  children=", Int.(n.children))
+end
+println("tree starts at ", g.t0, " and ends at ", g.time)
+```
+
+`g[i]` is node `i`.
+Its fields:
+
+- `.type` is the node type.
+- `.slate` is the node's time.
+- `.parent` is the index of the parent, or `nothing`.
+- `.children` is the list of child indices.
+- `.deme` is `missing` here. Section 8 fills it.
+
+The three node types:
+
+| Type | Meaning | Children |
+|---|---|---|
+| `Root` | Start of a founder lineage. | 1 |
+| `Node` | A branch point. One lineage became two. That is an infection. | 2 |
+| `Sample` | A host was sampled at this time. | 0 if the sample removed the host, at most 1 if the host kept going |
+
+Compare with the printout.
+Node 1 is the `Root`.
+Node 2 is a `Node` with two children.
+Node 3 is a `Sample` with one child: that host was sampled, kept going, and was sampled again later.
+
+The exported helpers return node indices:
+
+```{julia}
+println("nodes(g)   = ", nodes(g))
+println("samples(g) = ", samples(g))
+println("roots(g)   = ", roots(g))
+println("tips(g)    = ", tips(g), "   (nodes with no children)")
+println("is node 4 a Sample? ", g[4].type == PhyloPOMP.Sample)
+```
+
+`Root`, `Node` and `Sample` are not exported.
+Write `PhyloPOMP.Sample`, or compare `string(g[i].type)`.
+
+The tree is pruned.
+Only sampled hosts and their ancestors remain.
+Hosts that were never sampled are removed.
+
+## 4. The population over time
+
+Run this cell.
+`simulate_trajectory` returns the tree and the counts after every event.
+
+```{julia}
+r = simulate_trajectory(SIR, θ; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
+
+println("fields:        ", keys(r))
+println("events fired:  ", length(r.events))
+println("length(times)  = ", length(r.times), ",  length(states) = ", length(r.states))
+println("first events:  ", r.events[1:5])
+println("first state:   ", r.states[1])
+println("last state:    ", r.states[end])
+println("last event at: ", round(r.times[end], digits = 2))
+println("samples:       ", nsample(r.genealogy))
+```
+
+What the fields hold:
+
+- `genealogy` is the tree. It equals what `simulate` returns for the same seed.
+- `times` is `t0`, then the time of each event.
+- `states` is `x0`, then the counts after each event. It is as long as `times`.
+- `events` is the name of each event. It is one shorter than `times`.
+
+Plot the number of infected hosts:
+
+```{julia}
+plot(r.times, [s.I for s in r.states], seriestype = :steppost,
+     xlabel = "time", ylabel = "infected (I)", title = "SIR, seed 3")
+```
+
+The epidemic rises, peaks, and ends when `I` reaches 0.
+Nothing happens after that, so the last event is before `tmax`.
+The counts cover the whole population.
+Pruning removes lineages from the tree only.
+
+## 5. Write your own model with `@mgp`
+
+Run this cell.
+It defines `MySIR`, a copy of the built-in `SIR`.
+
+```{julia}
+@mgp MySIR begin
+    compartments = (S, I, R)
+    demes = (I,)
+    params = (β, γ, ψ, N)
+
+    @event infection rate=β*S*I/N pop=(S=-1, I=+1) move=fork(I => I, I) kind=regular
+    @event recovery  rate=γ*I     pop=(I=-1, R=+1) move=chop(I)         kind=regular
+    @event sampling  rate=ψ*I     pop=()           move=sample(I)       kind=singular
+end
+
+mine    = simulate(MySIR, θ; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
+builtin = simulate(SIR,   θ; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
+println("same tree as the built-in SIR? ", newick(mine) == newick(builtin))
+println("nsample = ", nsample(mine))
+```
+
+Same model and same seed give the same tree.
+
+The three declaration lines:
+
+| Line | Meaning |
+|---|---|
+| `compartments` | Every count the model tracks. |
+| `demes` | The compartments whose hosts carry a lineage in the tree. A **deme** is one such group. |
+| `params` | Parameter names. They must not repeat a compartment name. |
+
+The five parts of each `@event`:
+
+| Part | Meaning |
+|---|---|
+| name | A label, such as `infection`. |
+| `rate=` | A Julia expression. The macro replaces `S` with `x.S` and `β` with `θ.β`. |
+| `pop=` | The change to each compartment. `()` means no change. |
+| `move=` | What happens to lineages in the tree. See the table below. |
+| `kind=` | `regular` (default) or `singular`. `singular` marks events that leave a mark in the tree, such as sampling. `simulate` ignores `kind`. The likelihood filters use it. |
+
+The six moves:
+
+| Move | Meaning |
+|---|---|
+| `fork(A => B, C)` | A lineage in deme A splits. Afterwards one lineage is in B and one is in C. Exactly two products. |
+| `swap(A => B)` | One lineage moves from deme A to deme B. |
+| `chop(A)` | A lineage in A ends without being sampled. |
+| `sample(A)` | A lineage in A is sampled and keeps going. |
+| `sample_remove(A)` | A lineage in A is sampled and ends. |
+| `none` | No lineage is involved. |
+
+The macro made two things.
+`MySIR` is the model.
+`MySIRDemes` is a module with one value per deme:
+
+```{julia}
+println(typeof(MySIR))
+println(MySIRDemes.I)
+```
+
+Now turn it into an SIRS model.
+In SIRS, recovered hosts lose immunity and become susceptible again.
+
+1. Add the parameter `ω` to `params`.
+2. Add one `@event` that moves `R` back to `S`.
+3. Use `move=none`, because no lineage is involved.
+
+```{julia}
+@mgp MySIRS begin
+    compartments = (S, I, R)
+    demes = (I,)
+    params = (β, γ, ψ, N, ω)
+
+    @event infection rate=β*S*I/N pop=(S=-1, I=+1) move=fork(I => I, I) kind=regular
+    @event recovery  rate=γ*I     pop=(I=-1, R=+1) move=chop(I)         kind=regular
+    @event sampling  rate=ψ*I     pop=()           move=sample(I)       kind=singular
+    @event waning    rate=ω*R     pop=(R=-1, S=+1) move=none            kind=regular
+end
+
+θs = merge(θ, (ω = 0.5,))
+rs = simulate_trajectory(MySIRS, θs; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
+
+println("waning events: ", count(==(:waning), rs.events))
+println("last state:    ", rs.states[end])
+println("samples:       ", nsample(rs.genealogy))
+
+plot(rs.times, [s.I for s in rs.states], seriestype = :steppost,
+     xlabel = "time", ylabel = "infected (I)", title = "SIRS, seed 3")
+```
+
+With `ω = 0.5` the epidemic does not end at the first wave.
+Immunity is lost, so `S` refills. `I` is still above 0 at `tmax`.
+
+## 6. The rule `pop` must obey
+
+Run this cell.
+The macro refuses an event whose `pop` disagrees with its `move`.
+
+```{julia}
+function show_error(f)
+    try
+        f()
+    catch e
+        while e isa LoadError
+            e = e.error
+        end
+        println(typeof(e), ": ", e.msg)
+    end
+end
+
+show_error() do
+    eval(:(@mgp WrongPop begin
+        compartments = (S, E, I, R)
+        demes = (E, I)
+        params = (β, N)
+        @event infection rate=β*S*I/N pop=(S=-1) move=fork(I => E, I)
+    end))
+end
+```
+
+The cause:
+
+1. Each host in a deme carries one lineage. So lineages in a deme and hosts in that compartment must change together.
+2. `fork(I => E, I)` adds one lineage to deme `E`. It keeps one in `I`, which was already there.
+3. `pop=(S=-1)` does not add a host to `E`. The two disagree.
+
+The rule: for each deme, `pop` must equal the change in lineages that `move` implies.
+That is the number of products in that deme, minus 1 for the source deme.
+Compartments that are not demes are free.
+Here `S` is not a deme, so `S=-1` is fine.
+
+The fix:
+
+```{julia}
+@mgp FixedPop begin
+    compartments = (S, E, I, R)
+    demes = (E, I)
+    params = (β, ψ, N)
+    @event infection rate=β*S*I/N pop=(S=-1, E=+1) move=fork(I => E, I)
+    @event sampling  rate=ψ*I     pop=()           move=sample(I)      kind=singular
+end
+
+θf = (β = 4.0, ψ = 0.3, N = 100.0)
+gf = simulate(FixedPop, θf; x0 = (S = 99, E = 0, I = 1, R = 0), graft = [0, 1],
+              tmax = 5.0, rng = MersenneTwister(1))
+println("FixedPop runs. samples: ", nsample(gf))
+```
+
+Other mistakes are caught when the macro runs, before any simulation:
+
+```{julia}
+bad_moves = [
+    :(@mgp BadMove begin
+        compartments = (S, I)
+        demes = (I,)
+        params = (β,)
+        @event f rate=β*S*I pop=(S=-1) move=teleport(I)
+    end),
+    :(@mgp OneProduct begin
+        compartments = (S, I)
+        demes = (I,)
+        params = (β,)
+        @event f rate=β*S*I pop=(S=-1, I=+1) move=fork(I => I)
+    end),
+    :(@mgp NoRate begin
+        compartments = (S, I)
+        demes = (I,)
+        params = (β,)
+        @event f pop=(I=-1) move=chop(I)
+    end),
+]
+
+for ex in bad_moves
+    show_error(() -> eval(ex))
+end
+```
+
+## 7. Sampling that removes the host and sampling that keeps it
+
+Run this cell.
+It lists the demes and events of each built-in model.
+
+```{julia}
+for m in (SIR, SEIR, SI2R, MTBD, MERS)
+    println(rpad(string(m.name), 5), " demes = ", rpad(join(m.demes, ", "), 10),
+            " events = ", join((e.name for e in m.events), ", "))
+end
+```
+
+A sample can end the host's lineage or let it continue.
+This is a model parameter, not an option of `simulate`.
+The likelihood code reads the same event table.
+
+| Model | Keeps the host | Removes the host |
+|---|---|---|
+| `SIR` | `sampling` | not in this model |
+| `SEIR` | rate `ψ`, `move=sample(I)` | rate `χ`, `move=sample_remove(I)` |
+| `SI2R` | rate `(1-r)*ψ` | rate `r*ψ` |
+| `MTBD` | rate `(1-r1)*psi1`, `(1-r2)*psi2` | rate `r1*psi1`, `r2*psi2` |
+
+`SEIR`, `SI2R` and `MTBD` are defined in `src/examples/`.
+`MERS` has camels and humans as two demes.
+
+To see the effect, count the `Sample` nodes that have a child.
+Such a host was sampled and kept going.
+The cell uses 20 seeds per row.
+
+```{julia}
+with_child(g) = count(i -> !isempty(g[i].children), samples(g))
+
+function summarize(model, θ, x0, graft, tmax)
+    total, kept = 0, 0
+    for s in 1:20
+        g = simulate(model, θ; x0 = x0, graft = graft, tmax = tmax, rng = MersenneTwister(s))
+        total += Int(nsample(g))
+        kept  += with_child(g)
+    end
+    (samples = total, with_child = kept)
+end
+
+θ_seir = (β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.3, χ = 0.0, N = 100.0)
+x_seir = (S = 99, E = 0, I = 1, R = 0)
+
+θ_si2r = (β = 4.0, κ = 3.0, γ = 1.0, ω = 0.5, ψ = 0.3, η_L = 0.5, η_H = 1.0, N = 100.0, r = 1.0)
+x_si2r = (S = 99, I_L = 1, I_H = 0, R = 0)
+
+θ_mtbd = (lambda11 = 1.2, lambda12 = 0.3, lambda21 = 0.2, lambda22 = 0.9, m12 = 0.2, m21 = 0.1,
+          mu1 = 0.5, mu2 = 0.5, psi1 = 0.3, psi2 = 0.3, r1 = 0.7, r2 = 1.0)
+x_mtbd = (I1 = 1, I2 = 0)
+
+rows = [
+    "SEIR  keep   (ψ=0.3, χ=0)" => summarize(SEIR, merge(θ_seir, (ψ = 0.3, χ = 0.0)), x_seir, [0, 1], 20.0),
+    "SEIR  remove (ψ=0, χ=0.3)" => summarize(SEIR, merge(θ_seir, (ψ = 0.0, χ = 0.3)), x_seir, [0, 1], 20.0),
+    "SI2R  keep   (r=0)"        => summarize(SI2R, merge(θ_si2r, (r = 0.0,)), x_si2r, [1, 0], 20.0),
+    "SI2R  remove (r=1)"        => summarize(SI2R, merge(θ_si2r, (r = 1.0,)), x_si2r, [1, 0], 20.0),
+    "MTBD  keep   (r1=r2=0)"    => summarize(MTBD, merge(θ_mtbd, (r1 = 0.0, r2 = 0.0)), x_mtbd, [1, 0], 6.0),
+    "MTBD  remove (r1=r2=1)"    => summarize(MTBD, merge(θ_mtbd, (r1 = 1.0, r2 = 1.0)), x_mtbd, [1, 0], 6.0),
+]
+for (label, s) in rows
+    println(rpad(label, 28), s)
+end
+```
+
+When the sample removes the host, no `Sample` node has a child.
+When it keeps the host, many do.
+Removal also takes the host out of the population: the `culling` event has `pop=(I=-1)`.
+Section 6 explains why.
+
+## 8. Label samples with their deme
+
+Run this cell.
+It labels each sample with the deme of its host.
+`MTBD` has two demes, `I1` and `I2`.
+They are two host types.
+
+```{julia}
+ds = PhyloPOMP.MTBDDemes
+
+gm = simulate(MTBD, θ_mtbd; x0 = x_mtbd, graft = [1, 0], tmax = 6.0,
+              rng = MersenneTwister(4),
+              demeset = ds, samplemap = [ds.I1, ds.I2])
+
+println(gm)
+println(newick(gm))
+```
+
+Two new keywords did this:
+
+1. `demeset = PhyloPOMP.MTBDDemes` names the module that `@mgp` made for this model. For `MySIRS` it would be `MySIRSDemes`.
+2. `samplemap = [ds.I1, ds.I2]` has one entry per deme, in `model.demes` order. The label for a sample from deme `d` is `samplemap[d]`.
+
+Read the labels from the tree:
+
+```{julia}
+for i in samples(gm)
+    println("sample ", i, " is in deme ", gm[i].deme)
+end
+println("node 2 (a branch point) has deme: ", gm[2].deme)
+```
+
+Only `Sample` nodes carry a deme.
+All other nodes have `missing`.
+Without `demeset` and `samplemap`, every `.deme` is `missing`, as in Section 3.
+
+## 9. What gets checked for you
+
+Run this cell.
+`validate_model` returns a list of problems.
+An empty list means none.
+
+```{julia}
+println("SIR: ", validate_model(SIR))
+println("MTBD: ", validate_model(MTBD))
+```
+
+`@mgp` builds a correct model by design.
+A model you build by hand with `MGPModel(...)` and `Event(...)` can be wrong.
+Here is a birth event that makes one lineage instead of two:
+
+```{julia}
+HalfBirth = MGPModel(:HalfBirth, [:I], [:I], [
+    Event(:b, [:I => +1], (x, θ) -> θ.b * x.I, [1], PhyloPOMP.BIRTH, 1, Int[], true, false),
+])
+
+for issue in validate_model(HalfBirth)
+    println(issue)
+end
+
+show_error() do
+    simulate(HalfBirth, (b = 1.0,); x0 = (I = 1,), graft = [1], tmax = 1.0)
+end
+```
+
+`simulate` calls `validate_model` first.
+It throws an `ArgumentError` that lists every issue.
+The fix is `r = [2]` and `into = [1]` for a birth that stays in deme `I`. Or write the model with `@mgp`.
+
+`simulate` also checks its arguments.
+Each line below breaks one rule:
+
+```{julia}
+show_error(() -> simulate(SIR, θ; x0 = x0, graft = [1, 0], tmax = 5.0))
+show_error(() -> simulate(SIR, θ; x0 = (S = 99, I = 1), graft = [1], tmax = 5.0))
+show_error(() -> simulate(SIR, θ; x0 = (S = 98, I = 2, R = 0), graft = [1], tmax = 5.0))
+show_error(() -> simulate(SIR, θ; x0 = x0, graft = [1], tmax = -1.0))
+```
+
+The causes, in order:
+
+1. `graft` has one entry per deme. `SIR` has one deme.
+2. `x0` must name every compartment.
+3. `x0` for each deme must equal `graft`. Every infected host carries a lineage.
+4. `tmax` must not be earlier than `t0`.
+
+One more check happens during the run.
+A rate must be 0 when the compartment it takes from is empty.
+This model breaks that rule:
+
+```{julia}
+@mgp Leak begin
+    compartments = (S, I)
+    demes = (I,)
+    params = (ρ,)
+    @event drain rate=ρ pop=(S=-1) move=none
+end
+
+show_error() do
+    simulate(Leak, (ρ = 1.0,); x0 = (S = 3, I = 1), graft = [1], tmax = 20.0,
+             rng = MersenneTwister(1))
+end
+```
+
+The cause: the rate `ρ` stays positive after `S` reaches 0.
+The event fires and `S` goes to -1.
+That is an `AssertionError`.
+The fix: write `rate=ρ*S`.
+
+`AssertionError` is also thrown if a rate is negative, infinite or `NaN`.
+
+## 10. Under the hood
+
+Run this cell.
+It prints what `@mgp` built for the first event of `SIR`.
+
+```{julia}
+ev = SIR.events[1]
+for f in fieldnames(typeof(ev))
+    f == :hazard && continue
+    println(rpad(string(f), 9), getfield(ev, f))
+end
+println("hazard at x0: ", ev.hazard(x0, θ))
+```
+
+The fields of an `Event`:
+
+| Field | Meaning |
+|---|---|
+| `name` | The label. |
+| `Δ` | The change to each compartment. This is `pop`. |
+| `hazard` | The rate, as a function `(x, θ) -> number`. |
+| `r` | Lineages produced in each deme. |
+| `type` | `BIRTH`, `MIGRATION`, `DEATH`, `SAMPLE` or `NEUTRAL`. These come from `fork`, `swap`, `chop`, `sample` and `none`. |
+| `from`, `into` | The source deme index (0 for none) and the target deme indices. |
+| `regular`, `observed` | `kind=regular` gives `regular = true`. `kind=singular` gives `observed = true`. |
+
+`audit_model` prints the whole event table:
+
+```{julia}
+audit_model(SIR)
+```
+
+`@macroexpand` shows the code the macro writes.
+This cell expands a one-event model and prints only the model line:
+
+```{julia}
+expanded = Base.remove_linenums!(@macroexpand @mgp Tiny begin
+    compartments = (S, I)
+    demes = (I,)
+    params = (β,)
+    @event removal rate=β*I pop=(I=-1) move=chop(I)
+end)
+println(expanded.args[end])
+```
+
+The rate `β*I` became `θ.β * x.I`.
+The move `chop(I)` became type `DEATH`, source deme 1, and `r = [0]`.
+
+Where the code lives:
+
+| File | Contents |
+|---|---|
+| `src/simulate.jl` | `simulate`, `simulate_trajectory`. |
+| `src/examples/mgp_macro.jl` | `@mgp`, and the `SEIR` model. |
+| `src/examples/mgp.jl` | `Event`, `MGPModel`. |
+| `src/examples/mgp_audit.jl` | `validate_model`, `audit_model`. |
+| `src/examples/mgp_sir.jl`, `mgp_si2r.jl`, `mgp_mtbd.jl`, `mgp_mers.jl` | The other built-in models. |
+
+`scripts/mgp_crossvalidate.R` and `scripts/mgp_crossvalidate.jl` compare this simulator with the R package phylopomp.
+
+## 11. Cheat sheet
+
+Run a model:
+
+```julia
+g = simulate(Model, θ; x0 = (...), graft = [...], tmax = 20.0, rng = MersenneTwister(1))
+r = simulate_trajectory(Model, θ; x0 = (...), graft = [...], tmax = 20.0)   # r.genealogy, r.times, r.states, r.events
+```
+
+Keywords of `simulate`:
+
+| Keyword | Meaning |
+|---|---|
+| `x0` | Start count of every compartment. |
+| `graft` | Founding lineages per deme, in `model.demes` order. Must equal `x0` for the demes. |
+| `tmax` | Stop time. |
+| `t0` | Start time. Default 0. |
+| `rng` | `MersenneTwister(seed)` for repeatable runs. |
+| `demeset`, `samplemap` | Label samples with their deme. Use together. |
+
+Read a tree:
+
+| Call | Result |
+|---|---|
+| `nsample(g)` | Number of samples. 0 means an empty tree. |
+| `newick(g)` | Vector of Newick strings, one per founder. |
+| `g[i].type`, `.slate`, `.parent`, `.children`, `.deme` | Fields of node `i`. |
+| `samples(g)`, `nodes(g)`, `roots(g)`, `tips(g)` | Node indices. |
+
+Write a model:
+
+```julia
+@mgp Name begin
+    compartments = (S, I, R)
+    demes = (I,)
+    params = (β, γ)
+    @event infection rate=β*S*I/N pop=(S=-1, I=+1) move=fork(I => I, I)
+    @event sampling  rate=ψ*I     pop=()           move=sample(I)  kind=singular
+end
+```
+
+Moves: `fork(A => B, C)`, `swap(A => B)`, `chop(A)`, `sample(A)`, `sample_remove(A)`, `none`.
+
+Rules:
+
+1. For each deme, `pop` must equal the lineage change that `move` implies.
+2. Every rate must be 0 when the compartment it takes from is empty.
+3. Parameter names must not repeat compartment names.
+
+Errors:
+
+| Error | Cause |
+|---|---|
+| Macro error at definition | `pop` and `move` disagree, unknown move, `fork` without two products, missing `rate` or `move`. |
+| `ArgumentError` from `simulate` | Bad `graft`, `x0`, `samplemap` or `tmax`, or a hand-built model that fails `validate_model`. |
+| `AssertionError` from `simulate` | A rate is negative, infinite or `NaN`, or an event fires when its source compartment is empty. |
+
+Inspect: `validate_model(m)`, `audit_model(m)`, `@macroexpand @mgp ...`.
+
+## Next thing to try
+
+In `MySIRS`, set `ω = 0.0` and run with `MersenneTwister(3)`.
+Compare `newick` of the result with `newick` of the built-in `SIR` run with the same seed.
+Then set `ω = 0.1` and plot `I` over time.
