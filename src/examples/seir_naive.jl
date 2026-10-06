@@ -101,8 +101,13 @@ event_rates!(
     alpha[4] = alpha[3] = σ*E
     alpha[5] = @indicator(I > ellI, γ*(I-ellI))
     alpha[6] = ω*R
-    pi[1] = @indicator(I > 0, 1-ellI/I)
-    pi[2] = @indicator(I > 0, ellI/I)
+    ## Infection (k = 1, 2): "no move" must stay possible when every
+    ## infectious host is tracked (a tracked host can infect while its
+    ## lineage stays with it); propose it with its target share.
+    ## Progression (k = 3, 4) is different: the progressing host carries
+    ## its lineage, so "no move" does need an untracked exposed host.
+    pi[1] = no_move_share(ellI, ellE, I, E)
+    pi[2] = 1 - pi[1]
     pi[3] = @indicator(E > 0, 1-ellE/E)
     pi[4] = @indicator(E > 0, ellE/E)
     pi[6] = pi[5] = 1.0

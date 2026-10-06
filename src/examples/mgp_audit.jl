@@ -1,51 +1,13 @@
-# mgp_audit.jl
-# =============================================================================
-# Structural audit / semantic validation of an MGPModel (Population IR).
-#
-#   Read-only inspection only: no likelihood math, no genealogy/coloring
-#   state, no saturation/φ/Q_u computation (those are runtime, genealogy-
-#   dependent quantities -- explicitly out of scope until M02+, see the
-#   `Event` docstring in mgp.jl). This file answers one question: "can the
-#   compiler mechanically inspect/audit the static Population IR that
-#   already exists in `Event`/`MGPModel`?" -- and, as a stretch, "can it
-#   also catch structural mistakes in that IR without throwing?"
-#
-#   `audit_model` is an ordinary function, not a macro, per this project's
-#   rule that macros are syntax, not architecture. The `@mgpaudit` macro
-#   this docstring originally forward-referenced is now built (M06 Part 2)
-#   -- see `src/examples/mgp_mgpaudit.jl`, a SEPARATE file (not appended
-#   here) because `mgpaudit`'s per-mark derivation walks M02-M06 IR
-#   (`ReducedTransition`/`FilterSpec`/`explain`/...) that is only defined by
-#   files included LATER than this one in `Examples.jl` -- Julia struct
-#   field types must already exist at struct-definition time, so a struct
-#   carrying e.g. `Vector{ReducedExplanation}` cannot itself live in a file
-#   included before `mgp_explain.jl`. `mgp_audit.jl` stays exactly where M01
-#   put it (its `audit_model`/`validate_model` genuinely have no such
-#   dependency); `mgp_mgpaudit.jl` is included near the end of the chain,
-#   after `mgp_explain.jl`, where its dependencies are already satisfied.
-#
-# STATUS: new in M01. Cross-checked against `SEIR_REFERENCE` (mgp.jl) and
-#   against the `MERS` model (mgp_mers.jl) by `test/population_ir_test.jl`.
-#
-# Primary source: King, Lin & Ionides, "Exact phylodynamic likelihood via
-#   structured Markov genealogy processes" (StructuredMGPs.pdf), for the
-#   terminology only (Δ_u, α_u, r_u, W_u) -- no equation from the paper is
-#   implemented in this file.
-# =============================================================================
+# Static audit and validation of an MGPModel.
+# Reads the event table only; never calls a hazard closure.
 
 export audit_model, validate_model, EventAudit, ModelAudit
 
 """
     EventAudit
 
-One row of a model audit: everything statically knowable about a single
-`Event` without evaluating its hazard closure or touching genealogy state.
-
-Fields mirror the Population IR terminology used throughout the compiler
-project: `delta` = Δ_u (state jump), `has_hazard` = whether α_u is present
-as a callable, `r` = r_u (production vector), `from`/`into` = W_u (deme
-wiring), resolved here to both raw indices and the corresponding deme
-*names* for readability.
+One row of a model audit: static facts about one `Event`.
+Deme names are resolved from the `from`/`into` indices.
 """
 struct EventAudit
     name       :: Symbol
@@ -65,10 +27,8 @@ end
     ModelAudit
 
 Structural audit report for an `MGPModel`: its compartments, its
-lineage-carrying demes, and one `EventAudit` per event. Returned by
-`audit_model`. A plain, printable, structured value -- consume it
-programmatically (e.g. from a future `@mgpaudit` macro) or just `show` it
-at the REPL.
+lineage-carrying demes, and one `EventAudit` per event.
+Returned by `audit_model`. Plain printable value; `show` renders a table.
 """
 struct ModelAudit
     name         :: Symbol
@@ -86,11 +46,7 @@ observed flags, state transition Δ_u, whether a hazard α_u is present,
 production vector r_u, and source/target deme wiring W_u (`from`/`into`,
 resolved to deme names as well as raw indices).
 
-Purely inspective: never calls a hazard closure, never touches
-genealogy/coloring state, never computes saturation/φ_u/Φ_u/Q_u (those are
-runtime, genealogy-dependent quantities -- out of scope for this pass, see
-`Event`'s docstring in mgp.jl). Does not throw on structural problems --
-see `validate_model` for a checked, issue-reporting pass.
+Never calls a hazard closure and never throws; see `validate_model` for checks.
 
 `show(io, MIME("text/plain"), audit)` renders a human-readable table.
 """
@@ -139,16 +95,6 @@ end
 
 Base.show(io::IO, a::ModelAudit) = show(io, MIME("text/plain"), a)
 
-# =============================================================================
-# validate_model -- separately-callable semantic validation.
-#
-#   M00 found the equivalent checks folded into @mgp's macroexpansion-time
-#   error() calls (mgp_macro.jl:161,170,176,177-178,121-122) with no way to
-#   run them against an already-constructed MGPModel (e.g. a hand-written
-#   one like SEIR_REFERENCE). This closes that gap additively, without
-#   touching the macro or its existing (working, tested) error() checks.
-# =============================================================================
-
 """
     validate_model(model::MGPModel) -> Vector{String}
 
@@ -160,14 +106,18 @@ Covers: duplicate compartment/deme/event names, every deme being a
 declared compartment, every event's `from`/`into` deme indices being valid
 indices into `model.demes`, every event's `r` vector length matching
 `length(model.demes)`, every event's hazard being a callable `Function`,
-every Δ entry referencing a declared compartment, and a few per-`EventType`
-wiring sanity checks (e.g. a `BIRTH`/`MIGRATION`/`DEATH`/`SAMPLE` event
-must have a source deme).
+and every Δ entry referencing a declared compartment once.
 
-This is purely static-IR validation -- it does not (and cannot) check
-anything dynamic/genealogy-dependent (saturation, φ_u, Φ_u, Q_u); that
-machinery does not exist yet (see `docs/compiler/compiler_roadmap.md`
-items 4-7).
+Per `EventType`, when `r` and `from` are in range:
+- `BIRTH`: `sum(r) == 2`.
+- `MIGRATION`: one `into` deme, and `r` is 1 there and 0 elsewhere.
+- `DEATH`: `r` is all 0.
+- `SAMPLE`: `r[from]` is 0 or 1, and `r` is 0 elsewhere.
+- `NEUTRAL`: `from == 0`, no `into`, and `r` is all 0.
+- Every event: for each deme `d`, Δ of that compartment equals
+  `r[d] - (d == from)`. One lineage is kept per individual.
+
+[`simulate`](@ref) throws `ArgumentError` when this returns any issue.
 """
 function validate_model(model::MGPModel)
     issues = String[]
@@ -207,11 +157,42 @@ function validate_model(model::MGPModel)
                 push!(issues, "$tag: Δ references unknown compartment `$(p.first)`")
         end
 
+        allunique(p.first for p in ev.Δ) ||
+            push!(issues, "$tag: Δ names a compartment more than once")
+
         if ev.type in (BIRTH, MIGRATION, DEATH, SAMPLE) && ev.from == 0
             push!(issues, "$tag: $(ev.type) event has from=0 (no source deme)")
         end
         if ev.type == MIGRATION && isempty(ev.into)
             push!(issues, "$tag: MIGRATION event has no into deme")
+        end
+
+        ## The rules below index `r` by deme and by `from`.
+        (length(ev.r) == ndemes && 0 <= ev.from <= ndemes) || continue
+        if ev.type == BIRTH
+            sum(ev.r) == 2 ||
+                push!(issues, "$tag: BIRTH has $(sum(ev.r)) products (sum of r), expected 2")
+        elseif ev.type == MIGRATION
+            length(ev.into) == 1 ||
+                push!(issues, "$tag: MIGRATION has $(length(ev.into)) into demes, expected 1")
+            if length(ev.into) == 1 && 1 <= only(ev.into) <= ndemes
+                ev.r == [Int(j == only(ev.into)) for j in 1:ndemes] ||
+                    push!(issues, "$tag: MIGRATION r = $(ev.r) is not 1 at its into deme and 0 elsewhere")
+            end
+        elseif ev.type == DEATH
+            all(iszero, ev.r) || push!(issues, "$tag: DEATH r = $(ev.r), expected all 0")
+        elseif ev.type == SAMPLE && ev.from >= 1
+            ev.r[ev.from] in (0, 1) && all(iszero, ev.r[j] for j in 1:ndemes if j != ev.from) ||
+                push!(issues, "$tag: SAMPLE r = $(ev.r); r[from] must be 0 or 1 and the rest 0")
+        elseif ev.type == NEUTRAL
+            ev.from == 0 && isempty(ev.into) && all(iszero, ev.r) ||
+                push!(issues, "$tag: NEUTRAL must have from = 0, no into, and r all 0")
+        end
+        for (d, deme) in enumerate(model.demes)
+            implied = ev.r[d] - (d == ev.from ? 1 : 0)
+            stated = sum((p.second for p in ev.Δ if p.first == deme); init = 0)
+            stated == implied ||
+                push!(issues, "$tag: Δ changes deme `$deme` by $stated, but r and from imply $implied")
         end
     end
 

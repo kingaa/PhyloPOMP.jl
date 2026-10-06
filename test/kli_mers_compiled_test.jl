@@ -1,46 +1,14 @@
 """
-M09 acceptance-gate test: Gate 5 (numerical equivalence) for the compiled
-MERS filter (`src/examples/mgp_mers_filter.jl`) against the trusted,
-hand-coded `NaiveMERS.filter_pomp`/`regular_part!` (`src/examples/mers_naive.jl`,
-read-only oracle, never modified) -- the direct MERS analogue of
-`test/kli_seir_compiled_test.jl` (M08).
-
-One structural wrinkle vs. the SEIR test: `NaiveMERS.filter_pomp` (unlike
-`NaiveSEIR.filter_pomp`) takes NO genealogy argument at all -- it always
-filters the fixed empirical `mers_tree` (already noted in
-`test/mers_simulate.jl`'s own docstring, which is why THAT milestone used
-`SoftMERS.filter_pomp` instead). To compare against an ARBITRARY simulated
-genealogy here, this file defines `naive_oracle_filter_pomp` below: a
-test-local wrapper that is structurally IDENTICAL to `NaiveMERS.filter_pomp`
-(same `rinit`/`logdmeasure`/`rprocess` shape) but takes `gen` as an argument
-and calls `NaiveMERS.singular_part!`/`NaiveMERS.regular_part!` (BOTH
-unmodified, exported/accessible functions of the read-only oracle module)
-instead of hardcoding `mers_tree`. This does not modify `mers_naive.jl` in
-any way -- it only calls its two already-exported building-block functions
-with a different genealogy, exactly the same reuse pattern
-`mgp_mers_filter.jl`'s own `mers_compiled_filter_pomp` uses for the singular
-part.
-
-Genealogies are simulated with `demeset=NaiveMERS.Demes,
-samplemap=[NaiveMERS.Camel, NaiveMERS.Human]` (NOT `SoftMERS.Demes`) so the
-resulting `Genealogy`'s deme values are the SAME `NaiveMERS.Camel`/
-`NaiveMERS.Human` enum instances `NaiveMERS.singular_part!`/
-`mers_compiled_regular_part!` compare against internally (`n.deme==Camel`
-etc.) -- using a different module's `@demes`-generated deme type would make
-those comparisons silently always false.
-
-Same bit-exact-comparison methodology as M08 (task option (b)): both
-filters are single-particle (`Np=1`) importance samplers whose `ll` depends
-on which silent/untracked regular events the proposal draws; the GLOBAL RNG
-is seeded identically immediately before each `pfilter` call, since
-`mers_compiled_regular_part!` was built to issue the identical sequence of
-`rcateg`/`rand()` calls, in the same order, as `NaiveMERS.regular_part!`.
+Compiled MERS filter vs NaiveMERS: seed-matched Np=1 log-likelihoods must
+agree on simulated genealogies. naive_oracle_filter_pomp is
+NaiveMERS.filter_pomp taking gen as an argument. Genealogies use
+NaiveMERS.Demes so the oracle's deme comparisons see the same enum type.
 """
 module KliMersCompiledTest
 
 import ..Main: h1, h2
 
-@info h1("Compiled MERS filter vs. mers_naive.jl (M09 Gate 5)")
+@info h1("Compiled MERS filter vs. mers_naive.jl")
 
 using Test
 using PhyloPOMP
@@ -53,22 +21,13 @@ import PartiallyObservedMarkovProcesses as POMP
 
 find_event(model, name) = model.events[findfirst(e -> e.name == name, model.events)]
 
-# Robust lookup: InlineSameDemeTransition/CrossDemeTransition/ForkTransition
-# are legitimately ABSENT from full_transitions' output when the relevant
-# ell_d is too small for that saturation to be enumerable (enumerate_saturations
-# collapses to {0} whenever ell_d==0, or excludes s_d=2 whenever ell_d==1,
-# etc.) -- `only(filter(...))` throws on an empty collection in that case;
-# the correct probability contribution is 0, not an error.
+# Saturations are absent when ell is too small; phi_of returns 0 for them.
 phi_of(ts, T) = begin
     i = findfirst(t -> t isa T, ts)
     isnothing(i) ? zero(Rational{Int}) : ts[i].phi
 end
 
-# ---------------------------------------------------------------------------
-# Test-local naive oracle: NaiveMERS.filter_pomp, but parameterized on `gen`
-# instead of hardcoding `mers_tree`. Reuses NaiveMERS.singular_part!/
-# regular_part! verbatim -- see this file's docstring.
-# ---------------------------------------------------------------------------
+# NaiveMERS.filter_pomp with gen as an argument.
 naive_oracle_filter_pomp(
     gen::Genealogy;
     Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 1.0, Beta_hh = 4.0,
@@ -134,7 +93,6 @@ function build_genealogy(θ, x0, target_n, tmax, gseed; attempts = 800)
             PhyloPOMP.MERS, θ; x0 = x0, graft = [1, 0], tmax = tmax, rng = rng,
             demeset = NaiveMERS.Demes, samplemap = [NaiveMERS.Camel, NaiveMERS.Human],
         )
-        demes_sampled = Set(g[i].deme for i in samples(g))
         if nsample(g) == target_n
             return g, true
         end
@@ -179,16 +137,15 @@ function compare_ll(g, θ, pop_c, pop_h, x0; nseeds)
     nfinite, nmatch, worst
 end
 
-@testset verbose=true "Compiled MERS filter (M09)" begin
+@testset verbose=true "Compiled MERS filter" begin
 
-    @info h2("TCC/THH weighted-aggregate check: naive's drawless " *
-             "'no visible fork' term equals Phi_id + ell_d*Phi_inline, " *
-             "NOT reduce_event_indicator's plain Phi_noop sum")
+    @info h2("TCC/THH: naive's drawless no-fork term equals " *
+             "Phi_id + ell*Phi_inline, not the plain noop sum")
     @testset "TCC/THH weighted aggregate" begin
         tcc = find_event(PhyloPOMP.MERS, :transmission_cc)
         thh = find_event(PhyloPOMP.MERS, :transmission_hh)
 
-        # M07's own MERS instance's camel side: ell_C=2, I_C=5 (post-event).
+        # camel side: ell_C=2, I_C=5 (post-event)
         ts = full_transitions(tcc, [2, 0], [5, 3])
         Φid = only(filter(t -> t isa IdentityTransition, ts)).phi
         Φinl = only(filter(t -> t isa InlineSameDemeTransition, ts)).phi
@@ -203,13 +160,8 @@ end
         @test Φnoop == 3 // 5
         @test Φnoop != weighted
 
-        # A second, distinct (ell,n) instance, plus the Chu-Vandermonde
-        # sum-to-1 cross-check (Φid + ell*Φinl + C(ell,2)*Φfork == 1),
-        # confirming the C(ell,s) weighting generally, not by coincidence.
-        # ell_C=1 is included specifically to confirm the DEGENERATE case
-        # (ForkTransition unreachable/absent from full_transitions entirely
-        # since min(r_C=2,ell_C=1)=1 -- phi_of gracefully returns 0//1 here,
-        # rather than the C(1,2)=0 binomial coefficient masking a real bug).
+        # Other (ell, I) cases; ell_C=1 has no Fork saturation, so phi_of returns 0.
+        # Identity + ell*Inline + C(ell,2)*Fork sums to 1 in each.
         for (ellc, Ic) in ((3, 5), (1, 4), (4, 7))
             ts2 = full_transitions(tcc, [ellc, 0], [Ic, 3])
             Φid2 = phi_of(ts2, IdentityTransition)
@@ -230,23 +182,29 @@ end
         @test weighted_h == naive_h
     end
 
-    @info h2("THC/TCH identity/cross check: structurally identical to " *
-             "SEIR infection (boost(Phi,pi)/boost(Phi,1/ell) patterns, " *
-             "InlineSameDeme never realized regularly)")
+    @info h2("THC/TCH no-move/cross check: no move = Identity + " *
+             "ell*InlineSameDeme, cross = boost(Phi,1/ell)")
     @testset "THC/TCH identity+cross" begin
         thc = find_event(PhyloPOMP.MERS, :transmission_hc)
         ellc, ellh, Ic, Ih = 2, 1, 5, 4
         ts = full_transitions(thc, [ellc, ellh], [Ic, Ih])
         Φid = only(filter(t -> t isa IdentityTransition, ts)).phi
         Φcr = only(filter(t -> t isa CrossDemeTransition, ts)).phi
-        pi3 = 1 - ellc // Ic
-        @test Φid / pi3 == 1 - ellh // Ih   # naive's k==3 raw term
+        Φinl = only(filter(t -> t isa InlineSameDemeTransition, ts)).phi
+        @test Φid == (1 - ellc // Ic) * (1 - ellh // Ih)
+        # naive's k==3 target: no lineage passes to the new human, whether
+        # the parent is untracked (Identity) or tracked (InlineSameDeme)
+        @test Φid + ellc * Φinl == 1 - ellh // Ih
+        # ...and it stays positive when every camel is tracked
+        tsf = full_transitions(thc, [2, 1], [2, 4])
+        @test sum(t.phi for t in tsf if t isa IdentityTransition; init=0//1) +
+              2 * only(filter(t -> t isa InlineSameDemeTransition, tsf)).phi ==
+              1 - 1 // 4
         @test Φcr * ellc == 3 // 10          # boost(Φcr,1/ellc) == Φcr*ellc
     end
 
-    @info h2("Decay verification: M07's own MERS instance reduces to " *
-             "18/5 through mers_compiled_event_rates!'s compiled_decay call")
-    @testset "M07 decay instance" begin
+    @info h2("Decay: this MERS instance reduces to 18/5")
+    @testset "decay instance" begin
         γc, γh = 1 // 2, 2 // 5
         χc, χh = 1 // 10, 3 // 10
         x = (S_c = 0 // 1, I_c = 5 // 1, S_h = 0 // 1, I_h = 3 // 1)
@@ -257,11 +215,7 @@ end
         n = [5, 3]
         λ_tex = total_decay(PhyloPOMP.MERS, x, θ, ℓ, n)
         @test λ_tex == 13 // 5
-        # compiled_decay (mgp_seir_filter.jl) computes in Float64 internally
-        # (Float64(total_decay(...)) + Float64 leftover arithmetic), so the
-        # comparison is isapprox, not exact Rational equality -- the INPUT
-        # arithmetic above (λ_tex, the leftover derivation in this file's
-        # header) is exact Rational{Int}, cross-checked against this.
+        # compiled_decay computes in Float64, so compare with isapprox.
         total = compiled_decay(PhyloPOMP.MERS, x, θ, ℓ, n)
         @test isapprox(total, 18 / 5; atol = 1e-12)
     end
@@ -321,10 +275,8 @@ end
         @test nmismatch == 0
     end
 
-    @info h2("Gate 5: end-to-end log-likelihood, many (params, genealogy, " *
-             "seed) combinations, seed-matched Np=1 particle filters " *
-             "(beta_hc/beta_ch always nonzero, so THC/TCH cross-deme " *
-             "marks are exercised throughout the sweep)")
+    @info h2("End-to-end log-likelihood over many (params, genealogy, seed) " *
+             "combinations; beta_hc/beta_ch nonzero")
     @testset "end-to-end log-likelihood sweep" begin
         rng_master = MersenneTwister(20260919)
         total_finite = 0
@@ -361,7 +313,7 @@ end
             worst_abs = max(worst_abs, worst)
             @test nfinite == nmatch
         end
-        @info "Gate 5 sweep: $ncombos parameter/genealogy combos, " *
+        @info "End-to-end sweep: $ncombos parameter/genealogy combos, " *
               "$total_finite finite log-likelihood comparisons, " *
               "$total_match exact matches, worst |Δll|=$worst_abs"
         @test ncombos ≥ 8

@@ -1,44 +1,14 @@
-## This file contains definitions that are used in the guided filters
-## for the MERS-CoV two-host (Camel/Human) model.
+## Shared by SoftMERS and HardMERS: rates, singular part, filter_pomp.
+## Each module supplies its own regular_part!.
 ##
-## It is the MERS analogue of seir_funs.jl and is `include`d by both
-## SoftMERS (mers_soft.jl) and HardMERS (mers_hard.jl).  Everything
-## except the `regular_part!` kernel lives here; each of those two
-## modules supplies only its own `regular_part!`, exactly as
-## seir_soft.jl / seir_hard.jl do on top of seir_funs.jl.
-##
-## The singular (genealogical-event) machinery below --- `knowledge!`,
-## `check`, `deme_occupancy`, `live_condition`, `singular_root!`,
-## `terminal_sample!`, `singular_sample!`, `singular_branch!`,
-## `singular_part!`, `mers_rinit` and `filter_pomp` --- is copied
-## verbatim from GuidedMERS (mers_guided.jl), so that all three MERS
-## kernels share one, identical, singular part and differ *only* in
-## how they propose population events on the open intervals.
-##
-## The two structural differences from seir_funs.jl are:
-##
-##   1. A guide node (`GuideNode`) carries no `.deme` field, but a MERS
-##      Sample's host species (Camel or Human) is *essential* data (it
-##      selects χ_c vs χ_h and which color to chop). We therefore pass
-##      the underlying `Genealogy` alongside the `Guide` and read the
-##      sampled deme from `genealogy[node].deme`. `guide[node]` and
-##      `genealogy[node]` share the same node index.
-##
-##   2. An internal Node (coalescence) is NOT deme-fixed in MERS: the
-##      parent can transmit within-host (cc, hh) or across-host (hc, ch).
-##      Hence `knowledge!` fixes the guide only at Samples --- exactly the
-##      behavior of PhyloPOMP's default `known_deme!`.
+## Samples carry the host deme.
+## Coalescences are not deme-fixed, so knowledge! fixes the guide only at Samples.
 
 """
     knowledge!(v; deme, type, time)
 
-Return `true` if the guide probabilities are fixed at this node (and,
-if so, fill `v` with the appropriate probability vector); return
-`false` otherwise.
-
-For MERS the deme is fixed exactly when the genealogy supplies host
-metadata, i.e. at the sample tips. This is identical to the default
-`known_deme!`.
+Fix the guide at Sample tips, where the host deme is known; leave Nodes free.
+Returns `true` if `v` was filled.
 """
 knowledge!(
     v; deme, type, time,
@@ -68,22 +38,21 @@ check(
     nothing
 end
 
-## ---------------------------------------------------------------------
-## Population-process rates.
+## Population-process rates, in the on*/off* keyword style of seir_funs.jl.
 ##
-## These are written in seir_funs.jl's `on*`/`off*` keyword style so that
-## SoftMERS and HardMERS can share a single `event_rates!`:
+##   Both set     offC = I_c*no_move_share(ellC,ellH,I_c,I_h)
+##                offH = I_h*no_move_share(ellH,ellC,I_h,I_c)
+##   Soft passes  onC = I_c-offC,  onH = I_h-offH
+##   Hard passes  onC = sum_relhaz(rh,n,cols,Camel,Human)
+##                onH = sum_relhaz(rh,n,cols,Human,Camel)
 ##
-##   Soft passes  onC = ellC                          (offC defaults to I_c-onC)
-##                onH = ellH                          (offH defaults to I_h-onH)
-##   Hard passes  onC = sum_relhaz(rh,n,cols,Camel,Human), offC = I_c-ellC
-##                onH = sum_relhaz(rh,n,cols,Human,Camel), offH = I_h-ellH
+## The no-move share must stay positive when every host in the source deme
+## is tracked (ell = I): the parent may be untracked or keep its lineage.
+## Its target factor is 1 - ell_new/I_new > 0.
 ##
-## In both cases `pi[k]` is the proposal fraction of the underlying
-## population rate that is directed at slot `k`, and `alpha[k]` is the
-## resulting proposal intensity `rate*pi[k]`.  Whatever population rate
-## is left unclaimed is returned as "decay" and charged continuously
-## (`ll -= decay*step`); whichever slot fires is charged `-log(pi[k])`.
+## pi[k] is the share of the population rate proposed at slot k; alpha[k] = rate*pi[k].
+## Unclaimed rate is returned as decay; a firing slot is charged -log(pi[k]).
+## no_move_share sets the no-move share.
 ##
 ## Slot layout (12 slots):
 ##   1  camel → camel transmission
@@ -98,7 +67,6 @@ end
 ##  10  S_h birth
 ##  11  S_c death
 ##  12  S_h death
-## ---------------------------------------------------------------------
 
 transmission!(
     alpha, pi, state, cols;
@@ -126,8 +94,7 @@ transmission!(
     alpha[4] = rate_hc*pi[4]
     alpha[5] = rate_ch*pi[5]
     alpha[6] = rate_ch*pi[6]
-    ## Soft has pi[3]+pi[4] = pi[5]+pi[6] = 1, so this leftover is zero;
-    ## Hard's unnormalized onC/onH make it nonzero in either direction.
+    ## Leftover rate is returned as decay (zero when pi[3]+pi[4] = pi[5]+pi[6] = 1).
     rate_hc - alpha[3] - alpha[4] + rate_ch - alpha[5] - alpha[6]
 end
 
@@ -184,10 +151,6 @@ event_rates!(alpha, pi, state, cols; kwargs...) = begin
     decay += sampling(state, cols; kwargs...,)
     decay
 end
-
-## ---------------------------------------------------------------------
-## Singular part: verbatim from GuidedMERS (mers_guided.jl).
-## ---------------------------------------------------------------------
 
 deme_occupancy(;I_c, I_h, _...,) = begin
     ;I_c, I_h
@@ -358,9 +321,6 @@ end
 Constructs a pomp object for the MERS genealogy-conditioned filter, based on
 the filter guide built from genealogy `gen` and the guiding finite-state
 Markov process `m` (construct `m` with `fsmarkov`).
-
-Pass the built-in `mers_tree` as `gen` to reproduce the default data set; a call
-`filter_pomp(mers_tree, fsmarkov(...))` constructs the guided filter.
 """
 filter_pomp(
     gen::Genealogy,

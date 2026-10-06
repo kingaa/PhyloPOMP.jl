@@ -1,19 +1,8 @@
 """
-Structural completeness check of the Population IR (`Event`/`MGPModel`)
-for both models currently expressible via `@mgp`: `SEIR` and `MERS`.
-
-Confirms that for every event the compiler can recover/compute Δ_u
-(state jump), α_u (hazard), r_u (production vector), and W_u (from/into
-deme wiring) -- the four static per-mark quantities the Population IR is
-supposed to carry per `docs/compiler/compiler_roadmap.md` item 2. τ_u
-(event time) is correctly *not* checked here: it is a runtime quantity,
-not part of the static `Event` description (see `Event`'s docstring in
-mgp.jl).
-
-Also exercises `audit_model`/`validate_model` (`src/examples/mgp_audit.jl`,
-new in M01) against both models: `audit_model(SEIR)` is cross-checked
-against the hand-written `SEIR_REFERENCE` table, and both models are
-checked to `validate_model` clean (empty issue list).
+Structural check of the Population IR (`Event`/`MGPModel`) for SEIR and
+MERS: each event carries Δ_u, α_u, r_u and the from/into wiring.
+`audit_model(SEIR)` matches `SEIR_REFERENCE`; both models pass
+`validate_model`.
 """
 module PopulationIRTest
 
@@ -48,8 +37,7 @@ using PhyloPOMP
             @test ev.from == 0 || (1 <= ev.from <= ndemes)
             @test all(i -> 1 <= i <= ndemes, ev.into)
 
-            # τ_u is deliberately NOT stored on Event (runtime quantity) --
-            # confirm no field pretends to be it.
+            # Event stores no runtime event time.
             @test !hasproperty(ev, :τ) && !hasproperty(ev, :t) && !hasproperty(ev, :time)
 
             # Semantic type / regular-singular / observed metadata present.
@@ -114,8 +102,11 @@ using PhyloPOMP
     @test PhyloPOMP.validate_model(PhyloPOMP.SEIR) == String[]
     @test PhyloPOMP.validate_model(PhyloPOMP.MERS) == String[]
     @test PhyloPOMP.validate_model(PhyloPOMP.SEIR_REFERENCE) == String[]
+    @test PhyloPOMP.validate_model(PhyloPOMP.SI2R) == String[]
+    @test PhyloPOMP.validate_model(PhyloPOMP.SIR) == String[]
+    @test PhyloPOMP.validate_model(PhyloPOMP.MTBD) == String[]
 
-    @info h2("validate_model catches a deliberately broken model")
+    @info h2("validate_model catches a broken model")
     broken = PhyloPOMP.MGPModel(:Broken, [:A, :B], [:A],
         [PhyloPOMP.Event(:bad, [:A=>-1, :ZZZ=>+1], (x,θ)->1.0,
                           [1, 2], PhyloPOMP.BIRTH, 5, [7], true, false)])
@@ -125,6 +116,28 @@ using PhyloPOMP
     @test any(occursin("from index", i) for i in issues)
     @test any(occursin("into index", i) for i in issues)
     @test any(occursin("unknown compartment", i) for i in issues)
+
+    @info h2("validate_model: per-type lineage rules on hand-built events")
+    ## One deme, I. Each event breaks one rule; Δ agrees with r unless noted.
+    check1(e) = PhyloPOMP.validate_model(PhyloPOMP.MGPModel(:One, [:S, :I], [:I], [e]))
+    mkev(name, Δ, r, type, from, into = Int[]) =
+        PhyloPOMP.Event(name, Δ, (x,θ)->1.0, r, type, from, into, true, false)
+    has(issues, s) = any(occursin(s, i) for i in issues)
+    @test has(check1(mkev(:b, [:S=>-1], [1], PhyloPOMP.BIRTH, 1)), "BIRTH has 1 products")
+    @test has(check1(mkev(:b, [:S=>-1, :I=>+2], [3], PhyloPOMP.BIRTH, 1)), "BIRTH has 3 products")
+    @test has(check1(mkev(:d, [:I=>-1], [1], PhyloPOMP.DEATH, 1)), "DEATH r = [1]")
+    @test has(check1(mkev(:s, Pair{Symbol,Int}[], [2], PhyloPOMP.SAMPLE, 1)), "SAMPLE r = [2]")
+    @test has(check1(mkev(:n, [:S=>-1], [0], PhyloPOMP.NEUTRAL, 1)), "NEUTRAL must have from = 0")
+    @test has(check1(mkev(:d, [:I=>-1, :I=>-1], [0], PhyloPOMP.DEATH, 1)), "more than once")
+    @test has(check1(mkev(:d, [:S=>-1], [0], PhyloPOMP.DEATH, 1)), "but r and from imply -1")
+    ## Two demes, E and I.
+    check2(e) = PhyloPOMP.validate_model(PhyloPOMP.MGPModel(:Two, [:E, :I], [:E, :I], [e]))
+    @test has(check2(mkev(:m, [:E=>-1, :I=>+1], [0, 1], PhyloPOMP.MIGRATION, 1, [1, 2])),
+              "MIGRATION has 2 into demes")
+    @test has(check2(mkev(:m, [:E=>-1, :I=>+1], [1, 0], PhyloPOMP.MIGRATION, 1, [2])),
+              "is not 1 at its into deme")
+    @test has(check2(mkev(:s, [:E=>-1], [0, 1], PhyloPOMP.SAMPLE, 1)), "the rest 0")
+    @test check2(mkev(:f, [:E=>-1, :I=>+2], [0, 2], PhyloPOMP.BIRTH, 1)) == String[]
 
     @info h2("audit_model / EventAudit / ModelAudit show output is non-empty")
     io = IOBuffer()

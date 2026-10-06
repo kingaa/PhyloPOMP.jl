@@ -35,15 +35,21 @@ rcateg(
         @assert p[i] ≥ 0 "invalid p[$i]=$(p[i]) detected"
         s += Prob(p[i])
     end
-    ## NB: this is a non-destructive routine.
-    ## If it is permissible to destroy p, one could save the
-    ## extra round of subtractions.
     if s > 0
         r = s*rand(rng, Prob)
         k::Int = 1
-        while r > p[k]
+        n = lastindex(p)
+        ## Subtraction can leave a remainder past the last weight.
+        ## That remainder belongs to the last category with positive weight.
+        while k < n && r > p[k]
             r -= p[k]
             k += 1
+        end
+        if p[k] ≤ 0
+            ## k == n: the remainder ran past a zero last weight.
+            ## k < n: the draw was 0 and the first weight is 0.
+            ## s > 0, so some category has weight.
+            k = (k == n) ? findlast(>(0), p) : findfirst(>(0), p)
         end
         if prob
             k, s, p[k]/s

@@ -37,7 +37,10 @@ regular_part!(
             ellE, ellI,
             kwargs...,
             onE=ellE,
-            onI=ellI,
+            ## infection: identity share in proportion to the target
+            ## (see no_move_share); progression keeps E-ellE
+            offI=I*no_move_share(ellI,ellE,I,E),
+            onI=I-I*no_move_share(ellI,ellE,I,E),
         )
         k, s = rcateg(alpha)
         step = -log(rand())/s

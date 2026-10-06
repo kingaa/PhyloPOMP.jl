@@ -41,7 +41,8 @@ export fsmarkov, generator, forward_action, statdist
 include("fsmarkov.jl")
 
 export Guide, GuideNode, guide, relhaz, relhaz_alloc, relhaz!,
-    sum_relhaz, demekron!, choose_branch
+    sum_relhaz, demekron!, choose_branch, choose_move,
+    no_move_share
 include("guide.jl")
 
 export @marks, rcateg

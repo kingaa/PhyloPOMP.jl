@@ -7,7 +7,6 @@ import PartiallyObservedMarkovProcesses: times, timezero
 Genealogical nodes (see [`GenealNode`](@ref)) can be one of three types: Root, Node, or Sample.
 """
 @enum NodeType Root Sample Node
-## FIXME: inclusion of Root in NodeType introduces some inelegant redundancy
 
 """
     GenealNode{E}
@@ -106,17 +105,35 @@ Renames all nodes and corrects the parent/child relationships.
 Traces sample-lineages.
 """
 repair!(G::Genealogy) = begin
-    ## weed out dead roots:
     filter!(
         n -> !(isnothing(n.parent) && isempty(n.children)),
         G.nodes,
     )
-    ## sort nodes:
+    ## Sort by time; ties go ancestor before descendant (depth from root), then by name.
+    byname = Dict(n.name => n for n ∈ G.nodes)
+    depth = Dict{eltype(keys(byname)),Int}()
+    nodedepth(n) = begin
+        ## iterative (no recursion on deep trees): climb to the first ancestor
+        ## with a known depth, then assign on the way back down
+        chain = typeof(n)[]
+        m = n
+        while !haskey(depth, m.name)
+            push!(chain, m)
+            (isnothing(m.parent) || !haskey(byname, m.parent)) && break
+            m = byname[m.parent]
+        end
+        d = haskey(depth, m.name) ? depth[m.name] : -1
+        for k ∈ reverse(eachindex(chain))
+            d += 1
+            depth[chain[k].name] = d
+        end
+        depth[n.name]
+    end
     compare(p,q) = p.slate < q.slate ||
         (p.slate == q.slate &&
-        (p==q.parent || (q!=p.parent && p.name < q.name)))
+        (nodedepth(p) < nodedepth(q) ||
+         (nodedepth(p) == nodedepth(q) && p.name < q.name)))
     sort!(G.nodes,lt=compare)
-    ## repair names and types:
     namemap = Dict(n.name=>k for (k,n) ∈ enumerate(G.nodes))
     G.nsample = zero(Size)
     for n ∈ G.nodes

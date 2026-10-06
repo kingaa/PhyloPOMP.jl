@@ -1,29 +1,7 @@
 """
-Milestone-2 acceptance test for the generic forward simulator
-(`src/simulate.jl`), generalizing the SEIR check in `test/seir_simulate.jl`
-to a second, independent model: MERS's two-host (Camel/Human) structure,
-already declared via `@mgp MERS` in `src/examples/mgp_mers.jl` -- no new
-model-spec front-end code was needed for this milestone, only the
-`demeset`/`samplemap` generalization to `simulate` itself (MERS observes
-deme identity at the moment of sampling, unlike SEIR, where deme is purely
-latent -- see `src/simulate.jl`'s module header).
-
-`NaiveMERS.filter_pomp` cannot be used as the validating filter here: unlike
-`NaiveSEIR.filter_pomp`, it takes no genealogy argument at all and always
-filters the fixed empirical `mers_tree` (confirmed in `handoff.md`'s
-"Follow-up round 4"). `SoftMERS.filter_pomp(gen, m; ...)` (shared machinery
-in `src/examples/mers_funs.jl`) DOES accept an arbitrary genealogy, exactly
-like the SEIR case, so it is the validating filter used below.
-
-`GuidedMERS.filter_pomp(gen, m; ...)` (`src/examples/mers_guided.jl`) is a
-SECOND, independently-written filter over the same rate structure, and it is
-strictly more demanding of the simulator than `SoftMERS` is: it calls
-`GuidedMERS.check` on the genealogy (asserting root/node/sample degrees and a
-KNOWN host species at every tip) and its `knowledge!`/`terminal_sample!`
-dereference `gen[node].deme` directly. It is therefore exercised below too,
-on a genealogy simulated with `demeset=GuidedMERS.Demes` --  the enum
-instances must come from `GuidedMERS`'s own `@demes` module, since a
-`SoftMERS.Demes` value is a different type entirely and would never match.
+`simulate` on `@mgp MERS`, then `SoftMERS.filter_pomp` and `GuidedMERS.filter_pomp`.
+MERS records the deme of a sample, so this file is where `demeset` and `samplemap` get used.
+`GuidedMERS` has to be given `demeset = GuidedMERS.Demes`. A `SoftMERS` deme is a different type, and `GuidedMERS` reads `gen[node].deme` directly.
 """
 module MERSSimulateTest
 
@@ -50,11 +28,8 @@ import PartiallyObservedMarkovProcesses as POMP
 
 @testset verbose=true "MERS forward simulator" begin
 
-    ## parameters shared between the simulator and the filter. Kept modest
-    ## (small N, R0 not too far above 1) so a "cross-species, few-sample"
-    ## realization is common within the retry budget below, rather than
-    ## needing to fish for a rare narrow window between "died out" and "large
-    ## outbreak" -- see the diagnostic in the implementation notes.
+    ## Parameters shared by simulator and filter. Small N and R0 near 1 make
+    ## cross-species, few-sample trees common within the retry budget.
     β_cc, β_ch, β_hc, β_hh = 3.0, 0.5, 0.5, 3.0
     γ_c, γ_h = 1.0, 1.0
     χ_c, χ_h = 0.3, 0.3
@@ -68,9 +43,9 @@ import PartiallyObservedMarkovProcesses as POMP
     x0 = (S_c=N_c-1, I_c=1, S_h=N_h, I_h=0)
     samplemap = [Camel, Human]
 
-    ## the same simulation, but recording sample demes as GuidedMERS's enum
-    ## instances, plus the retry loop shared by the two guided blocks below.
-    ## Returns `(genealogy, ok)`; `lo` is the minimum sample count demanded.
+    ## The same simulation, recording sample demes as GuidedMERS's enum
+    ## instances, with the retry loop shared by the two guided blocks below.
+    ## Returns `(genealogy, ok)`; `lo` is the minimum sample count.
     guided_sim(rng, lo) = begin
         local gsim
         okl = false
@@ -91,9 +66,8 @@ import PartiallyObservedMarkovProcesses as POMP
         gsim, okl
     end
 
-    ## the filter parameters are the SAME numbers the simulation used;
-    ## `mers_rinit` (src/examples/mers_guided.jl:416) rescales each species
-    ## separately by N/(S0+I0), so these fractions reproduce x0 exactly.
+    ## Filter parameters match the simulation; `mers_rinit` rescales each
+    ## species by N/(S0+I0).
     guided_pomp(gen, m) = GuidedMERS.filter_pomp(
         gen, m;
         β_cc=β_cc, β_ch=β_ch, β_hc=β_hc, β_hh=β_hh,
@@ -125,12 +99,8 @@ import PartiallyObservedMarkovProcesses as POMP
             PhyloPOMP.MERS, θ; x0=x0, graft=[1,0], tmax=10.0, rng=rng,
             demeset=SoftMERS.Demes, samplemap=samplemap,
         )
-        ## demand at least one sample of EACH species (so the test actually
-        ## exercises the cross-deme transmission_hc/transmission_ch events,
-        ## not just the single-host case), and cap the sample count so the
-        ## tree stays cheap and non-collapse-prone for pfilter below --
-        ## an uncapped major outbreak can reach 50+ samples, which needs
-        ## far more than a modest Np to reliably avoid -Inf.
+        ## Require both species sampled (exercises transmission_hc/ch) and at
+        ## most 12 samples (keeps pfilter cheap).
         demes_sampled = Set(g[i].deme for i ∈ samples(g))
         if 4 ≤ nsample(g) ≤ 12 && Camel ∈ demes_sampled && Human ∈ demes_sampled
             ok = true
@@ -141,16 +111,13 @@ import PartiallyObservedMarkovProcesses as POMP
     @test g isa Genealogy{SoftMERS.Demes}
     @test length(roots(g)) == 1
     @test nsample(g) == length(samples(g))
-    ## MERS sampling is always destructive (`sample_remove`): every Sample
-    ## node has exactly zero children, matching NaiveMERS/SoftMERS's
-    ## `@assert length(n.children)==0` invariant.
+    ## MERS sampling is destructive: Sample nodes have no children.
     @test all(isempty(g[i].children) for i ∈ samples(g))
     @test all(!ismissing(g[i].deme) for i ∈ samples(g))
     @test all(ismissing(g[i].deme) for i ∈ eachindex(g) if g[i].type != Sample)
 
     @info h2("per-event timing, structure, round trips (single root and forest, demography on)")
-    ## Same checks as SEIR, with destructive sampling (Sample degree must be 0)
-    ## and the four NEUTRAL demography events switched on (B_c, B_h > 0).
+    ## Same checks as SEIR. Sampling removes the host, and births are on (`B_c`, `B_h` > 0).
     θd = merge(θ, (B_c=0.5, B_h=0.5))
     cov = run_invariants(PhyloPOMP.MERS, θd,
                          [(x0, [1,0]), ((S_c=18, I_c=2, S_h=19, I_h=1), [2,1])];
@@ -184,19 +151,14 @@ import PartiallyObservedMarkovProcesses as POMP
         N_c=N_c, N_h=N_h,
     )
     @test p isa POMP.PompObject
-    ## pfilter draws from the global RNG (unlike `simulate` above, which was
-    ## given its own `rng`), so seed explicitly for a reproducible result
-    ## independent of what ran earlier in the suite.
+    ## pfilter uses the global RNG, so seed it.
     seed!(20260814)
     pf = pfilter(p, Np=5000)
     @test pf isa POMP.PfilterdPompObject
     @test isfinite(logLik(pf))
 
-    ## ...and through the guided filter as well. `demeset`/`samplemap` only
-    ## LABEL nodes (src/simulate.jl:195); they consume no randomness, so an
-    ## identically-seeded rng replays the very realization `g` above -- the
-    ## newick equality asserts exactly that, making this a second, independent
-    ## filter's verdict on ONE tree rather than on a luckier one.
+    ## demeset/samplemap only label nodes and use no randomness, so the same
+    ## seed replays g; the newick equality checks that.
     gg, okg = guided_sim(MersenneTwister(20260813), 4)
     @test okg
     @test gg isa Genealogy{GuidedMERS.Demes}
@@ -213,18 +175,13 @@ import PartiallyObservedMarkovProcesses as POMP
     @test isfinite(logLik(pfg))
 
     @testset "simulate -> GuidedMERS: check passes and logLik finite" begin
-        ## An INDEPENDENT realization (different seed), to show the agreement
-        ## above is not a property of one lucky tree. `GuidedMERS.check`
-        ## returns `nothing` on success and throws on failure, so calling it
-        ## outside `@test_throws` is itself the assertion; `=== nothing`
-        ## records it as a passing test.
+        ## Independent realization. GuidedMERS.check returns nothing or throws.
         @info h2("simulate -> GuidedMERS: check passes and logLik finite")
         g4, ok4 = guided_sim(MersenneTwister(20260901), 3)
         @test ok4
         @test 3 ≤ nsample(g4) ≤ 12
         @test GuidedMERS.check(g4) === nothing
-        ## the properties `check` asserts, spelled out, so a failure says
-        ## which invariant broke rather than only that an assert fired:
+        ## The properties check asserts, so a failure names the broken one.
         @test all(length(g4[i].children)==1 for i ∈ roots(g4))
         @test all(isempty(g4[i].children) for i ∈ samples(g4))
         @test all(

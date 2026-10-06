@@ -1,27 +1,18 @@
 """
-M06 acceptance-gate tests: `explain` (`src/examples/mgp_explain.jl`, Part 1)
-and `mgpaudit`/`@mgpaudit` (`src/examples/mgp_mgpaudit.jl`, Part 2).
+Tests for `explain` and `mgpaudit`/`@mgpaudit`. `explain` walks `FilterTerm`
+to `ReducedTransition` to `KLITransition` to `Event`; `mgpaudit` gives a
+derivation per BIRTH/MIGRATION event and an out-of-scope note for the rest.
 
-`explain` walks the full provenance chain `FilterTerm -> ReducedTransition ->
-KLITransition -> Event` built by M01-M05 (and M06 Part 0's
-`DecayTerm -> OutflowImbalanceTerm` rename); `mgpaudit`/`@mgpaudit` walks
-`audit_model` (M01) through `classify_filter_terms` (M05/M06) for every
-event of a model and reports either a full derivation (BIRTH/MIGRATION) or
-an explicit out-of-scope note (DEATH/SAMPLE/NEUTRAL).
-
-Every concrete `(ℓ, n)` instance used below for `explain`'s own tests is
-REUSED, unchanged, from `test/kli_reduce_test.jl` / `test/kli_filter_ir_test.jl`
-(SEIR `infection`: `[2, 2]`/`[6, 5]`; MERS `transmission_cc`: `[2, 0]`/`[5, 3]`)
--- per the milestone's explicit instruction not to invent new numbers for
-this check. `mgpaudit`'s own DEFAULT `(ℓ, n)` state (`default_audit_state`)
-is a separate, independently documented choice (see that function's
-docstring in `mgp_mgpaudit.jl`) -- not required to match these test values.
+The `(ℓ, n)` instances for `explain` are those of `kli_reduce_test.jl` and
+`kli_filter_ir_test.jl` (SEIR `infection`: `[2, 2]`/`[6, 5]`; MERS
+`transmission_cc`: `[2, 0]`/`[5, 3]`). `mgpaudit` uses its own default state
+(`default_audit_state`), which need not match them.
 """
 module MgpAuditTest
 
 import ..Main: h1, h2
 
-@info h1("Provenance / explain and mgpaudit / @mgpaudit (M06)")
+@info h1("explain and mgpaudit / @mgpaudit")
 
 using Test
 using PhyloPOMP
@@ -34,16 +25,16 @@ using PhyloPOMP: filter_spec, RegularFlow, SingularFlow, OutflowImbalanceTerm,
 
 find_event(model, name) = model.events[findfirst(e -> e.name == name, model.events)]
 
-const SEIR_EVENT_NAMES = [:infection, :progression, :recovery, :waning, :sampling]
+const SEIR_EVENT_NAMES = [:infection, :progression, :recovery, :waning, :sampling, :culling]
 const MERS_EVENT_NAMES = [:transmission_cc, :transmission_hh, :transmission_hc,
                            :transmission_ch, :removal_c, :removal_h,
                            :sampling_c, :sampling_h, :birth_c, :birth_h,
                            :death_c, :death_h]
 
-@testset verbose=true "Provenance / explain and mgpaudit (M06)" begin
+@testset verbose=true "explain and mgpaudit" begin
 
     @info h2("explain(::KLITransition) / explain(::ReducedTransition) --" *
-             " bottom-of-chain provenance, SEIR infection instance")
+             " bottom of the chain, SEIR infection instance")
     @testset "explain: KLITransition / ReducedTransition" begin
         infection = find_event(PhyloPOMP.SEIR, :infection)
         # Same instance as kli_reduce_test.jl / kli_filter_ir_test.jl
@@ -101,9 +92,7 @@ const MERS_EVENT_NAMES = [:transmission_cc, :transmission_hh, :transmission_hc,
         @test occursin("regular_flow", str) || occursin("RegularFlow", str)
     end
 
-    @info h2("explain(::OutflowImbalanceTerm) correctly identifies event" *
-             " name, transition kind, and the M06 Part-0 mechanism tag --" *
-             " MERS transmission_cc")
+    @info h2("explain(::OutflowImbalanceTerm): event name, kind and mechanism tag, MERS transmission_cc")
     @testset "explain: OutflowImbalanceTerm (MERS transmission_cc)" begin
         tcc = find_event(PhyloPOMP.MERS, :transmission_cc)
         # Same instance as kli_reduce_test.jl "TCC" / kli_filter_ir_test.jl
@@ -121,9 +110,7 @@ const MERS_EVENT_NAMES = [:transmission_cc, :transmission_hh, :transmission_hc,
         @test te.reduced.kind == :fork
         @test te.mechanism == :inflow_outflow_imbalance
         @test te.reason == :fork_unobserved_at_regular_time
-        # Structural distinctness from lambda re-asserted here too (not just
-        # kli_filter_ir_test.jl's dedicated testset): explain() never labels
-        # this mechanism :lambda.
+        # explain never labels this mechanism :lambda.
         @test te.mechanism != :lambda
 
         str = sprint(show, MIME("text/plain"), te)
@@ -134,7 +121,7 @@ const MERS_EVENT_NAMES = [:transmission_cc, :transmission_hh, :transmission_hc,
     end
 
     @info h2("mgpaudit(SEIR) / @mgpaudit SEIR run without error and cover" *
-             " every one of SEIR's 5 events by name")
+             " every one of SEIR's 6 events by name")
     @testset "mgpaudit(SEIR) completeness" begin
         report = mgpaudit(PhyloPOMP.SEIR)
         @test report isa MgpAuditReport
@@ -163,13 +150,11 @@ const MERS_EVENT_NAMES = [:transmission_cc, :transmission_hh, :transmission_hc,
         @test any(t.bucket == :regular_flow for t in infection_mark.terms)
         @test any(t.bucket == :outflow_imbalance for t in infection_mark.terms)
 
-        # progression (MIGRATION) structurally never has an
-        # OutflowImbalanceTerm (M04's finding, carried through M05/M06).
+        # progression has no OutflowImbalanceTerm.
         progression_mark = only(m for m in report.marks if m.event_audit.name == :progression)
         @test all(t.bucket != :outflow_imbalance for t in progression_mark.terms)
 
-        # The printed report also mentions every event name -- a
-        # human-readable completeness check, not just the struct's.
+        # The printed report names every event.
         str = sprint(show, MIME("text/plain"), report)
         for name in SEIR_EVENT_NAMES
             @test occursin(String(name), str)
@@ -262,8 +247,7 @@ const MERS_EVENT_NAMES = [:transmission_cc, :transmission_hh, :transmission_hc,
         @test_throws ArgumentError mgpaudit(PhyloPOMP.SEIR; ℓ = [5, 5], n = [1, 1])
     end
 
-    @info h2("default_audit_state matches this milestone's documented" *
-             " per-model choices")
+    @info h2("default_audit_state per-model values")
     @testset "default_audit_state" begin
         @test default_audit_state(PhyloPOMP.SEIR) == ([2, 2], [6, 5])
         @test default_audit_state(PhyloPOMP.MERS) == ([2, 2], [5, 5])

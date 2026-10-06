@@ -149,11 +149,14 @@ event_rates!(
     alpha[11] = Bc*Sc/Nc
     alpha[12] = Bh*Sh/Nh
 
+    ## Cross-deme births: no move (k = 3, 5) leaves the new host untracked;
+    ## move (k = 4, 6) passes a tracked lineage.
+    ## no_move_share keeps no move positive when every source host is tracked.
     pi[1:2] .= one(Prob)
-    pi[3] = @indicator(Ic > 0, 1-ellc/Ic)
-    pi[4] = @indicator(Ic > 0, ellc/Ic)
-    pi[5] = @indicator(Ih > 0, 1-ellh/Ih)
-    pi[6] = @indicator(Ih > 0, ellh/Ih)
+    pi[3] = no_move_share(ellc, ellh, Ic, Ih)
+    pi[4] = 1 - pi[3]
+    pi[5] = no_move_share(ellh, ellc, Ih, Ic)
+    pi[6] = 1 - pi[5]
     pi[7:12] .= one(Prob)
 
     chi_c * Ic + chi_h * Ih +
@@ -174,7 +177,8 @@ regular_part!(
         step::Time = zero(Time)
         decay::Prob = zero(Prob)
         ellc, ellh = ell(cols)
-        while t+step < tf
+        ## Loop on t < tf so the final partial interval is charged decay.
+        while t < tf
             decay = event_rates!(
                 alpha, pi, cols,
                 Sc, Ic, Sh, Ih;
@@ -244,10 +248,12 @@ regular_part!(
 end
 
 """
-    filter_pomp(; ...)
+    filter_pomp(; ..., gen = mers_tree)
 
 Construct a Julia POMP object for the phylopomp MERS genealogy-conditioned
-filter. Parameter names and event order follow R phylopomp's MERS model.
+filter.
+`gen` is the genealogy to condition on (parsed with `demes =
+NaiveMERS.Demes`); it defaults to the built-in MERS tree.
 """
 filter_pomp(
     ;Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 1.0, Beta_hh = 4.0,
@@ -257,8 +263,8 @@ filter_pomp(
     Sc0 = 1.0, Sh0 = 1.0,
     Ic0 = 0.01, Ih0 = 0.0,
     Nc = 10000, Nh = 10000,
+    gen::Genealogy = mers_tree,
 ) = begin
-    gen = mers_tree
     pomp(
         params = (
             Beta_cc = Float64(Beta_cc), Beta_ch = Float64(Beta_ch),

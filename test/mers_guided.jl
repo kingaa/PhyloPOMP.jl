@@ -31,7 +31,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     if heavy
     @time mf = mif(
         pf,Nmif=100,Np=1000,trigger=0.2,target=0.8,
-        cooling_schedule=geometric_cooling(1.0),
+        cooling=geometric_cooling(1.0),
         perturbations=function(
             s, lag;
             β_cc, β_hh, β_ch, β_hc,
@@ -58,7 +58,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
         end,
     )
     @time mf = mif(mf,Nmif=20)
-    @time mf = mif(mf,Nmif=50,cooling_schedule=geometric_cooling(0.8))
+    @time mf = mif(mf,Nmif=50,cooling=geometric_cooling(0.8))
     @test mf isa POMP.AbstractPompObject
     end
 

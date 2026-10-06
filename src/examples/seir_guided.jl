@@ -209,16 +209,22 @@ regular_transmission!(
     t, guide, node, cols, (;S, E, I, R);
     kwargs...,
 ) = begin
-    b,p = choose_branch(t,guide,node,I,cols,Infec,Expos)
-    ll = -log(p)
+    ## "No move" (no lineage passes to the new exposed host) has target
+    ## factor 1 - ellE/E', positive even when every infectious host is
+    ## tracked: the tracked parent may keep its own lineage.
+    ellE, ellI = ell(cols)
     S -= 1
     E += 1
-    if b == 0
-        ellE = ell(cols,Expos)
-        ll += log(1-ellE/E)
+    f0 = 1-ellE/E
+    f1 = (1-(ellI-1)/I)/E
+    b,q = choose_move(t,guide,node,cols,Infec,Expos,f0,f1)
+    ll = if q == 0
+        -Inf
+    elseif b == 0
+        log(f0)-log(q)
     else
-        ellE, ellI = swap!(cols,Infec,Expos,b)
-        ll += log(1-ellI/I)-log(E)
+        swap!(cols,Infec,Expos,b)
+        log(f1)-log(q)
     end
     ll, (;S, E, I, R)
 end

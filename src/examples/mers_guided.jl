@@ -21,13 +21,8 @@ include("mers_tree.jl")
 """
     knowledge!(v; deme, type, time)
 
-Return `true` if the guide probabilities are fixed at this node (and,
-if so, fill `v` with the appropriate probability vector); return
-`false` otherwise.
-
-For MERS the deme is fixed exactly when the genealogy supplies host
-metadata, i.e. at the sample tips. This is identical to the default
-`known_deme!`.
+Fix the guide at Sample tips, where the host deme is known.
+Returns `true` if `v` was filled.
 """
 knowledge!(
     v; deme, type, time,
@@ -290,16 +285,22 @@ regular_transmission_hc!(
     t, guide, node, cols, (;S_c, I_c, S_h, I_h),
     kwargs...,
 ) = begin
-    b,p = choose_branch(t,guide,node,I_c,cols,Camel,Human)
-    ll = -log(p)
+    ## "No move" means no lineage passes to the new human.  Its target
+    ## factor 1 - ellH/I_h' stays positive even when every camel is
+    ## tracked: the tracked parent may keep its own lineage.
+    ellC, ellH = ell(cols,Camel), ell(cols,Human)
     S_h -= 1
     I_h += 1
-    if b == 0
-        ellH = ell(cols,Human)
-        ll += log(1-ellH/I_h)
+    f0 = 1-ellH/I_h
+    f1 = (1-(ellC-1)/I_c)/I_h
+    b,q = choose_move(t,guide,node,cols,Camel,Human,f0,f1)
+    ll = if q == 0
+        -Inf
+    elseif b == 0
+        log(f0)-log(q)
     else
-        ellC, ellH = swap!(cols,Camel,Human,b)
-        ll += log(1-ellC/I_c) - log(I_h)
+        swap!(cols,Camel,Human,b)
+        log(f1)-log(q)
     end
     ll, (;S_c, I_c, S_h, I_h)
 end
@@ -308,16 +309,20 @@ regular_transmission_ch!(
     t, guide, node, cols, (;S_c, I_c, S_h, I_h),
     kwargs...,
 ) = begin
-    b,p = choose_branch(t,guide,node,I_h,cols,Human,Camel)
-    ll = -log(p)
+    ## As for human-from-camel, with the demes exchanged.
+    ellC, ellH = ell(cols,Camel), ell(cols,Human)
     S_c -= 1
     I_c += 1
-    if b == 0
-        ellC = ell(cols,Camel)
-        ll += log(1-ellC/I_c)
+    f0 = 1-ellC/I_c
+    f1 = (1-(ellH-1)/I_h)/I_c
+    b,q = choose_move(t,guide,node,cols,Human,Camel,f0,f1)
+    ll = if q == 0
+        -Inf
+    elseif b == 0
+        log(f0)-log(q)
     else
-        ellC, ellH = swap!(cols,Human,Camel,b)
-        ll += log(1-ellH/I_h) - log(I_c)
+        swap!(cols,Human,Camel,b)
+        log(f1)-log(q)
     end
     ll, (;S_c, I_c, S_h, I_h)
 end
@@ -327,7 +332,7 @@ regular_removal_c!(
     kwargs...,
 ) = begin
     ellC = ell(cols,Camel)
-    ll = -log(1-ellC/I_c)       # preboost
+    ll = -log(1-ellC/I_c)
     I_c -= 1
     ll, (;S_c, I_c, S_h, I_h)
 end
@@ -337,7 +342,7 @@ regular_removal_h!(
     kwargs...,
 ) = begin
     ellH = ell(cols,Human)
-    ll = -log(1-ellH/I_h)       # preboost
+    ll = -log(1-ellH/I_h)
     I_h -= 1
     ll, (;S_c, I_c, S_h, I_h)
 end
@@ -436,9 +441,6 @@ end
 Constructs a pomp object for the MERS genealogy-conditioned filter, based on
 the filter guide built from genealogy `gen` and the guiding finite-state
 Markov process `m` (construct `m` with `fsmarkov`).
-
-Pass the built-in `mers_tree` as `gen` to reproduce the default data set; a call
-`filter_pomp(mers_tree, fsmarkov(...))` constructs the guided filter.
 """
 filter_pomp(
     gen::Genealogy,

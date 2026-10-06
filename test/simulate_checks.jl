@@ -1,37 +1,18 @@
 """
-Shared checks for the generic forward simulator (`src/simulate.jl`), used by
-`seir_simulate.jl`, `mers_simulate.jl`, and `sir_simulate.jl`.
+Checks shared by `seir_simulate.jl`, `mers_simulate.jl`, and `sir_simulate.jl`.
 
-Why these exist: the simulate-then-filter "finite logLik" tests cannot see
-internal-node timing (pulling every internal node 90% of the way toward its
-parent still gives a finite likelihood), and the two timing bugs found in
-`check_milestone3.md`/`check_milestone4.md` were therefore invisible to them.
-The checks below were run against the pre-fix simulator (commit `e5d6b30`)
-and fail on it; they pass on the current code.
-
-Three layers:
-
-1. `simulate_checked` replays `simulate`'s loop using the package's own
-   `apply_event!` and asserts the timing contract after EVERY event: BIRTH and
-   SAMPLE append exactly one node, stamped with the firing time, whose parent
-   is strictly earlier and on which every lineage the event produced now sits;
-   MIGRATION/DEATH/NEUTRAL append none. Its output must equal `simulate`'s for
-   the same seed, which is also checked.
-2. `structure_problems` inspects a finished genealogy: parent strictly earlier
-   than child, no zero-length edges, Root degree 1 / Node degree 2 / Sample
-   degree ≤ `sample_max_children`, consistent parent/child links, time-sorted.
-3. `roundtrip_problems` requires Newick and CBLV round trips to preserve the
-   internal-node times and total branch length, not just node counts.
-
-`run_invariants` drives all three over many seeds (single root and forest).
+A finite filter likelihood does not pin down internal-node times.
+`simulate_checked` runs the simulator's own loop and checks each event as it happens.
+`structure_problems` checks the finished tree: positive edge lengths, root degree 1, internal degree 2, sample degree at most `sample_max_children`.
+`roundtrip_problems` checks that Newick and CBLV keep those times.
+`run_invariants` runs all three over many seeds, including forests.
 """
 module SimulateChecks
 
 using Test
 using Random: MersenneTwister
 using PhyloPOMP
-using PhyloPOMP: Root, Node, Sample, Time, SimInventory, push_node!, add!,
-    apply_delta, apply_event!, prune!, repair!, rcateg, BIRTH, SAMPLE
+using PhyloPOMP: Root, Node, Sample, Name, apply_delta, BIRTH, SAMPLE
 
 export simulate_checked, structure_problems, roundtrip_problems,
     total_branch_length, run_invariants
@@ -41,62 +22,53 @@ function simulate_checked(
     demeset::Module = PhyloPOMP.Unstructured, samplemap = nothing,
 )
     ndeme = length(model.demes)
-    G = Genealogy{demeset}(Time(0.0))
-    inv = SimInventory(ndeme)
-    for (d,n) ∈ enumerate(graft), _ ∈ 1:n
-        r = push_node!(G,Time(0.0),Root,nothing)
-        c = push_node!(G,Time(0.0),Node,r)
-        push!(G[r].children,c)
-        add!(inv,d,c)
-    end
-    x = x0
-    t = Time(0.0)
-    haz = zeros(length(model.events))
     bad = String[]
-    while true
-        for (k,ev) ∈ enumerate(model.events)
-            haz[k] = ev.hazard(x,θ)
-        end
-        total = sum(haz)
-        total ≤ 0 && break
-        dt = -log(rand(rng))/total
-        t + dt ≥ tmax && break
-        t += dt
-        k, _ = rcateg(haz; rng)
-        ev = model.events[k]
-        x = apply_delta(x,ev)
-        n0 = length(G.nodes)
-        apply_event!(G,inv,ev,model,t,rng,samplemap)
-        made = length(G.nodes) - n0
-        if ev.type == BIRTH || ev.type == SAMPLE
-            made == 1 || push!(bad, "$(ev.name): created $made nodes, expected 1")
-            nn = G.nodes[end]
-            nn.slate == t || push!(bad, "$(ev.name): slate $(nn.slate) ≠ firing time $t")
-            par = G.nodes[findfirst(m -> m.name==nn.parent, G.nodes)]
-            par.slate < t || push!(bad, "$(ev.name): parent slate $(par.slate) not < $t")
-            nn.name ∈ par.children || push!(bad, "$(ev.name): new node not among parent's children")
-            if ev.type == BIRTH
-                nn.type == Node || push!(bad, "$(ev.name): birth node has type $(nn.type)")
-                ## the continuing lineage and every new lineage sit on the new node
-                nn.name ∈ inv[ev.from] || push!(bad, "$(ev.name): continuing lineage not on new node")
-                for j ∈ ev.into
-                    nn.name ∈ inv[j] || push!(bad, "$(ev.name): new lineage in deme $j not on new node")
+    ## The state just before the current event, saved by the previous call.
+    n0 = Ref(0)
+    before = Ref([Name[] for _ ∈ 1:ndeme])
+    xprev = Ref(x0)
+    check(G, inv, ev, t, x) = begin
+        if !isnothing(ev)
+            x == apply_delta(xprev[], ev) ||
+                push!(bad, "$(ev.name): state $x is not the previous state plus Δ")
+            made = length(G.nodes) - n0[]
+            if ev.type == BIRTH || ev.type == SAMPLE
+                made == 1 || push!(bad, "$(ev.name): created $made nodes, expected 1")
+                nn = G.nodes[end]
+                nn.slate == t || push!(bad, "$(ev.name): slate $(nn.slate) ≠ firing time $t")
+                par = G.nodes[findfirst(m -> m.name==nn.parent, G.nodes)]
+                par.slate < t || push!(bad, "$(ev.name): parent slate $(par.slate) not < $t")
+                nn.name ∈ par.children || push!(bad, "$(ev.name): new node not among parent's children")
+                if ev.type == BIRTH
+                    nn.type == Node || push!(bad, "$(ev.name): birth node has type $(nn.type)")
+                    ## the acted-on lineage (the new node's parent) is gone and
+                    ## exactly r[j] copies of the new node are open in each deme j
+                    for j ∈ 1:ndeme
+                        count(==(nn.name), inv[j]) == ev.r[j] ||
+                            push!(bad, "$(ev.name): $(count(==(nn.name), inv[j])) products in deme $j, r says $(ev.r[j])")
+                        extra = count(==(nn.parent), inv[j]) - count(==(nn.parent), before[][j]) +
+                            (j == ev.from ? 1 : 0)
+                        extra == 0 || push!(bad, "$(ev.name): parent lineage not replaced in deme $j")
+                    end
+                else
+                    nn.type == Sample || push!(bad, "$(ev.name): sample node has type $(nn.type)")
+                    destructive = ev.r[ev.from] == 0
+                    (nn.name ∈ inv[ev.from]) == !destructive ||
+                        push!(bad, "$(ev.name): lineage continuation disagrees with the event's production vector")
                 end
             else
-                nn.type == Sample || push!(bad, "$(ev.name): sample node has type $(nn.type)")
-                destructive = ev.r[ev.from] == 0
-                (nn.name ∈ inv[ev.from]) == !destructive ||
-                    push!(bad, "$(ev.name): lineage continuation disagrees with the event's production vector")
+                made == 0 || push!(bad, "$(ev.name): created $made nodes, expected 0")
             end
-        else
-            made == 0 || push!(bad, "$(ev.name): created $made nodes, expected 0")
+            for (i,sym) ∈ enumerate(model.demes)
+                length(inv[i]) == getproperty(x,sym) || push!(bad, "inventory/population mismatch in $sym")
+            end
         end
-        for (i,sym) ∈ enumerate(model.demes)
-            length(inv[i]) == getproperty(x,sym) || push!(bad, "inventory/population mismatch in $sym")
-        end
+        n0[] = length(G.nodes)
+        before[] = [copy(inv[d]) for d ∈ 1:ndeme]
+        xprev[] = x
     end
-    G.time = Time(tmax)
-    prune!(G); repair!(G)
+    ## The simulator's own loop, with `check` called after every event.
+    G = PhyloPOMP._simulate(model, θ, x0, graft, 0.0, tmax, rng, demeset, samplemap, check)
     G, bad
 end
 
@@ -178,7 +150,7 @@ function run_invariants(
         g, bad = simulate_checked(model, θ; x0, graft, tmax, rng = MersenneTwister(s), demeset, samplemap)
         @test isempty(bad)
         g0 = simulate(model, θ; x0, graft, tmax, rng = MersenneTwister(s), demeset, samplemap)
-        @test newick(g) == newick(g0)
+        @test newick(g) == newick(g0)   # the check draws nothing, so the tree is the same
         nsample(g0) == 0 && continue
         nonempty += 1
         inline += count(length(g0[i].children) == 1 for i ∈ samples(g0))

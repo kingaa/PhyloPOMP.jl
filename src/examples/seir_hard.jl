@@ -39,7 +39,7 @@ regular_part!(
             onE=sum_relhaz(rh,n,cols,Expos,Infec),
             offE=E-ellE,
             onI=sum_relhaz(rh,n,cols,Infec,Expos),
-            offI=I-ellI,
+            offI=I*no_move_share(ellI,ellE,I,E),
         )
         k, s = rcateg(alpha)
         step = -log(rand())/s

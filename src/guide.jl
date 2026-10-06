@@ -44,7 +44,7 @@ struct GuideNode{F<:AbstractFloat,N,D<:Enum}
     """
     target::Matrix{F}
     "`target` rexpressed in the eigenbasis of the guide process"
-    dtarget::Matrix{F} ## FIXME: inelegant to store redundant information
+    dtarget::Matrix{F}
 end
 
 """
@@ -77,7 +77,6 @@ struct Guide{F<:AbstractFloat,N,D<:Enum}
             parlin = g[n].lineage
             chillins = map(x->g[x].lineage, g[n].children)
             target = probs[:,ells]
-            ## FIXME: inelegant to store redundant information
             dtarget = m.right_trans * target
             probs[:,ells] = forward_action(m,tend-g[n].slate,probs[:,ells])
             present = probs[:,chillins]
@@ -228,6 +227,63 @@ sum_relhaz(
     cols::Coloring{D},
     i::D, j::D,
 ) where {D,F,N} = sum(relhaz(r,n,cols,i,j))
+
+"""
+    no_move_share(ell_i, ell_j, n_i, n_j)
+
+For a birth in which a host in deme `i` infects a new host in deme `j`
+(`n_i`, `n_j` hosts and `ell_i`, `ell_j` tracked lineages before the
+event), the target probability that no tracked lineage passes to the new
+host: `f0/(f0 + ell_i*f1)`, where `f0 = 1 - ell_j/(n_j+1)` is the factor
+for "no move" and `f1 = (1 - (ell_i-1)/n_i)/(n_j+1)` the factor for
+moving one particular tracked lineage.
+Positive even when every host in deme `i` is tracked.
+"""
+no_move_share(ell_i, ell_j, n_i, n_j) = begin
+    f0 = 1 - ell_j/(n_j+1)
+    m = ell_i > 0 ? ell_i*(1 - (ell_i-1)/n_i)/(n_j+1) : zero(f0)
+    f0/(f0+m)
+end
+
+"""
+    choose_move(t, guide, node, cols, i, j, w0, wmove)
+
+Choose the outcome of an unobserved event that may move a tracked
+lineage from deme `i` to deme `j`.  "No move" gets weight `w0`; moving
+tracked lineage `b` gets weight `wmove` times its relative hazard (see
+[`relhaz`](@ref)).  Returns `(b, q)`, where `b = 0` means "no move" and
+`q` is the probability of the choice made; if every weight is zero it
+returns `(0, 0)`.
+
+Pass the target factors as `w0` and `wmove`.
+Unlike [`choose_branch`](@ref), `w0 > 0` even when every host in deme `i`
+is tracked.
+For a migration, set `w0 = 0` in that case.
+"""
+choose_move(
+    t::Time,
+    guide::Guide{F,N,D},
+    node::Integer,
+    cols::Coloring{D},
+    i::D, j::D,
+    w0::Real, wmove::Real,
+) where {F,N,D} = begin
+    lins = [guide[node].linmap[k] for k ∈ cols[i]]
+    h = isempty(lins) ? F[] : F(wmove) .* relhaz(t,guide,node,i,j,lins)
+    s = F(w0) + sum(h; init = zero(F))
+    s > 0 || return zero(Name), zero(F)
+    r = s*rand(F)
+    if r < w0
+        return zero(Name), F(w0)/s
+    end
+    r -= w0
+    k::Name = 1
+    while k < length(h) && r > h[k]
+        r -= h[k]
+        k += 1
+    end
+    guide[node].alllins[lins[k]], h[k]/s
+end
 
 choose_branch(
     r::AbstractDict{Tuple{D,D},Vector{F}},

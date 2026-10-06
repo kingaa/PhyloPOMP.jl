@@ -1,21 +1,7 @@
 """
-Acceptance test for the generic forward simulator (`src/simulate.jl`).
-
-The headline check: simulate a genealogy from the `@mgp`-generated `SEIR`
-event table (`src/examples/mgp.jl`), then feed the result straight into the
-already-tested, hand-coded `NaiveSEIR.filter_pomp` (`src/examples/seir_naive.jl`)
-and require a finite log-likelihood. These are two independent encodings of
-the same SEIR rate structure; agreement is far stronger evidence of
-correctness than a Newick/CBLV round trip alone (which would faithfully
-serialize a structurally wrong tree). Round-trip checks are included too,
-but only as supporting, non-sufficient evidence.
-
-A second, independently-written filter over the same rate structure --
-`GuidedSEIR.filter_pomp(gen, m; ...)` (`src/examples/seir_guided.jl`) -- is
-exercised at the end of the file. It is the stricter of the two: it runs
-`GuidedSEIR.check` on the genealogy (root degree 1, internal-node degree 2,
-sample degree < 2) before building the pomp object, and it needs a guiding
-finite-state Markov process (`fsmarkov`) as well as the genealogy.
+`simulate` on `@mgp SEIR`, then `NaiveSEIR.filter_pomp` and `GuidedSEIR.filter_pomp` on the result.
+Both should return a finite log likelihood.
+`GuidedSEIR.check` also requires root degree 1, internal degree 2, and sample degree below 2.
 """
 module SEIRSimulateTest
 
@@ -38,9 +24,7 @@ import PartiallyObservedMarkovProcesses as POMP
 
 @testset verbose=true "SEIR forward simulator" begin
 
-    ## parameters shared between the simulator and the filter -- the point
-    ## of this test is that these are the SAME numbers, not fitted/matched
-    ## after the fact.
+    ## Same numbers for the simulator and the filter.
     β, σ, γ, ω, ψ, χ = 4.0, 1.0, 1.0, 1.0, 0.10, 0.0
     pop = 100
     θ = (β=β, σ=σ, γ=γ, ω=ω, ψ=ψ, χ=χ, N=Float64(pop))
@@ -74,12 +58,36 @@ import PartiallyObservedMarkovProcesses as POMP
     @test g.time == 20.0
 
     @info h2("per-event timing, structure, round trips (single root and forest)")
-    ## These are the checks that catch the Milestone-3 (sample time) and
-    ## Milestone-4 (fork time) bugs; the filter tests below do not.
+    ## These look at node times. The filter tests below only ask for a finite likelihood.
     cov = run_invariants(PhyloPOMP.SEIR, θ, [(x0, [0,1]), ((S=95, E=2, I=3, R=0), [2,3])];
                          ntree=100, tmax=20.0, sample_max_children=1)
     @test cov.nonempty > 100
     @test cov.inline > 0        # ψ-sampling is non-destructive: inline samples must occur
+
+    @info h2("χ > 0: destructive `culling` samples terminate their lineage")
+    ## χ > 0: ψ-samples may have a child, χ-culls are leaves.
+    ## NaiveSEIR draws ψ against χ at each sample.
+    let θχ = merge(θ, (ψ = 0.05, χ = 0.10))
+        covχ = run_invariants(PhyloPOMP.SEIR, θχ, [(x0, [0,1])];
+                              ntree=100, seed=20261004, tmax=20.0, sample_max_children=1)
+        @test covχ.nonempty > 50
+        @test covχ.inline > 0
+        rngχ = MersenneTwister(20261004)
+        leaf_samples = 0; gχ = g
+        for _ ∈ 1:50
+            gχ = simulate(PhyloPOMP.SEIR, θχ; x0=x0, graft=[0,1], tmax=20.0, rng=rngχ)
+            leaf_samples += count(isempty(gχ[i].children) for i ∈ samples(gχ))
+            5 ≤ nsample(gχ) ≤ 40 && break
+        end
+        @test leaf_samples > 0
+        pχ = NaiveSEIR.filter_pomp(gχ; β=β, σ=σ, γ=γ, ω=ω, ψ=θχ.ψ, χ=θχ.χ, pop=pop,
+                                   S0=x0.S/pop, E0=x0.E/pop, I0=x0.I/pop, R0=x0.R/pop)
+        seed!(20261004)
+        @test isfinite(logLik(pfilter(pχ, Np=500)))
+        ## With χ = 0 the culling hazard is 0.
+        @test all(ev -> ev.hazard((S=90,E=4,I=5,R=1), θ) ≥ 0, PhyloPOMP.SEIR.events)
+        @test PhyloPOMP.SEIR.events[end].hazard((S=90,E=4,I=5,R=1), θ) == 0
+    end
 
     @info h2("newick round trip (necessary, not sufficient)")
     s = newick(g)
@@ -112,17 +120,9 @@ import PartiallyObservedMarkovProcesses as POMP
 
     @testset "simulate -> GuidedSEIR: check passes and logLik finite" begin
         @info h2("simulate -> GuidedSEIR: check passes and logLik finite")
-        ## The SEIR `sampling` event (`src/examples/mgp_macro.jl:197`) is
-        ## NON-destructive -- `pop=()`, so `simulate` leaves the sampled
-        ## lineage open (src/simulate.jl:197-198) and a later transmission
-        ## can hang a child off the Sample node itself. Such "inline"
-        ## samples are exactly what `GuidedSEIR.check` permits (`< 2`
-        ## children, seir_guided.jl:46) and what
-        ## `GuidedSEIR.inline_sample!` (seir_guided.jl:140) handles, so the
-        ## loop below insists on a realization that contains at least one:
-        ## it is the case a destructive-sampling simulator would get wrong.
-        ## Independently seeded from the headline `g` above, so this is a
-        ## second realization rather than a re-run on one lucky tree.
+        ## SEIR sampling leaves the host in place, so a later birth can put a
+        ## child on the Sample node. `GuidedSEIR.check` allows that.
+        ## Separate seed from `g` above.
         rng2 = MersenneTwister(20260901)
         local gs
         ok2 = false
@@ -138,28 +138,19 @@ import PartiallyObservedMarkovProcesses as POMP
         end
         @test ok2
         @test inline2
-        ## `check` returns `nothing` and throws on failure, so calling it at
-        ## all is the assertion; `=== nothing` records it as a passing test.
         @test GuidedSEIR.check(gs) === nothing
-        ## ...and the invariants it asserts, spelled out, so a regression
-        ## names the broken one instead of just firing an @assert:
         @test all(length(gs[i].children)==1 for i ∈ roots(gs))
         @test all(length(gs[i].children)<2 for i ∈ samples(gs))
         @test all(length(gs[i].children)==2 for i ∈ nodes(gs))
 
-        ## same numbers as the simulation: `seir_rinit`
-        ## (src/examples/seir_guided.jl:298) rescales by pop/(S0+E0+I0+R0),
-        ## so fractions of `pop` reproduce x0 exactly. NOTE θ.N ↔ `pop`, and
-        ## χ must be 0: the `@mgp SEIR` table has no χ-event at all, its only
-        ## sampling event being `rate=ψ*I` (mgp_macro.jl:197).
+        ## `seir_rinit` rescales by `pop / (S0+E0+I0+R0)`, so fractions of `pop` give `x0` back. `θ.N` is `pop`.
         pg = GuidedSEIR.filter_pomp(
             gs, fsmarkov(Expos=>0.1, Infec=>1, (Expos,Infec)=>1);
             β=β, σ=σ, γ=γ, ω=ω, ψ=ψ, χ=χ, pop=pop,
             S0=x0.S/pop, E0=x0.E/pop, I0=x0.I/pop, R0=x0.R/pop,
         )
         @test pg isa POMP.PompObject
-        ## pfilter draws from the global RNG, so seed for reproducibility
-        ## independent of whatever ran earlier in the suite.
+        ## pfilter uses the global RNG, so seed it.
         seed!(20260815)
         pfg = pfilter(pg, Np=1000)
         @test pfg isa POMP.PfilterdPompObject

@@ -105,6 +105,30 @@ function _decode_move(ex, demes)
     error("@event: use `move=none`, not `none(...)`")
 end
 
+"""
+    _check_move_vs_pop(name, from, r, delta, comps, demes)
+
+Check that `move` and `pop` change each deme by the same amount.
+The simulation keeps one lineage per individual, so `r[d]`, minus one when `d` is the source, has to equal the `pop` entry for that compartment.
+Also rejects an unknown compartment, or the same compartment twice.
+"""
+function _check_move_vs_pop(name, from, r, delta, comps, demes)
+    seen = Set{Symbol}()
+    for (c, _) in delta
+        c in comps || error("@event $name: `pop` names `$c`, which is not a declared compartment")
+        c in seen && error("@event $name: compartment `$c` repeated in `pop`")
+        push!(seen, c)
+    end
+    for (d, deme) in enumerate(demes)
+        implied = r[d] - (d == from ? 1 : 0)
+        i = findfirst(p -> p.first == deme, delta)
+        stated = isnothing(i) ? 0 : delta[i].second
+        stated == implied || error(
+            "@event $name: `move` changes the lineage count of deme `$deme` by $implied " *
+            "but `pop` declares $stated; lineages and population must agree")
+    end
+end
+
 function _event_expr(args, comps, pars, demes)
     isempty(args) && error("@event: missing event name")
     name = first(args)
@@ -129,7 +153,13 @@ function _event_expr(args, comps, pars, demes)
         error("@event $name: `kind` must be `regular` or `singular`")
     regular = kind === :regular
     event_type, from, into, r = _decode_move(kv[:move], demes)
+    ## A birth node carries exactly two open lineages.
+    event_type == BIRTH && sum(r) != 2 && error(
+        "@event $name: `fork` must list exactly two products (the lineages open after " *
+        "the birth, including the parent if it continues), got $(sum(r)); " *
+        "use `swap` for a one-to-one deme change")
     delta = _pairs(get(kv, :pop, Expr(:tuple)))
+    _check_move_vs_pop(name, from, r, delta, comps, demes)
     hazard = :((x, θ) -> $(_rewrite(kv[:rate], comps, pars)))
     :(Event($(QuoteNode(name)), $delta, $hazard, $r, $event_type,
             $from, $into, $regular, $(!regular)))
@@ -143,8 +173,7 @@ end
 """
     @mgp Name begin ... end
 
-Turn a declarative Markov genealogy process specification into an auditable
-`MGPModel` event table. The macro performs no likelihood calculation.
+Build an `MGPModel` from a declarative event specification.
 """
 macro mgp(name, block)
     name isa Symbol || error("@mgp: the model name must be a symbol")
@@ -195,5 +224,5 @@ end
     @event recovery    rate=γ*I     pop=(I=-1, R=+1) move=chop(I)         kind=regular
     @event waning      rate=ω*R     pop=(R=-1, S=+1) move=none            kind=regular
     @event sampling    rate=ψ*I     pop=()           move=sample(I)      kind=singular
+    @event culling     rate=χ*I     pop=(I=-1)       move=sample_remove(I) kind=singular
 end
-include("mgp_mers.jl")

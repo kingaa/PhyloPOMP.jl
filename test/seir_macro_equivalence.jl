@@ -1,15 +1,7 @@
 """
-Executable equivalence checks between the `@mgp`-generated `SEIR` event table
-and the model encoded by `NaiveSEIR`.
-
-The proved scope is the model layer: compartments, lineage demes, population
-hazards, population increments, event classifications, regular driver rates,
-and inter-event decay. The parameter correspondence is `N = pop`, and exact
-equivalence requires `χ = 0` because the current macro table contains the
-non-destructive `ψ` sampling mark but no destructive `χ` sampling mark.
-
-This file does not claim full-filter equivalence: the KLI move and singular
-weight functions in `mgp_filter.jl` are still explicit stubs.
+Equivalence of the `@mgp` SEIR event table with `NaiveSEIR`, model layer
+only: compartments, demes, hazards, increments, event types, regular driver
+rates and decay (`N = pop`). Full-filter equivalence is not tested.
 """
 module SEIRMacroEquivalenceTest
 
@@ -65,16 +57,18 @@ function macro_rates(x, θ, ellE, ellI)
     pIon = x.I > 0 ? ellI/x.I : 0.0
     pEoff = x.E > 0 ? 1 - ellE/x.E : 0.0
     pEon = x.E > 0 ? ellE/x.E : 0.0
+    ## infection proposes "no move" with its target share (seir_naive.jl)
+    pInf = no_move_share(ellI, ellE, x.I, x.E)
 
     driver = [
-        hazards[1]*pIoff,
-        hazards[1]*pIon,
+        hazards[1]*pInf,
+        hazards[1]*(1-pInf),
         hazards[2]*pEoff,
         hazards[2]*pEon,
         hazards[3]*pIoff,
         hazards[4],
     ]
-    decay = hazards[5] + hazards[3]*(1-pIoff)
+    decay = hazards[5] + hazards[6] + hazards[3]*(1-pIoff)
     driver, decay
 end
 
@@ -92,14 +86,15 @@ end
         (:recovery,    [:I=>-1, :R=>1], [0, 0], PhyloPOMP.DEATH,     2, Int[], true,  false),
         (:waning,      [:R=>-1, :S=>1], [0, 0], PhyloPOMP.NEUTRAL,   0, Int[], true,  false),
         (:sampling,    Pair{Symbol,Int}[], [0, 1], PhyloPOMP.SAMPLE, 2, Int[], false, true),
+        (:culling,     [:I=>-1],           [0, 0], PhyloPOMP.SAMPLE, 2, Int[], false, true),
     ]
     @test map(event_signature, MacroModel.events) == expected
 
     x = (S = 90, E = 4, I = 5, R = 1)
     θ = (β = 4.0, σ = 0.8, γ = 0.5, ω = 0.2,
-         ψ = 0.03, χ = 0.0, N = 100.0)
+         ψ = 0.03, χ = 0.01, N = 100.0)
     @test [ev.hazard(x, θ) for ev in MacroModel.events] ≈
-        [θ.β*x.S*x.I/θ.N, θ.σ*x.E, θ.γ*x.I, θ.ω*x.R, θ.ψ*x.I]
+        [θ.β*x.S*x.I/θ.N, θ.σ*x.E, θ.γ*x.I, θ.ω*x.R, θ.ψ*x.I, θ.χ*x.I]
 
     expected_states = [
         (S = 89, E = 5, I = 5, R = 1),
@@ -107,6 +102,7 @@ end
         (S = 90, E = 4, I = 4, R = 2),
         (S = 91, E = 4, I = 5, R = 0),
         x,
+        (S = 90, E = 4, I = 4, R = 1),
     ]
     @test [PhyloPOMP.apply_pop(x, ev) for ev in MacroModel.events] == expected_states
 
@@ -128,8 +124,12 @@ end
         @test new_driver ≈ old_driver
         @test new_decay ≈ old_decay
 
+        ## With the culling event in the table, equivalence holds for χ > 0.
         χ = rand(rng)
-        _, destructive_decay = existing_rates(x, θ, ellE, ellI; χ)
+        θχ = merge(θ, (χ = χ,))
+        _, destructive_decay = existing_rates(x, θχ, ellE, ellI; χ)
+        _, new_destructive_decay = macro_rates(x, θχ, ellE, ellI)
+        @test new_destructive_decay ≈ destructive_decay
         @test destructive_decay - new_decay ≈ χ*I
     end
 end

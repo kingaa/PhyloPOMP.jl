@@ -14,7 +14,7 @@ knowledge!(
     if type==Sample || type==Node
         demekron!(v,Infec)
         true
-    else
+    else    
         false
     end
 end

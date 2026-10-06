@@ -1,29 +1,8 @@
 """
     SoftMERS
 
-A module containing an implementation of the phylodynamic filter for the
-MERS-CoV two-host (Camel/Human) model, using so-called "soft" proposals.
-Soft preserves the naive aggregate identity/tracked-branch mass split
-(`(I-ell)/I` vs `ell/I`) but, when a tracked-branch event is proposed,
-distributes that fixed mass among the tracked branches according to the
-guide's relative hazards rather than uniformly. The overall event rate
-for each population process therefore remains exactly that of the
-underlying population process, matching the target's collapsed
-identity/tracked split; only the *within-group* branch choice is guided.
-
-This is the MERS analogue of `SoftSEIR` (seir_soft.jl). It shares its
-singular (genealogical-event) part, its rate functions and its
-`filter_pomp` with `HardMERS` via `mers_funs.jl`, which in turn carries
-those pieces verbatim from `GuidedMERS` (mers_guided.jl); the three
-modules differ *only* in `regular_part!`.
-
-`GuidedMERS` differs from `SoftMERS` in exactly one respect: its
-cross-deme proposals call `choose_branch(t, guide, node, I, cols, i, j)`,
-which normalizes the identity weight `I-ell` jointly against the *raw*
-per-branch relative hazards. The identity/tracked split is therefore
-itself guide-driven there, whereas here it is pinned at `(I-ell)/I` vs
-`ell/I` and only the choice *within* the tracked group is guided. All
-three kernels target the same likelihood.
+Filter for the two-host MERS model with soft proposals.
+Population-event rates equal the model's; the guide only picks among tracked branches.
 """
 module SoftMERS
 
@@ -39,28 +18,8 @@ const mers_tree = parse_newick(mers_newick, t0=0, demes=Demes)
 
 include("mers_funs.jl")
 
-## Soft proposals: the aggregate tracked-branch mass is `ell/I`, i.e.
-## exactly what the naive (unguided) filter uses, so `onC = ellC` and
-## `onH = ellH`; `offC`/`offH` then default to `I-ell`.  Since
-## `pi[3]+pi[4] = pi[5]+pi[6] = 1`, the transmission processes contribute
-## nothing to the decay, and the guide enters only through
-## `choose_branch`, which apportions the tracked mass among the tracked
-## branches in proportion to their relative hazards.
-##
-## Removal accounting: the former on-disk version of this file used
-## `alpha[7] = γ_c*(I_c-ellC)` with `pi[7] = 1` and then charged
-## `-log(1-ellC/I_c)` by hand at the removal event.  The shared
-## `removal!` in mers_funs.jl instead sets `pi[7] = 1-ellC/I_c` and
-## `alpha[7] = γ_c*I_c*pi[7]`, letting the generic `ll -= log(pi[k])`
-## line do the charging.  The two conventions are identical in value:
-##   * alpha:  γ_c*I_c*(1-ellC/I_c) = γ_c*(I_c-ellC), in both cases
-##             gated on `I_c > ellC`;
-##   * charge: -log(pi[7]) = -log(1-ellC/I_c), the same term;
-##   * decay:  if I_c > ellC, `rate_c - alpha[7]` = γ_c*ellC, which is
-##             the old `γ_c*ellC` term; if I_c ≤ ellC, alpha[7] = 0 and
-##             `rate_c - alpha[7]` = γ_c*I_c, which is the old
-##             `γ_c*ellC + γ_c*(I_c-ellC)`.
-## The same argument holds slot-for-slot for human removal.
+## Soft: onC = I_c-offC, so pi[3]+pi[4] = 1 and transmission adds no decay.
+## The guide enters only through choose_branch.
 
 regular_part!(
     cols, state, guide, n, t, tf;
@@ -76,11 +35,13 @@ regular_part!(
     ll::Prob = zero(Prob)
     ellC, ellH = ell(cols)
     while t < tf
+        offC = I_c*no_move_share(ellC,ellH,I_c,I_h)
+        offH = I_h*no_move_share(ellH,ellC,I_h,I_c)
         decay = event_rates!(
             alpha, pi, (;S_c, I_c, S_h, I_h), cols;
             kwargs...,
-            onC=ellC,
-            onH=ellH,
+            onC=I_c-offC, offC=offC,
+            onH=I_h-offH, offH=offH,
         )
         k, s = rcateg(alpha)
         step = -log(rand())/s

@@ -1,26 +1,8 @@
 """
     HardMERS
 
-A module containing an implementation of the phylodynamic filter for the
-MERS-CoV two-host (Camel/Human) model, using a filter guide and "hard"
-proposals. That is, color changes can be proposed on branches at
-*unnormalized* auxiliary intensities that may exceed (or fall short of) the
-event rates in the underlying population process; any rate not consumed by
-these auxiliary intensities is returned to the population process through
-the compensating decay `alpha_population - sum_j beta_j`.
-
-This is the MERS analogue of `HardSEIR` (seir_hard.jl). It shares its
-singular (genealogical-event) part, its rate functions and its
-`filter_pomp` with `SoftMERS` via `mers_funs.jl`, which in turn carries
-those pieces verbatim from `GuidedMERS` (mers_guided.jl); the three
-modules differ *only* in `regular_part!`.
-
-It differs from `SoftMERS` precisely in that its per-branch auxiliary
-intensities use the raw relative hazards directly (`onC =
-sum_relhaz(...)`) rather than renormalizing them to preserve the naive
-tracked-branch mass `ell/I`; the shortfall or excess is absorbed by the
-decay term returned from `transmission!`. All three kernels target the
-same likelihood.
+Filter for the two-host MERS model with hard proposals.
+Branch intensities use the raw relative hazards; the shortfall or excess is returned as decay.
 """
 module HardMERS
 
@@ -36,20 +18,8 @@ const mers_tree = parse_newick(mers_newick, t0=0, demes=Demes)
 
 include("mers_funs.jl")
 
-## Hard proposals: the aggregate tracked-branch intensity is the *raw*
-## sum of relative hazards, `onC = sum_relhaz(rh,node,cols,Camel,Human)`,
-## while the identity share keeps its naive value, `offC = I_c-ellC`.
-## `pi[3]+pi[4]` therefore need not equal 1, and the leftover
-## `rate_hc - alpha[3] - alpha[4]` (of either sign) is returned by
-## `transmission!` as decay.  `relhaz!` must run once per loop iteration,
-## before `event_rates!`, because the rates themselves depend on it.
-##
-## Removal accounting is unchanged from the former on-disk version of
-## this file: `pi[7] = 1-ellC/I_c`, `alpha[7] = γ_c*I_c*pi[7]` gated on
-## `I_c > ellC`, and the generic `ll -= decay*step + log(pi[k])` line
-## charges `-log(1-ellC/I_c)` when a removal fires.  (See mers_soft.jl
-## for the proof that SoftMERS's former, differently-bookkept, removal
-## convention is identical in value to this one.)
+## Hard: onC = sum_relhaz(...), so pi[3]+pi[4] need not be 1; the leftover goes to decay.
+## relhaz! must run before event_rates!.
 
 regular_part!(
     cols, state, guide, n, t, tf;
@@ -70,9 +40,9 @@ regular_part!(
             alpha, pi, (;S_c, I_c, S_h, I_h), cols;
             kwargs...,
             onC=sum_relhaz(rh,node,cols,Camel,Human),
-            offC=I_c-ellC,
+            offC=I_c*no_move_share(ellC,ellH,I_c,I_h),
             onH=sum_relhaz(rh,node,cols,Human,Camel),
-            offH=I_h-ellH,
+            offH=I_h*no_move_share(ellH,ellC,I_h,I_c),
         )
         k, s = rcateg(alpha)
         step = -log(rand())/s
