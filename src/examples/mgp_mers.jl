@@ -1,5 +1,4 @@
-# The two lineage coordinates are `(I_c, I_h)`. Their indices correspond to
-# `(Camel, Human)` in the hand-written MERS filters.
+# Demes are (I_c, I_h): camel, human.
 @mgp MERS begin
     compartments = (S_c, I_c, S_h, I_h)
     demes = (I_c, I_h)

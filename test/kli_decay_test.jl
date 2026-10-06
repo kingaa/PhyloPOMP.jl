@@ -1,23 +1,13 @@
 """
-M07 Part A acceptance-gate tests: `decay_contribution` / `total_decay`
-(`src/examples/mgp_decay.jl`), the generic lambda(t,x,y) (KLI Eq. 47 /
-Appendix B Eq. B2) generalized from `mers_filter_suite.tex`'s MERS-specific
-closed form (the "Decay lambda" subsection, and the "RC and RH"/"SC and SH"
-event-specific derivations) to an arbitrary DEATH/SAMPLE `Event`.
-
-Every concrete instance below is hand-computed independently (not copied
-from an earlier milestone's table, since this is the first milestone to
-touch DEATH/SAMPLE events at all -- M03 explicitly scoped them out of
-`full_transitions`), using exact `Rational{Int}` arithmetic throughout
-(`x`/`θ` NamedTuples with `Rational{Int}` fields, so `event.hazard(x,θ)`
-itself returns an exact `Rational{Int}`, per this milestone's "exact
-arithmetic, not floating point" instruction).
+Tests for `decay_contribution` and `total_decay` (KLI Eq. 47 / App. B
+Eq. B2) for DEATH and SAMPLE events, in exact `Rational` arithmetic.
+Expected values are hand-computed.
 """
 module KliDecayTest
 
 import ..Main: h1, h2
 
-@info h1("Decay lambda: decay_contribution / total_decay (M07 Part A)")
+@info h1("Decay lambda: decay_contribution / total_decay")
 
 using Test
 using PhyloPOMP
@@ -26,7 +16,7 @@ using PhyloPOMP: Event, EventType, BIRTH, MIGRATION, DEATH, SAMPLE, NEUTRAL,
 
 find_event(model, name) = model.events[findfirst(e -> e.name == name, model.events)]
 
-@testset verbose=true "Decay lambda (M07 Part A)" begin
+@testset verbose=true "Decay lambda" begin
 
     @info h2("MERS: concrete (I_C,I_H,ell_C,ell_H) exercising both the " *
              "above-threshold and at-threshold indicator branches")
@@ -48,12 +38,10 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         ℓ = [2, 3]
         n = [5, 3]
 
-        # Hand-computed against mers_filter_suite.tex's boxed "Decay lambda"
-        # formula (lines 833-836):
-        #   lambda = chi_C I_C + chi_H I_H
-        #          + gamma_C I_C*1{I_C<=ell_C} + gamma_H I_H*1{I_H<=ell_H}
-        #          = (1/10)*5 + (3/10)*3 + (1/2)*5*0 + (2/5)*3*1
-        #          = 1/2 + 9/10 + 0 + 6/5 = 13/5
+        # lambda = chi_C I_C + chi_H I_H + gamma_C I_C 1{I_C<=ell_C}
+        #          + gamma_H I_H 1{I_H<=ell_H}
+        #        = (1/10)*5 + (3/10)*3 + (1/2)*5*0 + (2/5)*3*1
+        #        = 1/2 + 9/10 + 0 + 6/5 = 13/5
         dc_rc = decay_contribution(removal_c, x, θ, ℓ, n)
         @test dc_rc.alpha  == 5 // 2          # gamma_C*I_C = (1/2)*5
         @test dc_rc.gate   == 0 // 1          # I_C=5 > ell_C=2 -> no decay
@@ -114,7 +102,7 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         recovery = find_event(S, :recovery)
         sampling = find_event(S, :sampling)
         @test recovery.type == DEATH && recovery.r == [0, 0]
-        @test sampling.type == SAMPLE && sampling.r == [0, 1]   # M03's finding
+        @test sampling.type == SAMPLE && sampling.r == [0, 1]
 
         # gamma=3/4, psi=1/5. Demes are (E,I); recovery/sampling both act on
         # I (deme 2).
@@ -167,10 +155,8 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test_throws ArgumentError decay_contribution(progression, x, θ, [0, 0], [1, 1])
         @test_throws ArgumentError decay_contribution(waning, x, θ, [0, 0], [1, 1])
 
-        # total_decay silently (correctly) skips BIRTH/MIGRATION/NEUTRAL --
-        # confirm the MERS birth_c/birth_h/death_c/death_h NEUTRAL marks
-        # contribute nothing, by comparing total_decay against a manual sum
-        # over ONLY the DEATH/SAMPLE events.
+        # total_decay skips BIRTH/MIGRATION/NEUTRAL: compare with a manual sum
+        # over DEATH/SAMPLE events.
         x_mers = (S_c = 1 // 1, I_c = 4 // 1, S_h = 1 // 1, I_h = 4 // 1)
         θ_mers = (β_cc = 1 // 1, β_ch = 1 // 1, β_hc = 1 // 1, β_hh = 1 // 1,
                   γ_c = 1 // 1, γ_h = 1 // 1, χ_c = 1 // 1, χ_h = 1 // 1,

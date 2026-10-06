@@ -1,36 +1,15 @@
 """
-M08 acceptance-gate test: Gate 5 (numerical equivalence) for the compiled
-SEIR filter (`src/examples/mgp_seir_filter.jl`) against the trusted,
-hand-coded `NaiveSEIR.filter_pomp` (`src/examples/seir_naive.jl`, read-only
-oracle, never modified).
-
-Approach (per the M08 task's option (b)): both filters are single-particle
-(`Np=1`) importance samplers whose log-likelihood is itself a random variable
-(depends on the specific silent/untracked regular events the proposal
-happens to draw). Exact numerical equivalence is only meaningful if BOTH
-filters draw the IDENTICAL sequence of random numbers for the IDENTICAL
-genealogy/parameters -- so each comparison resets the GLOBAL RNG
-(`Random.seed!(seed)`) to the SAME seed immediately before each `pfilter`
-call. `compiled_regular_part!` was written to make the exact same `rcateg`/
-`rand()` calls, in the same order, as `NaiveSEIR.regular_part!`
-(`src/examples/mgp_seir_filter.jl`'s own docstring), so this is a legitimate
-bit-for-bit comparison, not a statistical one.
-
-Over MANY (parameter, genealogy, seed) combinations, every PAIR of finite
-log-likelihoods must agree to a tight tolerance (`atol=1e-6, rtol=1e-8` --
-loose enough to absorb floating-point summation-order noise from computing
-some quantities via `Rational{Int}` Φ_u then converting to `Float64` at a
-different point in the expression than `seir_naive.jl`'s own arithmetic, but
-tight enough that a REAL formula discrepancy -- e.g. the M07 decay
-discrepancy this milestone resolved, or the M03 Q_u regular/singular gating
-bug this milestone found and fixed -- would fail it immediately, as both did
-during development).
+Compiled SEIR filter vs `NaiveSEIR`: seed-matched `Np=1` log-likelihoods
+agree to `atol=1e-6, rtol=1e-8` over many parameter/genealogy/seed
+combinations. `compiled_regular_part!` makes the same random draws in the
+same order as `NaiveSEIR.regular_part!`, so the global RNG is reseeded
+before each `pfilter` call.
 """
 module KliSeirCompiledTest
 
 import ..Main: h1, h2
 
-@info h1("Compiled SEIR filter vs. seir_naive.jl (M08 Gate 5)")
+@info h1("Compiled SEIR filter vs. seir_naive.jl")
 
 using Test
 using PhyloPOMP
@@ -75,7 +54,7 @@ function compare_ll(g, β, σ, γ, ω, ψ, χ, pop, x0; nseeds)
     nfinite, nmatch, worst
 end
 
-@testset verbose=true "Compiled SEIR filter (M08)" begin
+@testset verbose=true "Compiled SEIR filter" begin
 
     @info h2("Isolated regular-part unit check: many (state, ell) draws, " *
              "mixed event types, bit-exact against NaiveSEIR.regular_part!")
@@ -119,8 +98,7 @@ end
         @test nmismatch == 0
     end
 
-    @info h2("Gate 5: end-to-end log-likelihood, many (params, genealogy, " *
-             "seed) combinations, seed-matched Np=1 particle filters")
+    @info h2("End-to-end log-likelihood, seed-matched Np=1 filters")
     @testset "end-to-end log-likelihood sweep" begin
         rng_master = MersenneTwister(20260819)
         total_finite = 0
@@ -150,7 +128,7 @@ end
             worst_abs = max(worst_abs, worst)
             @test nfinite == nmatch
         end
-        @info "Gate 5 sweep: $ncombos parameter/genealogy combos, " *
+        @info "Sweep: $ncombos parameter/genealogy combos, " *
               "$total_finite finite log-likelihood comparisons, " *
               "$total_match exact matches, worst |Δll|=$worst_abs"
         @test ncombos ≥ 15   # most combos should successfully build a genealogy

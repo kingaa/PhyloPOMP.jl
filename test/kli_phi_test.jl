@@ -1,23 +1,7 @@
 """
-Reference-value tests for the generic KLI production-slot math added in
-M02 (`src/examples/mgp_phi.jl`): `production_slots`, `enumerate_saturations`,
-`kli_binomial_ratio` (φ_u).
-
-Every numeric case here is hand-computed in the M02 task spec / handoff
-(`handoffs/M02_kli_phi.md`) using exact rational arithmetic, then asserted
-against the generic function -- not just checked for "looks reasonable".
-Several cases additionally cross-check the generic output against real
-`Event`s pulled from the actual `MERS`/`SEIR` `MGPModel`s (not hand-typed
-literals) so that no saturation list is hard-coded per model, per the M02
-acceptance gate. The MERS cross-checks are verified against this repo's
-own worked derivation, `src/examples/mers_filter_suite.tex`:
-  - Step B (enumerate saturations): lines 443-449
-  - Step C (binomial ratio formula): lines 450-457
-  - TCC (within-camel birth, r=(2,0)):  lines 472-480, table rows 554-556
-  - THH (within-human birth, r=(0,2)):  lines 482-485, table rows 557-559
-  - THC (camel-to-human spillover, r=(1,1)): lines 487-498, table rows 560-563
-  - TCH (human-to-camel spillover, r=(1,1)): lines 500-509, table rows 564-567
-  - RC/RH/SC/SH (r=(0,0)):  lines 511-539, table rows 568-571
+Reference-value tests for `production_slots`, `enumerate_saturations` and
+`kli_binomial_ratio` (φ_u). Values are hand-computed in exact rationals; MERS
+cases follow the worked table in `mers_filter_suite.tex`.
 """
 module KliPhiTest
 
@@ -27,11 +11,12 @@ import ..Main: h1, h2
 
 using Test
 using PhyloPOMP
-using PhyloPOMP: production_slots, enumerate_saturations, kli_binomial_ratio
+using PhyloPOMP: production_slots, enumerate_saturations, kli_binomial_ratio,
+    safe_binomial
 
 find_event(model, name) = model.events[findfirst(e -> e.name == name, model.events)]
 
-@testset verbose=true "KLI φ_u (M02)" begin
+@testset verbose=true "KLI φ_u" begin
 
     @info h2("r = (0): trivial saturation, φ = Q always")
     @testset "r=(0)" begin
@@ -64,8 +49,8 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test enumerate_saturations([1], [0]) == [[0]]
         @test kli_binomial_ratio([1], [0], [0], [5]) == 1 // 1  # C(5,1)/C(5,1)
 
-        # cross-check against SEIR progression (MIGRATION, r=(0,1) -- the
-        # I-deme slot is the "r=1" component; E-deme slot is a fixed r=0).
+        # SEIR progression (MIGRATION, r=(0,1)): the I-deme slot is the
+        # r=1 component.
         progression = find_event(PhyloPOMP.SEIR, :progression)
         @test production_slots(progression) == [0, 1]
         Sp = enumerate_saturations(progression, [3, 2])  # ℓ_E=3 (irrelevant, r_E=0), ℓ_I=2
@@ -87,10 +72,9 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test binomial(2, 0) * (3 // 10) + binomial(2, 1) * (3 // 10) +
               binomial(2, 2) * (1 // 10) == 1
 
-        # cross-check against MERS transmission_cc (TCC, r=(2,0)), I_C=5,
-        # ℓ_C=2, H-deme irrelevant (r_H=0). mers_filter_suite.tex:472-480,
-        # 554-556: s_C=0 -> (I_C-ℓ_C)(I_C-ℓ_C-1)/(I_C(I_C-1)) = 3*2/(5*4) =
-        # 3/10; s_C=1 -> 2(I_C-ℓ_C)/(I_C(I_C-1)) = 6/20 = 3/10;
+        # MERS transmission_cc (TCC, r=(2,0)), I_C=5, ℓ_C=2, H-deme
+        # irrelevant (r_H=0): s_C=0 -> (I_C-ℓ_C)(I_C-ℓ_C-1)/(I_C(I_C-1)) =
+        # 3*2/(5*4) = 3/10; s_C=1 -> 2(I_C-ℓ_C)/(I_C(I_C-1)) = 6/20 = 3/10;
         # s_C=2 -> 2/(I_C(I_C-1)) = 2/20 = 1/10.
         tcc = find_event(PhyloPOMP.MERS, :transmission_cc)
         @test production_slots(tcc) == [2, 0]
@@ -100,9 +84,8 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test kli_binomial_ratio(tcc, [1, 0], [2, 0], [5, 3]) == 3 // 10
         @test kli_binomial_ratio(tcc, [2, 0], [2, 0], [5, 3]) == 1 // 10
 
-        # mirror: transmission_hh (THH, r=(0,2)), I_H=4, ℓ_H=1.
-        # mers_filter_suite.tex:482-485, 557-559: s_H=0 -> (3*2)/(4*3)=1/2;
-        # s_H=1 -> 2*3/(4*3)=1/2; s_H=2 -> 2/(4*3)=1/6.
+        # Mirror: transmission_hh (THH, r=(0,2)), I_H=4, ℓ_H=1:
+        # s_H=0 -> (3*2)/(4*3)=1/2; s_H=1 -> 2*3/(4*3)=1/2; s_H=2 -> 2/(4*3)=1/6.
         thh = find_event(PhyloPOMP.MERS, :transmission_hh)
         @test production_slots(thh) == [0, 2]
         @test kli_binomial_ratio(thh, [0, 0], [0, 1], [3, 4]) == 1 // 2
@@ -121,8 +104,7 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test kli_binomial_ratio(r, [0, 1], ℓ, n) == 3 // 20
         @test kli_binomial_ratio(r, [1, 1], ℓ, n) == 1 // 20
 
-        # cross-check against MERS transmission_hc (THC, camel-to-human
-        # spillover). mers_filter_suite.tex:487-498, 560-563:
+        # MERS transmission_hc (THC, camel-to-human spillover):
         # (s_C,s_H)=(0,0) -> (I_C-ℓ_C)(I_H-ℓ_H)/(I_CI_H) = 3*3/20 = 9/20;
         # (0,1) -> (I_C-ℓ_C)/(I_CI_H) = 3/20; (1,0) -> (I_H-ℓ_H)/(I_CI_H) =
         # 3/20; (1,1) -> 1/(I_CI_H) = 1/20.
@@ -135,11 +117,9 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test kli_binomial_ratio(thc, [1, 0], [2, 1], [5, 4]) == 3 // 20
         @test kli_binomial_ratio(thc, [1, 1], [2, 1], [5, 4]) == 1 // 20
 
-        # mirror: transmission_ch (TCH, human-to-camel spillover), same
-        # (n,ℓ). mers_filter_suite.tex:500-509, 564-567 -- algebraically
-        # identical product formula for r=(1,1), independently re-derived
-        # in the tex with C/H roles swapped; the generic function must
-        # reproduce the same numeric values since it only consumes r,s,ℓ,n.
+        # Mirror: transmission_ch (TCH, human-to-camel spillover), same
+        # (n,ℓ). The formula for r=(1,1) is the same with C/H swapped, so the
+        # values match.
         tch = find_event(PhyloPOMP.MERS, :transmission_ch)
         @test production_slots(tch) == [1, 1]
         @test kli_binomial_ratio(tch, [0, 0], [2, 1], [5, 4]) == 9 // 20
@@ -155,9 +135,7 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test Set(S) == Set([[0, 0], [0, 1]])
         @test all(s[1] == 0 for s in S)
 
-        # all demes zero: saturation forced to all-zero, φ = Q (worked by
-        # hand: s_d must be 0, so C(n_d-0, r_d-0)/C(n_d, r_d) =
-        # C(n_d,r_d)/C(n_d,r_d) = 1 for every d, so φ_u = Q * 1 = Q).
+        # All demes zero: s is forced to all-zero and every factor is 1, so φ = Q.
         r, ℓ, n = [1, 1], [0, 0], [5, 4]
         S0 = enumerate_saturations(r, ℓ)
         @test S0 == [[0, 0]]
@@ -167,9 +145,8 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
 
     @info h2("boundary: ℓ_d = n_d (fully saturated deme)")
     @testset "boundary ℓ=n" begin
-        # single deme, r=1, ℓ=n=5: s=0 forced-impossible (φ=0), s=1 forced
-        # (C(0,0)/C(5,1) = 1/5) -- by hand: C(n-ℓ, r-s) = C(0, 1-s), which
-        # is 1 iff s == r (=1) and 0 otherwise.
+        # Single deme, r=1, ℓ=n=5: C(n-ℓ, r-s) = C(0, 1-s) is 1 iff s == r,
+        # so s=0 gives φ=0 and s=1 gives C(0,0)/C(5,1) = 1/5.
         r, ℓ, n = [1], [5], [5]
         S = enumerate_saturations(r, ℓ)
         @test S == [[0], [1]]
@@ -179,10 +156,8 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
 
     @info h2("boundary: n_d < r_d (deme cannot produce r_d individuals)")
     @testset "boundary n<r" begin
-        # r=3 requested from a deme with only n=2 total individuals:
-        # C(n,r) = C(2,3) = 0 (b>a) -> denominator zero -> this
-        # implementation's documented defensive convention is to return
-        # exactly 0 (not throw, not NaN/Inf) for every saturation.
+        # r=3 from a deme with n=2: C(2,3) = 0, so the denominator is zero.
+        # kli_binomial_ratio returns 0 (no throw, no NaN/Inf) for every s.
         r, ℓ, n = [3], [1], [2]
         S = enumerate_saturations(r, ℓ)  # min(r,ℓ)=1, so {0,1}; enumeration
         @test S == [[0], [1]]            # itself is still well-defined.
@@ -218,20 +193,14 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
     @testset "defensive φ_u on s outside [0, min(r,ℓ)]" begin
         # s=2 > r=1: numerator argument r-s = -1 < 0 -> safe_binomial -> 0.
         @test kli_binomial_ratio([1], [2], [5], [10]) == 0 // 1
-        # s=-1 < 0: r-s = 2 is NOT negative (it's *larger* than r), so the
-        # b<0 rule alone would not catch it -- verified this is a real trap
-        # (safe_binomial(5,2)/safe_binomial(10,1) = 10/10 = 1 != 0) before
-        # adding an explicit `any(s .< 0)` guard to kli_binomial_ratio; now
-        # it correctly returns 0 for any negative-count saturation.
+        # s=-1 gives r-s=2, which the b<0 rule alone would not zero;
+        # kli_binomial_ratio guards s < 0 explicitly.
         @test kli_binomial_ratio([1], [-1], [5], [10]) == 0 // 1
     end
 
     @info h2("r=(0,0) events (RC/RH/SC/SH): φ=1 always, no fork")
     @testset "RC/RH/SC/SH (r=(0,0))" begin
-        # mers_filter_suite.tex:511-539, table rows 568-571: r=(0,0),
-        # s=(0,0) forced, φ=1 (the empty product), for removal and
-        # sample/death alike (the Supp indicator is a separate, not-yet-
-        # implemented compatibility condition -- out of scope for M02).
+        # r=(0,0): s=(0,0) is forced and φ=1 for removal and sampling alike.
         for name in (:removal_c, :removal_h, :sampling_c, :sampling_h)
             ev = find_event(PhyloPOMP.MERS, name)
             @test production_slots(ev) == [0, 0]
@@ -246,6 +215,18 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test_throws ArgumentError kli_binomial_ratio([1, 1], [0, 0], [1], [5, 5])
         @test_throws ArgumentError kli_binomial_ratio([1, 1], [0, 0], [1, 1], [5])
     end
+
+    ## Base.binomial gives -1 at a < 0; safe_binomial gives 0 there and at b < 0, b > a.
+    @test binomial(5, 0) == 1
+    @test binomial(5, -1) == 0
+    @test binomial(5, 6) == 0
+    @test binomial(0, 0) == 1
+    @test binomial(0, 1) == 0
+    @test binomial(-1, 1) == -1
+    @test safe_binomial(-1, 1) == 0
+    @test safe_binomial(5, -1) == 0
+    @test safe_binomial(5, 6) == 0
+    @test safe_binomial(0, 0) == 1
 
 end
 

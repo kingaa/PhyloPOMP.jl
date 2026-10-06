@@ -1,16 +1,5 @@
-# SIR model declaration (the simplest `@mgp` example).
-#
-# Compartments: S (susceptible), I (infectious), R (recovered).
-# Demes: I (only infectious individuals carry lineages).
-#
-# Jump marks (3 total):
-#   infection — BIRTH, I parent sires an I child; r=(2)
-#   recovery  — DEATH of an I lineage
-#   sampling  — SAMPLE of an I lineage; non-destructive (pop=()), so the
-#               sampled individual stays infectious (serial sampling)
-#
-# There is no hand-coded filter for this model; it exists to show that the
-# generic simulator (src/simulate.jl) needs nothing but this event table.
+# SIR: one deme (I). Sampling is non-destructive (pop=()), so the host stays infectious.
+# No hand-coded filter; src/simulate.jl runs it from the event table alone.
 
 @mgp SIR begin
     compartments = (S, I, R)

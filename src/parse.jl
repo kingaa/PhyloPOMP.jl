@@ -101,8 +101,8 @@ parse_newick(
         scan_branch!(G, input[(b+1):e], p, dememapper, bl)
     end
     set_time!(G,time)
-    cap_tips!(G)     # all tips become samples
-    clip_zlb!(G)     # samples with zero-length branches become inline
+    cap_tips!(G)
+    clip_zlb!(G)
     repair!(G)
     G
 end
@@ -132,9 +132,8 @@ end
 """
     clip_zlb!(G)
 
-Isolates zero-length branches from Genealogy `G` as needed.  The
-genealogy is now incorrect: and needs to be repaired (see
-[`repair!`](@ref)).
+Isolates zero-length branches from Genealogy `G` as needed.
+Leaves `G` needing [`repair!`](@ref).
 """
 clip_zlb!(G::Genealogy) = begin
     for n ∈ G.nodes
@@ -162,8 +161,8 @@ end
 """
     insert_zlb!(G)
 
-Adds zero-length branches where needed.  The genealogy is now
-incorrect: and needs to be repaired (see [`repair!`](@ref)).
+Adds zero-length branches where needed.
+Leaves `G` needing [`repair!`](@ref).
 """
 insert_zlb!(G::Genealogy{D}) where D = begin
     for n ∈ G.nodes

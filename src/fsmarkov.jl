@@ -119,7 +119,7 @@ make_generator(
             error("unspecified stationary probability for $(D(i))")
         end
     end
-    pi = pi./sum(pi)        # normalize stationary distribution
+    pi = pi./sum(pi)
     Q = Diagonal(pi)*Q
     for i ∈ idx
         Q[i,i] = -sum(Q[:,i])

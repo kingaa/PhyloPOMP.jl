@@ -14,11 +14,9 @@ import PartiallyObservedMarkovProcesses as POMP
 
 heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
 
-## A small binary tree with both camel and human tips, requiring at least
-## one cross-deme transmission to explain -- small enough for a modest
-## particle count to reliably find compatible colorings (the full empirical
-## `mers_tree`, used only for the -Inf/constructor checks below, is far too
-## large for that).
+## A small tree with camel and human tips that needs at least one cross-deme
+## transmission. The full `mers_tree` is too large for a modest particle count,
+## so it is used only for the -Inf and constructor checks.
 const small_tree = "(([&&PhyloPOMP deme=camel]1:1.0,[&&PhyloPOMP deme=camel]2:1.0):0.5,[&&PhyloPOMP deme=human]3:1.5);"
 
 @testset verbose=true "MERS model with soft proposals" begin
@@ -51,17 +49,8 @@ const small_tree = "(([&&PhyloPOMP deme=camel]1:1.0,[&&PhyloPOMP deme=camel]2:1.
     @test isfinite(logLik(pf))
 
     @info h2("default parameters give a finite logLik")
-    ## SoftMERS now shares GuidedMERS's defaults (mers_funs.jl). The
-    ## pre-refactor defaults had χ_h = 0 (and β_hc = β_ch = 0), which
-    ## forced -Inf at the first human tip of any mixed-deme tree; the
-    ## shared defaults do not.
-    ##
-    ## Those defaults use N_c = N_h = 10000, which makes a 3-tip tree a
-    ## severe filtering problem: a single Np=2000 run survives to the last
-    ## tip only about half the time (measured over 13 seeds). The estimate
-    ## over 5 replicates is -Inf only if every one of them collapses, and
-    ## that is the property asserted here --- that the new defaults are not
-    ## *structurally* degenerate, as the old ones were.
+    ## Shared defaults (mers_funs.jl). N_c = N_h = 10000 makes a 3-tip tree hard
+    ## to filter, so assert only that the estimate over 5 replicates is finite.
     seed!(1)
     pdef = SoftMERS.filter_pomp(g, m)
     lldef,_ = logmeanexp([logLik(pfilter(pdef,Np=2000)) for _ ∈ 1:5], se=true)
@@ -69,18 +58,9 @@ const small_tree = "(([&&PhyloPOMP deme=camel]1:1.0,[&&PhyloPOMP deme=camel]2:1.
     @test isfinite(lldef)
 
     @info h2("soft, hard and guided agree on the likelihood")
-    ## SoftMERS, HardMERS and GuidedMERS are three importance-sampling
-    ## proposals for the SAME genealogy likelihood, so their pfilter
-    ## *estimates* must agree (up to Monte Carlo error), even though their
-    ## per-replicate values never do.  (The test that used to live here
-    ## compared per-replicate logLiks under a shared seed and asserted they
-    ## differ -- true of any two distinct kernels, and so no evidence of
-    ## anything.)
-    ##
-    ## The logmeanexp estimator is heavy-tailed on this fixture, so the
-    ## replicate count was chosen for margin rather than minimality: over a
-    ## 12-seed sweep at Np=2000, R=15 gave a worst-case pairwise
-    ## |Δ| / sqrt(se₁²+se₂²) of 2.27, with no seed reaching 3.
+    ## Soft, hard and guided are proposals for one likelihood, so their pfilter
+    ## estimates agree within Monte Carlo error (z < 3). 15 replicates at
+    ## Np=2000 keep the heavy-tailed estimator stable.
     kernels = (
         ("soft",   PhyloPOMP.SoftMERS),
         ("hard",   PhyloPOMP.HardMERS),

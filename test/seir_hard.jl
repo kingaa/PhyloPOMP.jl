@@ -14,7 +14,7 @@ import PartiallyObservedMarkovProcesses as POMP
 
 heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
 
-@testset verbose=true "SEIR model with guided proposals" begin
+@testset verbose=true "SEIR model with hard proposals" begin
 
     seed!(2123986527)
 

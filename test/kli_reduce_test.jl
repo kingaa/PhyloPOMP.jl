@@ -1,22 +1,13 @@
 """
-M04 acceptance-gate tests: `reduce_event_indicator` / `reduced_transitions`
-(`src/examples/mgp_reduce.jl`), the explicit reduction over the event
-indicator `m` that groups M03's `full_transitions` output by REDUCED
-color-only outcome and sums `phi` (exact `Rational{Int}`) within each group
-to get `Phi_u`, per `mers_filter_suite.tex`:423-432.
-
-Every concrete `(ell, n)` instance and every `phi` value below is REUSED,
-unchanged, from `test/kli_full_transitions_test.jl` (M03's own hand-verified
-term-by-term numbers) -- this file only adds the collapsing/summation layer
-on top, per the milestone's instruction to "compute the reduced Phi_u table
-by hand (sum the exact ... phi_u values you already have from M03's
-term-by-term match)".
+Tests for `reduce_event_indicator` and `reduced_transitions`: full
+transitions are grouped by color-only outcome and φ is summed into Φ_u.
+Instances and φ values are those of `kli_full_transitions_test.jl`.
 """
 module KliReduceTest
 
 import ..Main: h1, h2
 
-@info h1("Explicit reduction over the event indicator m: reduce_event_indicator (M04)")
+@info h1("Explicit reduction over the event indicator m: reduce_event_indicator")
 
 using Test
 using PhyloPOMP
@@ -28,7 +19,7 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
 
 by_kind(rts) = Dict(rt.kind => rt for rt in rts)
 
-@testset verbose=true "Explicit reduction over m (M04)" begin
+@testset verbose=true "Explicit reduction over m" begin
 
     @info h2("TCC (r=(2,0)): 3 full -> 2 reduced (noop collapses" *
              " Identity+InlineSameDeme, fork stays alone)")
@@ -46,8 +37,7 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
         @test g[:noop].Φ == 3 // 5
         @test g[:fork].Φ == 1 // 10        # alone, not collapsed with anything
 
-        # Provenance: the noop group's contributing transitions are EXACTLY
-        # the Identity and InlineSameDeme instances, by type.
+        # The noop group holds exactly the Identity and InlineSameDeme instances.
         noop_types = Set(typeof(t) for t in g[:noop].transitions)
         @test noop_types == Set([IdentityTransition, InlineSameDemeTransition])
         @test length(g[:noop].transitions) == 2
@@ -58,10 +48,8 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
         # Total Phi is conserved (partition, no drop/double-count).
         @test sum(rt.Φ for rt in rts) == sum(t.phi for t in ts)
 
-        # convenience wrapper agrees (compare by (kind, Φ) pairs -- struct
-        # `==` is identity-based by default since ReducedTransition carries
-        # Vector fields, so a Set-of-tuples comparison is used instead of
-        # `==` on the whole structs/vectors).
+        # The convenience wrapper agrees. Compare (kind, Φ) pairs, since struct
+        # `==` is identity-based for ReducedTransition.
         rts2 = reduced_transitions(tcc, [2, 0], [5, 3])
         @test Set((rt.kind, rt.Φ) for rt in rts2) == Set((rt.kind, rt.Φ) for rt in rts)
     end
@@ -86,9 +74,7 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
         @test sum(rt.Φ for rt in rts) == sum(t.phi for t in ts)
     end
 
-    @info h2("THC (r=(1,1)): 4 full -> 3 reduced -- THE critical collapse" *
-             " test: (1,0) InlineSameDeme collapses with (0,0) Identity," *
-             " NOT with the (0,1) CrossDeme case")
+    @info h2("THC: 4 full to 3 reduced; (1,0) Inline collapses into noop, (0,1) Cross does not")
     @testset "THC" begin
         thc = find_event(PhyloPOMP.MERS, :transmission_hc)
         # Same instance as kli_full_transitions_test.jl "THC":
@@ -106,9 +92,7 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
         @test g[:cross].Φ == 3 // 20   # alone -- NOT collapsed into noop
         @test g[:fork].Φ == 1 // 20    # alone
 
-        # The critical distinction: deme-match (not saturation index) drives
-        # collapsing. (1,0)=InlineSameDeme must be IN the noop group; the
-        # (0,1)=CrossDeme transition must NOT be in it.
+        # Collapsing follows deme match, not saturation index.
         noop_types = Set(typeof(t) for t in g[:noop].transitions)
         @test noop_types == Set([IdentityTransition, InlineSameDemeTransition])
         noop_ss = Set(t.s for t in g[:noop].transitions)
@@ -183,12 +167,8 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
         ts = full_transitions(progression, [3, 2], [9, 5])
         @test length(ts) == 2
 
-        # Structural confirmation: only Identity/CrossDeme are possible --
-        # no InlineSameDemeTransition or ForkTransition, since progression
-        # has a single production slot (r=(0,1)) that lives at the TARGET
-        # deme (I), never the ancestral deme (E) -- so sum(s) is 0 or 1
-        # only, and the one occupied slot's deme (I) can never equal
-        # event.from (E).
+        # Only Identity/CrossDeme are possible: the single production slot
+        # (r=(0,1)) is in the target deme I, never in event.from (E).
         @test all(t isa Union{IdentityTransition,CrossDemeTransition} for t in ts)
         @test !any(t isa InlineSameDemeTransition for t in ts)
         @test !any(t isa ForkTransition for t in ts)
@@ -212,9 +192,7 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
 
     @info h2("generic invariants")
     @testset "invariants" begin
-        # Every ReducedTransition's Φ equals the sum of its provenance
-        # transitions' phi (definition, not a coincidence) -- spot-checked
-        # across every case above via one representative call.
+        # Every ReducedTransition's Φ equals the sum of its member φ values.
         thc = find_event(PhyloPOMP.MERS, :transmission_hc)
         ts = full_transitions(thc, [2, 1], [5, 4])
         rts = reduce_event_indicator(ts)
@@ -222,11 +200,10 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
             @test rt.Φ == sum(t.phi for t in rt.transitions)
         end
 
-        # Every input transition appears in exactly one output group's
-        # provenance list (partition property).
-        all_provenance = vcat((rt.transitions for rt in rts)...)
-        @test length(all_provenance) == length(ts)
-        @test Set(objectid.(all_provenance)) == Set(objectid.(ts))
+        # Every input transition appears in exactly one group.
+        grouped = vcat((rt.transitions for rt in rts)...)
+        @test length(grouped) == length(ts)
+        @test Set(objectid.(grouped)) == Set(objectid.(ts))
     end
 
 end
