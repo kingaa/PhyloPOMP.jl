@@ -51,6 +51,9 @@ include("rcateg.jl")
 export @indicator
 include("indicator.jl")
 
+export genealogyplot
+include("genealogyplot.jl")
+
 include("examples/Examples.jl")
 
 include("simulate.jl")

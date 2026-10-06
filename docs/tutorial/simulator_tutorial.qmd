@@ -33,7 +33,7 @@ Read the output under each cell, then read the text.
 
 ```{julia}
 import Pkg
-Pkg.activate(@__DIR__)
+Pkg.activate(joinpath(@__DIR__, "simulator"))   # this tutorial's own environment
 Pkg.instantiate()
 
 ENV["GKSwstype"] = "100"  # headless GR, no display needed
@@ -109,7 +109,7 @@ What came back:
 - `nsample(g)` is the number of sampled hosts in the tree.
 - `newick(g)` writes the tree as text. Newick is a standard text format for trees. Parentheses nest. The number after a colon is the length of the branch above that node.
 - The result is a list with one string per founder. Here there is one founder.
-- The bracket `[&&PhyloPOMP type=sample]` labels each node with its type. Section 3 explains the types.
+- The bracket `[&&PhyloPOMP type=sample]` labels each node with its type. Section 3 explains the types and draws this tree.
 
 Now the same model for 20 time units, many runs.
 
@@ -163,6 +163,44 @@ Compare with the printout.
 Node 1 is the `Root`.
 Node 2 is a `Node` with two children.
 Node 3 is a `Sample` with one child: that host was sampled, kept going, and was sampled again later.
+
+### Draw the tree
+
+Run this cell.
+It draws the tree from Section 2.
+Time runs left to right.
+Each dot is a sampled host.
+
+```{julia}
+import CairoMakie   # loading a Makie backend turns on `genealogyplot`
+
+genealogyplot(g, title = "Section 2 tree: 3 samples, tmax = 2")
+```
+
+`genealogyplot` returns a Makie figure.
+It needs a Makie backend loaded, such as `CairoMakie`.
+Without one, `genealogyplot` has no method.
+This is the same arrangement `PartiallyObservedMarkovProcesses` uses for `sliceplot` and `traceplot`.
+
+How to read it:
+
+1. The line at the far left is the `Root`. It is the first infected host.
+2. A vertical line is a `Node`. One lineage became two: an infection.
+3. A dot is a `Sample`.
+4. A dot with a line after it is a host that was sampled and kept going. The lower sample in this tree is one.
+
+Options: `ladderize` (default `true`, puts smaller clades first), `points` (default `true`), `palette`, `title`.
+
+Now a bigger tree: the same model and seed, run to `tmax = 3`.
+
+```{julia}
+g3 = simulate(SIR, θ; x0 = x0, graft = [1], tmax = 3.0, rng = MersenneTwister(1))
+println("samples: ", nsample(g3))
+genealogyplot(g3, title = "seed 1, tmax = 3")
+```
+
+Same seed, so the first events are the same.
+More time means more samples, so more branches stay in the tree.
 
 The exported helpers return node indices:
 
@@ -504,6 +542,13 @@ Only `Sample` nodes carry a deme.
 All other nodes have `missing`.
 Without `demeset` and `samplemap`, every `.deme` is `missing`, as in Section 3.
 
+Draw the tree.
+`genealogyplot` colors the samples by deme and adds a legend when the tree records demes.
+
+```{julia}
+genealogyplot(gm, title = "MTBD tree, samples colored by deme")
+```
+
 ## 9. What gets checked for you
 
 Run this cell.
@@ -667,6 +712,7 @@ Read a tree:
 | `newick(g)` | Vector of Newick strings, one per founder. |
 | `g[i].type`, `.slate`, `.parent`, `.children`, `.deme` | Fields of node `i`. |
 | `samples(g)`, `nodes(g)`, `roots(g)`, `tips(g)` | Node indices. |
+| `import CairoMakie; genealogyplot(g)` | Draw the tree. Needs a Makie backend. |
 
 Write a model:
 
