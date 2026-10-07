@@ -40,10 +40,24 @@ ENV["GKSwstype"] = "100"  # headless GR, no display needed
 
 using PhyloPOMP
 using Plots
-using Random: MersenneTwister
+using Random: Xoshiro
 
 default(size=(650,300), legend=false)
 ```
+
+### Which random number generator
+
+`simulate` takes any `AbstractRNG` through `rng`. Prefer `Xoshiro(seed)`:
+
+| | `Xoshiro` (Xoshiro256++) | `MersenneTwister` (dSFMT) |
+|---|---|---|
+| Julia default since | 1.7 | before 1.7 |
+| State size | 32 bytes | about 19 KB in memory |
+| Speed | faster | slower |
+| TestU01 BigCrush | passes | fails the two linear-complexity tests |
+
+This tutorial uses `Xoshiro` throughout.
+Changing the generator changes every tree: `Xoshiro(3)` and `MersenneTwister(3)` are unrelated runs.
 
 ## 1. What the simulator does
 
@@ -87,7 +101,7 @@ The cell above did steps 1 and 2 by hand.
 Run this cell.
 
 ```{julia}
-g = simulate(SIR, θ; x0 = x0, graft = [1], tmax = 2.0, rng = MersenneTwister(1))
+g = simulate(SIR, θ; x0 = x0, graft = [1], tmax = 2.0, rng = Xoshiro(780))
 
 println("samples: ", nsample(g))
 println(only(newick(g)))
@@ -102,7 +116,7 @@ What you gave `simulate`:
 | `x0` | Starting count in every compartment. |
 | `graft` | Number of founding lineages in each deme. Here one. Section 5 defines deme. |
 | `tmax` | Stop time. Time units are arbitrary. |
-| `rng` | Random number generator. `MersenneTwister(1)` gives the same tree every time. |
+| `rng` | Random number generator. `Xoshiro(780)` gives the same tree every time. Any seed works; 780 gives a small tree that is easy to read. |
 
 What came back:
 
@@ -115,7 +129,7 @@ Now the same model for 20 time units, many runs.
 
 ```{julia}
 counts = [nsample(simulate(SIR, θ; x0 = x0, graft = [1], tmax = 20.0,
-                           rng = MersenneTwister(s))) for s in 1:1000]
+                           rng = Xoshiro(s))) for s in 1:1000]
 
 println("runs:                 ", length(counts))
 println("runs with no samples: ", count(==(0), counts))
@@ -194,9 +208,9 @@ Options: `ladderize` (default `true`, puts smaller clades first), `points` (defa
 Now a bigger tree: the same model and seed, run to `tmax = 3`.
 
 ```{julia}
-g3 = simulate(SIR, θ; x0 = x0, graft = [1], tmax = 3.0, rng = MersenneTwister(1))
+g3 = simulate(SIR, θ; x0 = x0, graft = [1], tmax = 3.0, rng = Xoshiro(780))
 println("samples: ", nsample(g3))
-genealogyplot(g3, title = "seed 1, tmax = 3")
+genealogyplot(g3, title = "Xoshiro(780), tmax = 3")
 ```
 
 Same seed, so the first events are the same.
@@ -225,7 +239,7 @@ Run this cell.
 `simulate_trajectory` returns the tree and the counts after every event.
 
 ```{julia}
-r = simulate_trajectory(SIR, θ; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
+r = simulate_trajectory(SIR, θ; x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
 
 println("fields:        ", keys(r))
 println("events fired:  ", length(r.events))
@@ -272,8 +286,8 @@ It defines `MySIR`, a copy of the built-in `SIR`.
     @event sampling  rate=ψ*I     pop=()           move=sample(I)       kind=singular
 end
 
-mine    = simulate(MySIR, θ; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
-builtin = simulate(SIR,   θ; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
+mine    = simulate(MySIR, θ; x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
+builtin = simulate(SIR,   θ; x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
 println("same tree as the built-in SIR? ", newick(mine) == newick(builtin))
 println("nsample = ", nsample(mine))
 ```
@@ -318,6 +332,39 @@ println(typeof(MySIR))
 println(MySIRDemes.I)
 ```
 
+### What `@mgp` prints
+
+`@mgp` prints nothing of its own.
+In the REPL, or when `@mgp` is the last line of a cell, you see the value it returns, the model.
+This cell shows that value:
+
+```{julia}
+MySIR
+```
+
+That is the raw `MGPModel`: the name, the compartments, the demes, then one `Event` per `@event`.
+Each `Event` prints its fields in this order:
+
+| Field | In the `infection` event | Meaning |
+|---|---|---|
+| `name` | `:infection` | The label you gave. |
+| `Δ` | `[:S => -1, :I => 1]` | Your `pop=`. |
+| `hazard` | `var"#13#14"()` | Your `rate=`, compiled into a function of `(x, θ)`. Julia prints a generated name, which can differ between sessions. |
+| `r` | `[2]` | Lineages produced in each deme. `fork` makes 2, `chop` 0, `sample` 1. |
+| `type` | `PhyloPOMP.BIRTH` | Worked out from `move=`: `BIRTH`, `MIGRATION`, `DEATH`, `SAMPLE`, or `NEUTRAL` for `none`. |
+| `from` | `1` | Source deme, as a position in `demes`. `0` means no lineage. |
+| `into` | `[1]` | Destination demes. |
+| `regular`, `observed` | `true, false` | From `kind=`. `singular` gives `false, true`. |
+
+`audit_model` prints the same information one event per block, with names instead of positions:
+
+```{julia}
+audit_model(MySIR)
+```
+
+To see the code the macro writes, use `@macroexpand @mgp MySIR begin ... end`.
+It defines the module `MySIRDemes`, then calls `MGPModel` with the events above.
+
 Now turn it into an SIRS model.
 In SIRS, recovered hosts lose immunity and become susceptible again.
 
@@ -338,18 +385,64 @@ In SIRS, recovered hosts lose immunity and become susceptible again.
 end
 
 θs = merge(θ, (ω = 0.5,))
-rs = simulate_trajectory(MySIRS, θs; x0 = x0, graft = [1], tmax = 20.0, rng = MersenneTwister(3))
+rs = simulate_trajectory(MySIRS, θs; x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
 
 println("waning events: ", count(==(:waning), rs.events))
 println("last state:    ", rs.states[end])
 println("samples:       ", nsample(rs.genealogy))
 
 plot(rs.times, [s.I for s in rs.states], seriestype = :steppost,
-     xlabel = "time", ylabel = "infected (I)", title = "SIRS, seed 3")
+     xlabel = "time", ylabel = "infected (I)", title = "SIRS, Xoshiro(3)")
 ```
 
 With `ω = 0.5` the epidemic does not end at the first wave.
 Immunity is lost, so `S` refills. `I` is still above 0 at `tmax`.
+
+### A model R phylopomp does not have: SICR
+
+SICR adds a chronic **carrier** stage, as in hepatitis B.
+Some infected hosts clear the infection.
+Others become carriers who stay infectious for a long time and infect others at a lower rate.
+
+- `S`: susceptible. `I`: acute infection. `C`: chronic carrier. `R`: recovered.
+- Both `I` and `C` hosts carry lineages, so `demes = (I, C)`.
+- A carrier who infects someone stays a carrier, and the new host starts in `I`: `fork(C => C, I)`.
+- An acute host who becomes a carrier moves its lineage from `I` to `C`: `swap(I => C)`.
+- A fraction `q` of acute hosts become carriers. The rest recover.
+
+```{julia}
+@mgp SICR begin
+    compartments = (S, I, C, R)
+    demes = (I, C)
+    params = (β, βc, γ, q, δ, ψ, N)
+
+    @event acute_infection   rate=β*S*I/N   pop=(S=-1, I=+1) move=fork(I => I, I) kind=regular
+    @event carrier_infection rate=βc*S*C/N  pop=(S=-1, I=+1) move=fork(C => C, I) kind=regular
+    @event clearance         rate=(1-q)*γ*I pop=(I=-1, R=+1) move=chop(I)         kind=regular
+    @event become_carrier    rate=q*γ*I     pop=(I=-1, C=+1) move=swap(I => C)    kind=regular
+    @event carrier_clearance rate=δ*C       pop=(C=-1, R=+1) move=chop(C)         kind=regular
+    @event sample_acute      rate=ψ*I       pop=()           move=sample(I)       kind=singular
+    @event sample_carrier    rate=ψ*C       pop=()           move=sample(C)       kind=singular
+end
+
+θc  = (β = 4.0, βc = 0.5, γ = 1.0, q = 0.2, δ = 0.05, ψ = 0.3, N = 100.0)
+x0c = (S = 99, I = 1, C = 0, R = 0)
+rc  = simulate_trajectory(SICR, θc; x0 = x0c, graft = [1, 0], tmax = 40.0, rng = Xoshiro(1))
+
+println("events:     ", length(rc.events))
+println("last state: ", rc.states[end])
+println("samples:    ", nsample(rc.genealogy))
+
+plot(rc.times, [[s.I for s in rc.states] [s.C for s in rc.states]], seriestype = :steppost,
+     label = ["acute (I)" "carrier (C)"], legend = :topright,
+     xlabel = "time", ylabel = "hosts", title = "SICR, Xoshiro(1)")
+```
+
+`graft = [1, 0]` starts one lineage in `I` and none in `C`, matching `x0c`.
+The acute wave peaks near t = 3 and is mostly over by t = 7. Carriers seed a few later acute cases.
+Carriers clear at rate `δ = 0.05`, so they persist long after the wave.
+Nothing in the engine changed to run this model.
+There is no R version to compare against, so the checks in Section 9 are what validate it.
 
 ## 6. The rule `pop` must obey
 
@@ -402,7 +495,7 @@ end
 
 θf = (β = 4.0, ψ = 0.3, N = 100.0)
 gf = simulate(FixedPop, θf; x0 = (S = 99, E = 0, I = 1, R = 0), graft = [0, 1],
-              tmax = 5.0, rng = MersenneTwister(1))
+              tmax = 5.0, rng = Xoshiro(2))
 println("FixedPop runs. samples: ", nsample(gf))
 ```
 
@@ -471,7 +564,7 @@ with_child(g) = count(i -> !isempty(g[i].children), samples(g))
 function summarize(model, θ, x0, graft, tmax)
     total, kept = 0, 0
     for s in 1:20
-        g = simulate(model, θ; x0 = x0, graft = graft, tmax = tmax, rng = MersenneTwister(s))
+        g = simulate(model, θ; x0 = x0, graft = graft, tmax = tmax, rng = Xoshiro(s))
         total += Int(nsample(g))
         kept  += with_child(g)
     end
@@ -517,7 +610,7 @@ They are two host types.
 ds = PhyloPOMP.MTBDDemes
 
 gm = simulate(MTBD, θ_mtbd; x0 = x_mtbd, graft = [1, 0], tmax = 6.0,
-              rng = MersenneTwister(4),
+              rng = Xoshiro(8),
               demeset = ds, samplemap = [ds.I1, ds.I2])
 
 println(gm)
@@ -613,7 +706,7 @@ end
 
 show_error() do
     simulate(Leak, (ρ = 1.0,); x0 = (S = 3, I = 1), graft = [1], tmax = 20.0,
-             rng = MersenneTwister(1))
+             rng = Xoshiro(1))
 end
 ```
 
@@ -689,7 +782,7 @@ Where the code lives:
 Run a model:
 
 ```julia
-g = simulate(Model, θ; x0 = (...), graft = [...], tmax = 20.0, rng = MersenneTwister(1))
+g = simulate(Model, θ; x0 = (...), graft = [...], tmax = 20.0, rng = Xoshiro(1))
 r = simulate_trajectory(Model, θ; x0 = (...), graft = [...], tmax = 20.0)   # r.genealogy, r.times, r.states, r.events
 ```
 
@@ -701,7 +794,7 @@ Keywords of `simulate`:
 | `graft` | Founding lineages per deme, in `model.demes` order. Must equal `x0` for the demes. |
 | `tmax` | Stop time. |
 | `t0` | Start time. Default 0. |
-| `rng` | `MersenneTwister(seed)` for repeatable runs. |
+| `rng` | `Xoshiro(seed)` for repeatable runs. Any `AbstractRNG` works. |
 | `demeset`, `samplemap` | Label samples with their deme. Use together. |
 
 Read a tree:
@@ -744,8 +837,52 @@ Errors:
 
 Inspect: `validate_model(m)`, `audit_model(m)`, `@macroexpand @mgp ...`.
 
-## Next thing to try
+## Exercise
 
-In `MySIRS`, set `ω = 0.0` and run with `MersenneTwister(3)`.
-Compare `newick` of the result with `newick` of the built-in `SIR` run with the same seed.
-Then set `ω = 0.1` and plot `I` over time.
+1. In `MySIRS`, set `ω = 0.0` and run with `Xoshiro(3)`.
+   Compare `newick` of the result with `newick` of the built-in `SIR` run with the same seed.
+2. Then set `ω = 0.1` and plot `I` over time.
+
+Try it before opening the solution.
+
+::: {.callout-tip collapse="true"}
+## Solution
+
+**Part 1.**
+
+```{julia}
+θ0   = merge(θ, (ω = 0.0,))
+sirs = simulate(MySIRS, θ0; x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
+sir  = simulate(SIR,    θ;  x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
+println("same newick? ", newick(sirs) == newick(sir))
+println("samples:     ", nsample(sirs))
+```
+
+The trees are identical.
+With `ω = 0`, the waning rate `ω*R` is always 0, so waning never fires.
+The simulator picks the next event in proportion to its rate, so an event with rate 0 never changes which event is picked or when.
+`MySIRS` draws the same random numbers as `SIR` and makes the same tree.
+`MersenneTwister(3)` gives the same yes, with a different tree.
+
+**Part 2.**
+
+```{julia}
+r0  = simulate_trajectory(MySIRS, merge(θ, (ω = 0.0,)); x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
+r01 = simulate_trajectory(MySIRS, merge(θ, (ω = 0.1,)); x0 = x0, graft = [1], tmax = 20.0, rng = Xoshiro(3))
+
+println("ω = 0.1: waning events ", count(==(:waning), r01.events),
+        ", last state ", r01.states[end], ", samples ", nsample(r01.genealogy))
+
+plot(r0.times,  [s.I for s in r0.states],  seriestype = :steppost, label = "ω = 0")
+plot!(r01.times, [s.I for s in r01.states], seriestype = :steppost, label = "ω = 0.1",
+      legend = :topright, xlabel = "time", ylabel = "infected (I)", title = "MySIRS, Xoshiro(3)")
+```
+
+Both runs start from the same seed, so they match until the first recovery.
+From then on `R > 0`, so waning has a nonzero rate, and every later waiting time changes even before any waning event fires.
+With `ω = 0.1`, each recovered host returns to `S` after 10 time units on average.
+A few return during the first wave, which feeds a small second rise near t = 5 to 6.
+That is not enough to sustain it: `I` reaches 0 near t = 7.3, about 2.5 time units after the `ω = 0` run.
+The orange line stays at 0 after that, while waning keeps moving hosts from `R` back to `S`.
+Compare `ω = 0.5` in Section 5, where `I` is still above 0 at `tmax`.
+:::

@@ -1,0 +1,10 @@
+[deps]
+AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+PartiallyObservedMarkovProcesses = "32433216-4d85-4b2d-94ed-a614743ba12b"
+PhyloPOMP = "d3093253-1426-44ff-8fa8-1ab5fe440962"
+
+[sources]
+PartiallyObservedMarkovProcesses = {path = "../../../POMP-migrate"}
+PhyloPOMP = {path = "../.."}

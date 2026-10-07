@@ -1,0 +1,322 @@
+---
+title: "Diagnostics tutorial: mif, slice, profile, mcap"
+subtitle: "PhyloPOMP.jl / PartiallyObservedMarkovProcesses.jl (analysis-layer), 2026-10-06"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: false
+---
+
+## Run this now
+
+```{.bash}
+quarto render docs/tutorial/diagnostics_tutorial.qmd
+```
+
+That's it. Every cell below runs top to bottom, on a self-contained project
+(`docs/tutorial/Project.toml`). It uses two local checkouts, found by
+relative path:
+
+- PhyloPOMP.jl itself (this repository).
+- The POMP.jl `analysis-layer` worktree, in a sibling directory named
+  `POMP-migrate` next to `PhyloPOMP.jl`.
+
+No `Pkg.develop` in your own environment needed.
+
+Two parts:
+
+1. **The toy model.** A fast, generic `pomp` object. Every tool in one pass:
+   `simulate`, `pfilter`, `mif`, a trace plot, a slice, a profile, `mcap`.
+2. **The SEIR genealogy.** The same tools on an actual phylodynamic tree,
+   `PhyloPOMP`'s naive SEIR filter. `mif`, the trace plot, and `slice` run
+   on it here. `profile` and `mcap` take the same calls as Part 1 §6 and
+   are not re-run, to keep this notebook fast.
+
+## Setup
+
+```{julia}
+import Pkg
+Pkg.activate(@__DIR__)
+Pkg.instantiate()
+
+using PhyloPOMP
+import PartiallyObservedMarkovProcesses as POMP
+using Distributions
+using CairoMakie, AlgebraOfGraphics
+using Random: MersenneTwister, seed!
+
+```
+
+# Part 1: the toy model
+
+A single scalar count `x` with Poisson growth and negative-binomial
+observation, `a` the growth rate, `k` the observation dispersion, `x0` the
+initial count. The same model the POMP.jl test suite uses.
+
+## 1. Build it and simulate
+
+```{julia}
+## Part 1 draws from the global RNG throughout (simulate, pfilter, mif,
+## slice, profile). One seed here makes every render identical.
+seed!(42)
+
+rin = function (;x0,_...)
+    (x=rand(Poisson(x0)),)
+end
+rlin = function (;t,a,x,_...)
+    (x=rand(Poisson(a*x)),)
+end
+rmeas = function (;x,k,_...)
+    (y=rand(NegativeBinomial(k,k/(k+x))),)
+end
+logdmeas = function (;x,y,k,_...)
+    logpdf(NegativeBinomial(k,k/(k+x)),y)
+end
+
+truth = (a=1.5, k=7.0, x0=5.0)
+
+P = simulate(
+    t0=0, times=0:20, params=truth,
+    rinit=rin, rprocess=discrete_time(rlin,dt=1),
+    rmeasure=rmeas, logdmeasure=logdmeas,
+)[1]
+
+scatter(times(P), [o.y for o ∈ obs(P)];
+        axis=(xlabel="time", ylabel="y", title="simulated data"), figure=(size=(650,260),))
+```
+
+## 2. Filter it: `pfilter`
+
+One run gives an unbiased likelihood *estimate*, not the likelihood
+itself. Replicate and combine with `logmeanexp`, exactly like
+R `phylopomp`'s `mtbd2_loglik`. `pfilter_loglik` does this in one call.
+
+```{julia}
+pfilter_loglik(P; Np=1000, nreps=10, params=truth)
+```
+
+`loglik` is the combined estimate, `se` its standard error, `ess` the
+replicate ensemble's effective sample size. A small `ess` relative to
+`nreps` means `Np` is too small: the estimate is dominated by a few
+lucky replicates.
+
+## 3. Fit it: `mif`
+
+Iterated filtering. Two things to specify:
+
+- **What moves, and how.** `@perturbn` builds the perturbation from one
+  entry per parameter. `a ~ LogNormal(0.02)` perturbs `a` on the log
+  scale, so it stays positive. `ivp(...)` marks an initial-value
+  parameter, perturbed only at time zero.
+- **How fast the perturbations shrink.** `geometric_cooling(0.5)` halves
+  them over 50 iterations.
+
+```{julia}
+ptb = @perturbn(a ~ LogNormal(0.02), k ~ LogNormal(0.02), x0 ~ ivp(LogNormal(0.1)))
+mf = mif(P; Nmif=30, Np=1000, perturbations=ptb, cooling=geometric_cooling(0.5))
+coef(mf)
+```
+
+**Do not report `logLik(mf)`.** It is one unreplicated particle filter at
+the final estimate: no standard error, and biased low. Evaluate the
+fitted point properly instead:
+
+```{julia}
+pfilter_loglik(mf; Np=1000, nreps=5)
+```
+
+## 4. Did it converge? Trace plot
+
+The `logLik` column in `traces(mf)` is the likelihood of the *perturbed*
+model, not the one you care about. `monitor` evaluates the unperturbed
+likelihood at the recorded point estimates, every `every` iterations,
+after the fit. It uses its own seeded random numbers and restores the
+global RNG afterwards, so it cannot change anything that runs later.
+
+```{julia}
+mon = monitor(mf; Np=500, nreps=2, seed=1, every=5)
+traceplot(mf; monitor=mon)
+```
+
+`traceplot` shows the trace log likelihood, the monitored log likelihood,
+and each perturbed parameter against iteration. `filterplot` shows the
+effective sample size and conditional log likelihood against time, from
+the particle filter run at the final estimate. Together they are the
+panels R `pomp` draws for a `mif2d_pomp`, plus the monitor.
+
+```{julia}
+filterplot(mf)
+```
+
+### If you continue a fit
+
+`mif(mf; Nmif=10)` runs 10 more iterations, with two catches:
+
+1. The cooling schedule restarts from iteration 0, at full strength.
+   Fix: pass `cooling=hyperbolic_cooling(0.5; start=30)` so it picks up
+   where 30 iterations left off. (`geometric_cooling` has no `start`.)
+2. The particle swarm restarts from the previous point estimate, so
+   30 iterations then 10 is not the same computation as one run of 40.
+   There is no fix for this; plan runs long enough in one call.
+
+## 5. Slice: is the likelihood well-behaved near the fit?
+
+A slice holds every other parameter fixed and sweeps one. Cheap, and the
+right first diagnostic. A profile re-maximizes over everything else and
+costs far more.
+
+```{julia}
+θ̂ = coef(mf)
+d = slice_design(θ̂; a=range(1.0,2.2,length=9), k=range(3.0,12.0,length=9))
+s = slice(P, d; Np=1000, nreps=5)
+sliceplot(s)
+```
+
+## 6. Profile + `mcap`: a confidence interval on `a`
+
+A profile re-fits `k` and `x0` by `mif` at every grid value of `a`, then
+evaluates the likelihood at each resulting point with fresh, unperturbed
+filters. `a` stays fixed because the perturbation leaves it out.
+
+`mcap` (a port of R `pomp`'s `mcap`, checked against it to `1e-12`)
+smooths the profile and reads off the point estimate and a Monte Carlo
+adjusted confidence interval, accounting for each point being itself a
+noisy estimate.
+
+```{julia}
+pd = profile_design(
+    a=range(1.1,2.0,length=8);
+    lower=(k=3.0,x0=3.0), upper=(k=12.0,x0=8.0), nprof=3,
+)
+pr = profile(
+    P, pd;
+    Nmif=15, Np=400,
+    perturbations=@perturbn(k ~ LogNormal(0.03), x0 ~ ivp(LogNormal(0.03))),
+    cooling=geometric_cooling(0.5),
+    nreps=5, Np_eval=1000,
+)
+m = mcap(pr.loglik, pr.a)
+```
+
+```{julia}
+mcapplot(m)
+```
+
+```{julia}
+(mle=m.mle, ci=m.ci, se_stat=m.se_stat, se_mc=m.se_mc)
+```
+
+`se_stat` is the usual curvature-based standard error. `se_mc` is the
+extra uncertainty from the profile itself being Monte Carlo noise, not an
+exact curve. `ci` combines both. A confidence interval that ignores
+`se_mc` understates the true uncertainty.
+
+# Part 2: the SEIR genealogy
+
+Same tools, on a genealogy this time. `PhyloPOMP`'s Doob-Gillespie
+simulator builds a tree from the `@mgp`-generated `SEIR` model, and
+`NaiveSEIR.filter_pomp` turns a tree into a `pomp` object whose particle
+filter walks the tree's events.
+
+Genealogy filters never declare `init_state`, because their particle
+state (node, coloring, compartment counts) has no natural "reported
+state". `mif` used to fail on any such model; the fix has been in Aaron's
+POMP.jl since v0.11.1, which is what makes this part possible.
+
+## 1. Simulate a tree
+
+```{julia}
+using PhyloPOMP.NaiveSEIR
+
+β,σ,γ,ω,ψ,χ = 4.0, 1.0, 1.0, 1.0, 0.10, 0.0
+pop = 100
+θ_sim = (β=β, σ=σ, γ=γ, ω=ω, ψ=ψ, χ=χ, N=Float64(pop))
+x0 = (S=pop-1, E=0, I=1, R=0)
+
+rng = MersenneTwister(20260813)
+local g
+for _ ∈ 1:100
+    global g = simulate(PhyloPOMP.SEIR, θ_sim; x0=x0, graft=[0,1], tmax=20.0, rng=rng)
+    nsample(g) ≥ 20 && break
+end
+nsample(g)
+```
+
+The retry loop is the same pattern `test/seir_simulate.jl` uses. A
+stochastic simulation can go extinct or under-sample, so draw until the
+tree is big enough to fit, all from one seeded stream.
+
+## 2. Filter it
+
+```{julia}
+θ_fit = (β=β, σ=σ, γ=γ, ω=ω, ψ=ψ, χ=χ, pop=Float64(pop),
+          S0=(pop-1)/pop, E0=0.0, I0=1/pop, R0=0.0)
+G = NaiveSEIR.filter_pomp(g; θ_fit...)
+pfilter_loglik(G; Np=1000, nreps=10)
+```
+
+Finite, as it should be: the same model generated this tree, at the same
+parameters. Note `ess` against `nreps`: a genealogy filter needs far more
+particles than the toy model for the same precision.
+
+## 3. `mif` on the transmission rate
+
+Estimate `β` from the tree alone, everything else held at its true value.
+The point is the machinery, not the statistics: `Np` and `Nmif` here are
+demo-sized. See the [pipeline plan](../pipeline_plan.pdf) for what a real
+run needs.
+
+```{julia}
+mfg = mif(G; Nmif=20, Np=500,
+          perturbations=@perturbn(β ~ LogNormal(0.02)),
+          cooling=geometric_cooling(0.5))
+(β̂=coef(mfg).β, clean=pfilter_loglik(mfg; Np=1000, nreps=5))
+```
+
+Expect β̂ to land well off the true value of 4.0. One 39-tip tree at
+`Np=500` and `Nmif=20` barely constrains a single transmission rate. A
+real fit needs more particles, more iterations, and several starts.
+
+## 4. Trace plot
+
+```{julia}
+mong = monitor(mfg; Np=500, nreps=2, seed=1, every=5)
+traceplot(mfg; monitor=mong)
+```
+
+## 5. Slice over β
+
+```{julia}
+dg = slice_design(coef(mfg); β=range(2.5,5.5,length=9))
+sg = slice(G, dg; Np=800, nreps=5)
+sliceplot(sg)
+```
+
+The same `slice_design`, `slice`, and `sliceplot` calls as Part 1.
+Nothing about them is specific to a genealogy.
+
+# What you have now
+
+All in the `analysis-layer` branch of `PartiallyObservedMarkovProcesses.jl`:
+
+- **Designs:** `slice_design`, `profile_design`, `runif_design`,
+  `sobol_design`, as in R `pomp`.
+- **Likelihood:** `pfilter_loglik`, `slice`, `profile`: replicate
+  `pfilter` plus `logmeanexp`, as in R `phylopomp`'s `mtbd2_loglik`.
+- **Fitting:** `mif` with `@perturbn`, `geometric_cooling`,
+  `hyperbolic_cooling`, and `monitor` for the unperturbed trace.
+- **Intervals:** `mcap`, the Monte Carlo adjusted profile.
+- **Plots:** `traceplot`, `filterplot`, `sliceplot`, `mcapplot`, drawn
+  with AlgebraOfGraphics. Load `AlgebraOfGraphics` and `CairoMakie` to
+  use them.
+
+They work on any `pomp` object, a toy model or a genealogy filter alike.
+
+## Next
+
+Run Part 2's `profile` and `mcap` on `β` for a real confidence interval,
+at particle counts big enough to trust. Then the same on `MERS`, and on
+each of SIR, LBDP, BDEI, and BDSS as their filters land. See the pipeline
+plan, milestones M2 and M3.
