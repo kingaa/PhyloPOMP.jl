@@ -208,9 +208,16 @@ find_event(model, name) = model.events[findfirst(e -> e.name == name, model.even
         @test :decay ∉ fieldnames(FilterSpec)
         @test :outflow_imbalance in fieldnames(FilterSpec)
 
-        # kli_decay is a separate code path and is still an error stub.
-        @test_throws ErrorException kli_decay(Float64[], Float64[], nothing,
-                                               nothing, PhyloPOMP.SEIR)
+        # kli_decay is a separate code path (mgp_filter.jl); at a state it equals compiled_decay.
+        cols = PhyloPOMP.Coloring(PhyloPOMP.NaiveSEIR.Demes)
+        push!(cols[PhyloPOMP.NaiveSEIR.Infec], 1)
+        x = (S = 30, E = 4, I = 6, R = 5)
+        θ = (β = 3.0, σ = 1.0, γ = 1.0, ω = 0.5, ψ = 0.2, χ = 0.1, N = 100.0)
+        slots = PhyloPOMP.kli_slots(PhyloPOMP.SEIR)
+        al, pv = zeros(length(slots)), zeros(length(slots))
+        PhyloPOMP.kli_rates!(al, pv, slots, cols, x, θ, PhyloPOMP.SEIR)
+        @test kli_decay(al, pv, slots, cols, x, θ, PhyloPOMP.SEIR) ≈
+              PhyloPOMP.compiled_decay(PhyloPOMP.SEIR, x, θ, [0, 1], [4, 6])
     end
 
 end

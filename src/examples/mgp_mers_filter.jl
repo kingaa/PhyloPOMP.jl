@@ -1,5 +1,5 @@
 # MERS filter built from the compiler IR. The regular part is compiled.
-# The singular part reuses NaiveMERS.singular_part!.
+# The singular part reuses NaiveMERS.singular_part!, or the generic singular_update! with generic_singular = true.
 # TCC/THH: no-move weight is Φ_id + ℓ_d·Φ_inl (C(ℓ,s)-weighted sum).
 # THC/TCH cross: boost(Φ_cross, 1/ℓ).
 
@@ -201,15 +201,30 @@ function mers_compiled_regular_part!(
 end
 
 """
+    _mers_theta(args) -> NamedTuple
+
+Parameters of `MERS`, from the keyword parameters of `mers_compiled_filter_pomp`.
+"""
+_mers_theta(args) = (β_cc = args[:Beta_cc], β_ch = args[:Beta_ch],
+                     β_hc = args[:Beta_hc], β_hh = args[:Beta_hh],
+                     γ_c = args[:gamma_c], γ_h = args[:gamma_h],
+                     χ_c = args[:chi_c], χ_h = args[:chi_h],
+                     B_c = args[:Bc], B_h = args[:Bh],
+                     N_c = args[:Nc], N_h = args[:Nh])
+
+"""
     mers_compiled_filter_pomp(; Beta_cc, Beta_ch, Beta_hc, Beta_hh, gamma_c,
                           gamma_h, chi_c, chi_h, Bc, Bh, Sc0, Sh0, Ic0, Ih0,
                           Nc, Nh)
 
 Build the MERS filter POMP for genealogy `gen`.
-Singular part is `NaiveMERS.singular_part!`; regular part is `mers_compiled_regular_part!` with `model = MERS`.
+Regular part is `mers_compiled_regular_part!` with `model = MERS`, or the generic `regular_step!` with `generic_regular = true`.
+Singular part is `NaiveMERS.singular_part!`, or the generic `singular_update!` with `generic_singular = true`.
 """
 mers_compiled_filter_pomp(
     gen::Genealogy;
+    generic_singular = false,
+    generic_regular = false,
     Beta_cc = 4.0, Beta_ch = 0.0, Beta_hc = 1.0, Beta_hh = 4.0,
     gamma_c = 1.0, gamma_h = 1.0,
     chi_c = 1.0, chi_h = 0.0,
@@ -253,12 +268,29 @@ mers_compiled_filter_pomp(
                 )
                 cols = copy(cols)
                 ll = zero(Prob)
-                ll, Sc, Ic, Sh, Ih = NaiveMERS.singular_part!(
-                    cols, ll, geneal, node,
-                    Sc, Ic, Sh, Ih;
-                    args...,
-                )
-                if isfinite(ll)
+                if generic_singular
+                    x = (S_c = Sc, I_c = Ic, S_h = Sh, I_h = Ih)
+                    θ = (β_cc = args[:Beta_cc], β_ch = args[:Beta_ch],
+                         β_hc = args[:Beta_hc], β_hh = args[:Beta_hh],
+                         γ_c = args[:gamma_c], γ_h = args[:gamma_h],
+                         χ_c = args[:chi_c], χ_h = args[:chi_h],
+                         B_c = args[:Bc], B_h = args[:Bh],
+                         N_c = args[:Nc], N_h = args[:Nh])
+                    Δ, x = singular_update!(cols, geneal, node, x, θ, MERS)
+                    ll += Δ
+                    Sc, Ic, Sh, Ih = x.S_c, x.I_c, x.S_h, x.I_h
+                else
+                    ll, Sc, Ic, Sh, Ih = NaiveMERS.singular_part!(
+                        cols, ll, geneal, node,
+                        Sc, Ic, Sh, Ih;
+                        args...,
+                    )
+                end
+                if isfinite(ll) && generic_regular
+                    x = (S_c = Sc, I_c = Ic, S_h = Sh, I_h = Ih)
+                    ll, x, _ = regular_step!(cols, ll, t, dt, x, MERS, _mers_theta(args))
+                    Sc, Ic, Sh, Ih = x.S_c, x.I_c, x.S_h, x.I_h
+                elseif isfinite(ll)
                     ll, Sc, Ic, Sh, Ih = mers_compiled_regular_part!(
                         cols, ll, t, dt,
                         Sc, Ic, Sh, Ih;

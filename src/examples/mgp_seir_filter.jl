@@ -1,5 +1,5 @@
 # SEIR filter built from the compiler IR. The regular part is compiled.
-# The singular part reuses NaiveSEIR.singular_part!.
+# The singular part reuses NaiveSEIR.singular_part!, or the generic singular_update! with generic_singular = true.
 
 export compiled_decay, compiled_event_rates!, compiled_regular_part!,
        compiled_filter_pomp
@@ -171,10 +171,13 @@ end
     compiled_filter_pomp(gen; β, σ, γ, ω, ψ, χ, pop, S0, E0, I0, R0)
 
 Build the SEIR filter POMP for genealogy `gen`.
-Singular part is `NaiveSEIR.singular_part!`; regular part is `compiled_regular_part!` with `model = SEIR`.
+Regular part is `compiled_regular_part!` with `model = SEIR`, or the generic `regular_step!` with `generic_regular = true`.
+Singular part is `NaiveSEIR.singular_part!`, or the generic `singular_update!` with `generic_singular = true`.
 """
 compiled_filter_pomp(
     gen::Genealogy;
+    generic_singular = false,
+    generic_regular = false,
     β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
     pop = 100,
     S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
@@ -211,12 +214,34 @@ compiled_filter_pomp(
                 )
                 cols = copy(cols)
                 ll = zero(Prob)
-                ll, S, E, I, R, live = NaiveSEIR.singular_part!(
-                    cols, geneal, node, ll, live,
-                    S, E, I, R;
-                    args...,
-                )
-                if live && dt > 0 && isfinite(ll)
+                if generic_singular
+                    ellE, ellI = ell(cols)
+                    if live && (I < ellI || E < ellE)
+                        live = false
+                    end
+                    if live
+                        x = (S = S, E = E, I = I, R = R)
+                        θ = (β = args[:β], σ = args[:σ], γ = args[:γ], ω = args[:ω],
+                             ψ = args[:ψ], χ = args[:χ], N = args[:pop])
+                        Δ, x = singular_update!(cols, geneal, node, x, θ, SEIR)
+                        ll += Δ
+                        S, E, I, R = x.S, x.E, x.I, x.R
+                        isfinite(Δ) || (live = false)
+                    end
+                    live || (ll = Prob(-Inf))
+                else
+                    ll, S, E, I, R, live = NaiveSEIR.singular_part!(
+                        cols, geneal, node, ll, live,
+                        S, E, I, R;
+                        args...,
+                    )
+                end
+                if live && dt > 0 && isfinite(ll) && generic_regular
+                    θ = (β = args[:β], σ = args[:σ], γ = args[:γ], ω = args[:ω],
+                         ψ = args[:ψ], χ = args[:χ], N = args[:pop])
+                    ll, x, _ = regular_step!(cols, ll, t, dt, (S = S, E = E, I = I, R = R), SEIR, θ)
+                    S, E, I, R = x.S, x.E, x.I, x.R
+                elseif live && dt > 0 && isfinite(ll)
                     ll, S, E, I, R = compiled_regular_part!(
                         cols, ll, t, dt,
                         S, E, I, R;
