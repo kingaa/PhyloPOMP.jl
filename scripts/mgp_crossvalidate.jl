@@ -1,11 +1,11 @@
-# Compare src/simulate.jl with R phylopomp's runSEIR, runMERS, runSIR, runSI2R
-# and runMTBD2.
+# Compare src/simulate.jl with R phylopomp's runSEIR, runMERS, runSIR, runSI2R,
+# runMTBD2, runLBDP, runBDEI and runBDSS.
 # Run scripts/mgp_crossvalidate.R first. The parameters match that script.
 # Prints a two-sample KS test for each statistic. Writes nothing.
 #
 # Per tree: nsample, internal nodes, inline (degree-1) samples, first/last/mean
 # sample time, first/mean internal-node time, total branch length. With a
-# fourth file (MERS, SI2R, MTBD) it also compares sample counts per deme.
+# fourth file (MERS, SI2R, MTBD, BDEI, BDSS) it also compares sample counts per deme.
 # Final compartment counts come from <rfile>.states when that file exists.
 #
 # The si2r case runs PhyloPOMP.SI2R with r = 1, so every sample removes the
@@ -25,13 +25,27 @@
 # MTBD: none of 13. SI2R (r = 1): mean internal-node time (0.029) and total
 # branch length (0.017) of 14. With SEED=7 and N=6000 those two gave 0.86 and
 # 0.62, and none of the 14 was below 0.05.
+#
+# Baseline, 2026-10-07. LBDP N=2000: none of 10 with p < 0.05. BDSS N=2000: mean
+# sample time (0.004) and mean internal-node time (0.002); with SEED=7, N=4000
+# none of 14 was below 0.05. BDEI N=2000: mean sample time (0.048); with SEED=7,
+# N=4000, nsample (0.0008) and total branch length (0.015); with SEED=11 and 12,
+# N=8000, none was below 0.16.
+#
+# The baselines above used the fork atpabuser/phylopomp 0.19.5.4. Upstream
+# kingaa/phylopomp 0.19.8.1 (2026-10-07): SIR and LBDP unchanged, no p < 0.05.
+# Its runSI2R sends sampled hosts to R (commit bd642fa). PhyloPOMP.SI2R did not
+# until 2026-10-07 and failed every statistic; now it does. si2r N=2000: first
+# sample time 0.034, the rest above 0.05; SEED=7, N=4000: none below 0.21.
+# Against the fork 0.19.5.4 (sampled hosts deleted) si2r now fails. Upstream has
+# no runMTBD2 and no BDEI/BDSS filters.
 using PhyloPOMP
 using PhyloPOMP: Root, Node, Sample
 using PhyloPOMP.SoftMERS.Demes: Camel, Human
 using Random: MersenneTwister
 using Printf
 
-length(ARGS) ≥ 3 || error("usage: mgp_crossvalidate.jl seir|seirchi|mers|sir|si2r|mtbd N rfile [rfile_unobscured]")
+length(ARGS) ≥ 3 || error("usage: mgp_crossvalidate.jl seir|seirchi|mers|sir|si2r|mtbd|lbdp|bdei|bdss N rfile [rfile_unobscured]")
 model = ARGS[1]; N = parse(Int, ARGS[2]); rfile = ARGS[3]
 rfile2 = length(ARGS) ≥ 4 ? ARGS[4] : nothing
 
@@ -58,6 +72,18 @@ elseif model == "mtbd"
          mu1 = 0.5, mu2 = 0.5, psi1 = 0.3, psi2 = 0.3, r1 = 0.7, r2 = 1.0)
     x0 = (I1 = 1, I2 = 0); graft = [1, 0]; tmax = 6.0
     M = PhyloPOMP.MTBD; D = PhyloPOMP.MTBDDemes; smap = [D.I1, D.I2]
+elseif model == "lbdp"
+    θ = (λ = 1.5, μ = 0.5, ψ = 0.3, χ = 0.2)
+    x0 = (n = 1,); graft = [1]; tmax = 4.0
+    M = PhyloPOMP.LBDP; D = PhyloPOMP.Unstructured; smap = nothing
+elseif model == "bdei"
+    θ = (σ = 1.0, λ = 2.0, μ = 0.5, χ = 0.4)
+    x0 = (E = 0, I = 1); graft = [0, 1]; tmax = 4.0
+    M = PhyloPOMP.BDEI; D = PhyloPOMP.MGPDemes2; smap = [D.d1, D.d2]
+elseif model == "bdss"
+    θ = (λ_nn = 1.0, λ_ns = 0.3, λ_sn = 1.5, λ_ss = 2.5, μ = 0.5, χ = 0.4)
+    x0 = (N = 1, S = 0); graft = [1, 0]; tmax = 3.0
+    M = PhyloPOMP.BDSS; D = PhyloPOMP.MGPDemes2; smap = [D.d1, D.d2]
 else
     error("unknown model: $model")
 end
@@ -157,6 +183,9 @@ if !isnothing(Rsp)
     for (k, d) in enumerate(smap)
         name = "n $(Symbol(d)) samples"
         a = Float64[j[k] for j in Jdeme]; b = Float64[r[k] for r in Rsp]
+        if all(==(a[1]), a) && all(==(a[1]), b)
+            @printf("%-22s %10.3f %10.3f  (constant on both sides)\n", name, mean(a), mean(b)); continue
+        end
         Dst, p = ks_two_sample(a, b)
         @printf("%-22s %10.3f %10.3f %8.4f %8.4f%s\n", name, mean(a), mean(b), Dst, p,
                 p < 0.05 ? "  <-- significant" : "")

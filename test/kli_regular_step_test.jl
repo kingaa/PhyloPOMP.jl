@@ -389,6 +389,23 @@ end
         cols2 = mers_cols(1, 1)                                   # the right count passes the check
         @test PhyloPOMP._check_demes(cols2, MERS) === nothing
     end
+
+    @testset "fast target factors equal the IR versions" begin
+        nchecked = 0
+        for M in (PhyloPOMP.MERS, SE, PhyloPOMP.SI2R, PhyloPOMP.BDSS, PhyloPOMP.BDEI, PhyloPOMP.MTBD), ev in M.events
+            (ev.regular && ev.type in (BIRTH, MIGRATION)) || continue
+            for n1 in 0:7, n2 in 0:7, l1 in 0:n1, l2 in 0:n2
+                ℓ = [l1, l2]; n = [n1, n2]
+                @test PhyloPOMP._no_move_target(ev, ℓ, n) === PhyloPOMP._no_move_target_ir(ev, ℓ, n)
+                for d in 1:2
+                    @test PhyloPOMP._cross_phi(ev, d, ℓ, n) === PhyloPOMP._cross_phi_ir(ev, d, ℓ, n)
+                end
+                nchecked += 1
+            end
+        end
+        @info "fast vs IR target factors: $nchecked (event, ℓ, n) cases, bit-identical"
+        @test nchecked > 5000
+    end
 end
 
 end # module KliRegularStepTest

@@ -162,7 +162,7 @@ function _event_expr(args, comps, pars, demes)
     _check_move_vs_pop(name, from, r, delta, comps, demes)
     hazard = :((x, θ) -> $(_rewrite(kv[:rate], comps, pars)))
     :(Event($(QuoteNode(name)), $delta, $hazard, $r, $event_type,
-            $from, $into, $regular, $(!regular)))
+            $from, $into, $regular, $(!regular), $(QuoteNode(kv[:rate]))))
 end
 
 "A marker parsed by `@mgp`; it is invalid outside an `@mgp` block."

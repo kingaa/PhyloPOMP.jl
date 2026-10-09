@@ -99,19 +99,19 @@ end
         @test sh.r == [0, 1]
         @test sh.regular == false
 
-        ## Sampling with removal (probability r): the lineage ends.
+        ## Sampling with removal (probability r): the lineage ends and the host enters R.
         slr = si2r_event(:SL_remove)
         @test slr.type == SAMPLE
         @test slr.from == 1
         @test slr.r == [0, 0]
-        @test slr.Δ == [:I_L => -1]
+        @test slr.Δ == [:I_L => -1, :R => 1]
         @test slr.regular == false
 
         shr = si2r_event(:SH_remove)
         @test shr.type == SAMPLE
         @test shr.from == 2
         @test shr.r == [0, 0]
-        @test shr.Δ == [:I_H => -1]
+        @test shr.Δ == [:I_H => -1, :R => 1]
         @test shr.regular == false
     end
 

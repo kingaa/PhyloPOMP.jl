@@ -1,0 +1,9 @@
+# Tiny MERS genealogies simulated by PhyloPOMP.simulate (3 camels, 3 humans, x0 = S_c 2, I_c 1, S_h 3; beta_cc = 3,
+# beta_ch = 1, beta_hc = 1.5, beta_hh = 2, gamma = 0.7, chi = 0.6, B = 0, N_c = N_h = 3; tmax = 4; sample demes observed)
+# with exact L from scripts/exact_dp.jl (mers_dp) and L' ("stays" removed at cross-species infections when every
+# infected host of the infector's species is tracked).
+# columns: model, tree, newick, time, L, L'
+mers	1	((([&&PhyloPOMP type=sample deme=Camel]:1.7872546545109,[&&PhyloPOMP type=sample deme=Camel]:2.3429823864866)[&&PhyloPOMP type=node]:0.12182751113091,[&&PhyloPOMP type=sample deme=Human]:0.38545745131567)[&&PhyloPOMP type=node]:0.5392647022782);	4.0	-8.194933404362567	-9.067746914013084
+mers	2	((([&&PhyloPOMP type=sample deme=Camel]:0.034014015098391,[&&PhyloPOMP type=sample deme=Human]:0.57072653630664)[&&PhyloPOMP type=node]:0.047337932974726,[&&PhyloPOMP type=sample deme=Camel]:0.12075046359793)[&&PhyloPOMP type=node]:0.084814177567134);	4.0	-0.9065637724605785	-1.100034084117347
+mers	3	((([&&PhyloPOMP type=sample deme=Human]:0.018916114474593,[&&PhyloPOMP type=sample deme=Camel]:0.3752489142926)[&&PhyloPOMP type=node]:0.1465752079366,[&&PhyloPOMP type=sample deme=Camel]:0.92519906349724)[&&PhyloPOMP type=node]:0.58220917426458);	4.0	-4.1987361908377165	-4.86498724983798
+mers	4	(([&&PhyloPOMP type=sample deme=Camel]:1.0799308200323,[&&PhyloPOMP type=sample deme=Human]:1.3051936269582)[&&PhyloPOMP type=node]:0.44097087053833);	4.0	-4.715180338699058	-5.151577434753296

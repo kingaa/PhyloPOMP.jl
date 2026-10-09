@@ -1,0 +1,8 @@
+# Tiny SEIR genealogies simulated by PhyloPOMP.simulate (N = 5 hosts, x0 = S 4, I 1; β = 3, σ = 1.5, γ = 0.8,
+# ω = 0.5, ψ = 0.6, χ = 0; tmax = 4) with their exact log-likelihood L from scripts/exact_dp.jl (seir_dp) and L', the
+# same with the "lineage stays with the infector" outcome removed whenever every infectious host is tracked.
+# columns: model, tree, newick, time, L, L'
+seir	1	((([&&PhyloPOMP type=sample]:0.21841853173528,([&&PhyloPOMP type=sample]:0.60656946146696)[&&PhyloPOMP type=sample]:0.80905323324484)[&&PhyloPOMP type=node]:0.35707291259394,[&&PhyloPOMP type=sample]:1.5574901614099)[&&PhyloPOMP type=node]:0.10548427199531);	4.0	-6.837129805850806	-7.663088149315292
+seir	2	((([&&PhyloPOMP type=sample]:0.2393860860381,[&&PhyloPOMP type=sample]:1.5528922457335)[&&PhyloPOMP type=node]:0.77826991946859,[&&PhyloPOMP type=sample]:2.0184957314614)[&&PhyloPOMP type=node]:1.6681257402305);	4.0	-8.54958228905135	-9.6638705568314
+seir	3	((([&&PhyloPOMP type=sample]:1.1246910170822)[&&PhyloPOMP type=sample]:0.86893734277913,([&&PhyloPOMP type=sample]:0.22534282188471)[&&PhyloPOMP type=sample]:2.4575732790185)[&&PhyloPOMP type=node]:0.14809825372095);	4.0	-7.309706437391898	-8.580456740900042
+seir	4	((([&&PhyloPOMP type=sample]:0.34867409758943,([&&PhyloPOMP type=sample]:0.90002646567535)[&&PhyloPOMP type=sample]:0.4076034913085)[&&PhyloPOMP type=node]:0.79972443917297)[&&PhyloPOMP type=sample]:0.19806487363403);	4.0	-7.18817908314968	-8.559148865972217

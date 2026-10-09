@@ -13,15 +13,28 @@ Fields:
 - `key`: grouping key, a `Tuple`. Shapes: `(:noop, d)`, `(:cross, d_from, d_to)`,
   `(:fork, d_anc, slot_demes)` with `slot_demes` a sorted `Tuple`.
 - `kind`: `:noop`, `:cross` or `:fork` (same as `key[1]`).
-- `Φ`: exact `Rational{Int}` sum of `phi` over the group.
+- `Φ`: exact `Rational{Int}` sum of `phi` over the group, one term per saturation class. It is not a
+  probability: a class with `s` tracked lineages in the slots stands for `Π_d C(ℓ_d, s_d)` configurations.
 - `transitions`: the grouped KLITransitions, in input order.
+- `mass`: `Σ Π_d C(ℓ_d, s_d)·phi` over the group, the probability of this outcome given the event when
+  `Q = 1` (the masses of all outcomes then sum to 1, Chu–Vandermonde). `missing` unless `ℓ` was given.
+  The no-move `mass` is `Φ_id + ℓ_a·Φ_inl`, the weight the filter uses.
 """
 struct ReducedTransition
     key         :: Tuple
     kind        :: Symbol
     Φ           :: Rational{Int}
     transitions :: Vector{KLITransition}
+    mass        :: Union{Rational{Int},Missing}
 end
+ReducedTransition(key, kind, Φ, transitions) = ReducedTransition(key, kind, Φ, transitions, missing)
+
+"""
+    multiplicity(t::KLITransition, ℓ) -> Int
+
+Number of ways to choose which tracked lineages occupy the slots of `t`: `Π_d C(ℓ_d, s_d)`.
+"""
+multiplicity(t::KLITransition, ℓ::AbstractVector{<:Integer}) = prod(binomial(ℓ[d], t.s[d]) for d in eachindex(ℓ))
 
 """
     reduced_key(t::KLITransition) -> Tuple
@@ -40,10 +53,11 @@ reduced_kind(t::CrossDemeTransition) = :cross
 reduced_kind(t::ForkTransition) = :fork
 
 """
-    reduce_event_indicator(transitions::Vector{KLITransition}) -> Vector{ReducedTransition}
+    reduce_event_indicator(transitions::Vector{KLITransition}; ℓ = nothing) -> Vector{ReducedTransition}
 
 Group `transitions` (`full_transitions` output for one event/state) by `reduced_key`.
-`Φ` is the exact sum of `phi` per group.
+`Φ` is the exact sum of `phi` per group. With `ℓ` (the `ℓ` given to `full_transitions`), `mass` weights each
+`phi` by its `multiplicity`.
 
 Returns one `ReducedTransition` per distinct outcome, in first-seen order.
 `sum(rt.Φ for rt in result) == sum(t.phi for t in transitions)`.
@@ -51,7 +65,8 @@ Returns one `ReducedTransition` per distinct outcome, in first-seen order.
 Example: MERS THC gives 4 transitions.
 Identity and InlineSameDeme merge into `(:noop, 1)`, giving 3 reduced transitions.
 """
-function reduce_event_indicator(transitions::AbstractVector{<:KLITransition})
+function reduce_event_indicator(transitions::AbstractVector{<:KLITransition};
+                                ℓ::Union{Nothing,AbstractVector{<:Integer}} = nothing)
     order = Tuple[]
     groups = Dict{Tuple,Vector{KLITransition}}()
     for t in transitions
@@ -66,7 +81,8 @@ function reduce_event_indicator(transitions::AbstractVector{<:KLITransition})
     for (i, k) in enumerate(order)
         members = groups[k]
         Φ = sum(t.phi for t in members)
-        result[i] = ReducedTransition(k, reduced_kind(members[1]), Φ, members)
+        mass = isnothing(ℓ) ? missing : sum(multiplicity(t, ℓ) * t.phi for t in members)
+        result[i] = ReducedTransition(k, reduced_kind(members[1]), Φ, members, mass)
     end
     return result
 end
@@ -74,8 +90,8 @@ end
 """
     reduced_transitions(event::Event, ell, n; Q = 1) -> Vector{ReducedTransition}
 
-`full_transitions(event, ℓ, n; Q)` followed by `reduce_event_indicator`.
+`full_transitions(event, ℓ, n; Q)` followed by `reduce_event_indicator(...; ℓ)`, so `mass` is filled.
 """
 reduced_transitions(event::Event, ℓ::AbstractVector{<:Integer},
                      n::AbstractVector{<:Integer}; Q::Real = 1) =
-    reduce_event_indicator(full_transitions(event, ℓ, n; Q = Q))
+    reduce_event_indicator(full_transitions(event, ℓ, n; Q = Q); ℓ = ℓ)

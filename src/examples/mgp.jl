@@ -1,5 +1,5 @@
 # Model layer: an MGPModel is a table of Events.
-export @mgp, @event, EventType, Event, MGPModel, SEIR, MERS, SI2R, SIR, MTBD
+export @mgp, @event, EventType, Event, MGPModel, SEIR, MERS, SI2R, SIR, MTBD, LBDP, BDEI, BDSS
 
 # Pure event types.
 # DEATH has no coloring op; SAMPLE is chop χ; NEUTRAL leaves lineages unchanged.
@@ -35,7 +35,10 @@ struct Event
     into     :: Vector{Int}
     regular  :: Bool
     observed :: Bool
+    rate     :: Any        # the rate expression as written in `@mgp` (`nothing` for a hand-built event)
 end
+Event(name, Δ, hazard, r, type, from, into, regular, observed) =
+    Event(name, Δ, hazard, r, type, from, into, regular, observed, nothing)
 
 """
     MGPModel
@@ -73,3 +76,6 @@ include("mgp_mers.jl")
 include("mgp_si2r.jl")
 include("mgp_sir.jl")
 include("mgp_mtbd.jl")
+include("mgp_lbdp.jl")
+include("mgp_bdei.jl")
+include("mgp_bdss.jl")

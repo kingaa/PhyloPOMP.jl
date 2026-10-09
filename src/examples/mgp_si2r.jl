@@ -1,6 +1,7 @@
 # SI2R superspreading model. Demes: I_L (low-rate spreader), I_H (super-spreader).
-# A host is sampled at rate ψ and removed with probability r.
-# r = 0 is the model of si2r_model.qmd; r = 1 is R phylopomp's runSI2R (chi = ψ).
+# A host is sampled at rate ψ and removed into R with probability r.
+# r = 0 is the model of si2r_model.qmd; r = 1 is R phylopomp's runSI2R (chi = ψ). Since phylopomp 0.19.8
+# (commit bd642fa) a removed sampled host enters R, as here; before, it left the population.
 
 @mgp SI2R begin
     compartments = (S, I_L, I_H, R)
@@ -16,6 +17,6 @@
     @event W rate=ω*R  pop=(R=-1, S=+1) move=none kind=regular
     @event SL rate=(1-r)*ψ*I_L  pop=() move=sample(I_L) kind=singular
     @event SH rate=(1-r)*ψ*I_H  pop=() move=sample(I_H) kind=singular
-    @event SL_remove rate=r*ψ*I_L  pop=(I_L=-1) move=sample_remove(I_L) kind=singular
-    @event SH_remove rate=r*ψ*I_H  pop=(I_H=-1) move=sample_remove(I_H) kind=singular
+    @event SL_remove rate=r*ψ*I_L  pop=(I_L=-1, R=+1) move=sample_remove(I_L) kind=singular
+    @event SH_remove rate=r*ψ*I_H  pop=(I_H=-1, R=+1) move=sample_remove(I_H) kind=singular
 end

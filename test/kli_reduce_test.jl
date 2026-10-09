@@ -206,6 +206,34 @@ by_kind(rts) = Dict(rt.kind => rt for rt in rts)
         @test Set(objectid.(grouped)) == Set(objectid.(ts))
     end
 
+
+    @testset "mass: multiplicity-weighted, sums to 1 (Chu-Vandermonde)" begin
+        nchecked = 0
+        for M in (PhyloPOMP.SEIR, PhyloPOMP.MERS, PhyloPOMP.SI2R, PhyloPOMP.BDSS, PhyloPOMP.LBDP), ev in M.events
+            ev.type in (PhyloPOMP.BIRTH, PhyloPOMP.MIGRATION) || continue
+            D = length(M.demes)
+            for n1 in 1:6, n2 in (D == 1 ? (0:0) : (1:6)), l1 in 0:n1, l2 in 0:n2
+                n = D == 1 ? [n1] : [n1, n2]; ℓ = D == 1 ? [l1] : [l1, l2]
+                all(n .>= ev.r) || continue          # a post-event deme holds at least the hosts the event made
+                rts = reduced_transitions(ev, ℓ, n)
+                @test sum(rt.mass for rt in rts) == 1
+                ts = full_transitions(ev, ℓ, n)
+                nm = sum((rt.mass for rt in rts if rt.kind == :noop); init = 0 // 1)
+                a = ev.from
+                Φid = sum((t.phi for t in ts if t isa PhyloPOMP.IdentityTransition); init = 0 // 1)
+                Φinl = sum((t.phi for t in ts if t isa PhyloPOMP.InlineSameDemeTransition && t.deme == a); init = 0 // 1)
+                @test nm == Φid + ℓ[a] * Φinl
+                nchecked += 1
+            end
+        end
+        @info "mass checks: $nchecked (event, ℓ, n) cases"
+        @test nchecked > 1000
+        # the case from the compiler tutorial: LBDP birth, ℓ = 2, n = 5
+        rts = reduced_transitions(PhyloPOMP.LBDP.events[1], [2], [5])
+        @test [(rt.kind, rt.Φ, rt.mass) for rt in rts] == [(:noop, 3 // 5, 9 // 10), (:fork, 1 // 10, 1 // 10)]
+        @test ismissing(only(reduce_event_indicator(full_transitions(PhyloPOMP.LBDP.events[1], [0], [3]))).mass)
+    end
+
 end
 
 end # module

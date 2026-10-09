@@ -1,0 +1,180 @@
+---
+title: "Compiler tutorial: LBDP from table to filter"
+subtitle: "PhyloPOMP.jl, 2026-10-07"
+engine: julia
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: false
+---
+
+## Run this now
+
+```{.bash}
+quarto render docs/tutorial/compiler_tutorial.qmd
+```
+
+Run it from the PhyloPOMP.jl directory.
+It writes `docs/tutorial/compiler_tutorial.html`.
+It uses the same environment as the simulator tutorial.
+
+## Setup
+
+```{julia}
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "simulator"))
+Pkg.instantiate()
+
+using PhyloPOMP
+using PhyloPOMP: full_transitions, reduce_event_indicator, total_decay, validate_model
+using Random: Xoshiro, seed!
+import CairoMakie
+```
+
+## 1. The model is a table
+
+LBDP is the linear birth-death-sampling process.
+One compartment, `n`, the number of infected hosts.
+Every rate is per host.
+
+```{julia}
+θ  = (λ = 1.5, μ = 0.5, ψ = 0.3, χ = 0.2)
+x0 = (n = 1,)
+
+for ev in LBDP.events
+    println(rpad(string(ev.name), 16), rpad(string(ev.type), 8),
+            " Δ = ", ev.Δ, "  r = ", ev.r, "  rate now = ", ev.hazard(x0, θ))
+end
+println("problems found: ", validate_model(LBDP))
+```
+
+| Event | What happens to the tree |
+|---|---|
+| `birth` | A branch point: one lineage becomes two. |
+| `death` | A lineage ends without a sample. |
+| `sampling` | A sample; the host stays infected (`ψ`). |
+| `sampling_remove` | A sample that removes the host (`χ`). |
+
+## 2. Simulate a genealogy from the table
+
+Keep the first tree with 5 to 10 samples, so that it has several branch points.
+
+```{julia}
+rng = Xoshiro(12)
+g = simulate(LBDP, θ; x0 = x0, graft = [1], tmax = 4.0, rng = rng)
+while !(5 <= nsample(g) <= 10)
+    global g = simulate(LBDP, θ; x0 = x0, graft = [1], tmax = 4.0, rng = rng)
+end
+println("samples: ", nsample(g), ", branch points: ", length(nodes(g)))
+genealogyplot(g, title = "LBDP genealogy")
+```
+
+## 3. What the compiler derives from one event
+
+The filter tracks `ℓ`, the number of lineages of the tree alive at time `t`.
+A birth among `n` hosts may or may not join two of them.
+`full_transitions` lists every case with its compatibility factor `φ`.
+
+```{julia}
+birth = LBDP.events[1]
+ℓ, n = [2], [5]          # 2 tracked lineages, 5 hosts after the birth
+for t in full_transitions(birth, ℓ, n)
+    println(rpad(string(typeof(t)), 28), " s = ", t.s, "  φ = ", t.phi)
+end
+```
+
+- `IdentityTransition`: the birth involved no tracked lineage.
+- `InlineSameDemeTransition`: it involved one tracked lineage, which stays where it was.
+- `ForkTransition`: it joined two tracked lineages. That is a branch point of the tree.
+
+Each `φ` is for one configuration of the class. `InlineSameDemeTransition` stands for `ℓ` configurations
+(any of the `ℓ` tracked lineages can be the parent's), and the fork for `C(ℓ,2)`.
+Weighted by these counts, the outcomes are probabilities and sum to 1.
+`reduced_transitions` reports both: `Φ`, the plain sum of `φ`, and `mass`, the weighted sum.
+
+```{julia}
+for r in PhyloPOMP.reduced_transitions(birth, ℓ, n)
+    println(rpad(string(r.kind), 6), " Φ = ", r.Φ, "   mass = ", r.mass)
+end
+ts = full_transitions(birth, ℓ, n)
+Φid  = only(t.phi for t in ts if t isa PhyloPOMP.IdentityTransition)
+Φinl = only(t.phi for t in ts if t isa PhyloPOMP.InlineSameDemeTransition)
+println("Φ_id + ℓ·Φ_inl   = ", Φid + ℓ[1] * Φinl)
+println("1 - C(2,2)/C(5,2) = ", 1 - 1//10)
+```
+
+Between tree nodes no branch point is visible, so the filter weights a birth by the no-fork mass,
+`Φ_id + ℓ·Φ_inl = 1 − C(ℓ,2)/C(n,2)`, not by the plain sum `Φ`.
+
+The decay term is the rate of events the tree rules out between nodes.
+For LBDP it is the sampling rate `(ψ + χ)·n`, plus deaths when every host is tracked:
+
+```{julia}
+println("decay at n = 5, ℓ = 2: ", total_decay(LBDP, (n = 5,), θ, [2], [5]))
+println("decay at n = 2, ℓ = 2: ", total_decay(LBDP, (n = 2,), θ, [2], [2]))
+```
+
+## 4. The generated filter
+
+`mgp_filter_pomp` assembles the singular step (at each tree node) and the regular step
+(between nodes) into a pomp object. Nothing in it is specific to LBDP.
+
+```{julia}
+P = mgp_filter_pomp(g, LBDP; θ = θ, x0 = x0)
+seed!(1)
+ll = [logLik(pfilter(P, Np = 2000)) for _ in 1:20]
+est, se = logmeanexp(ll, se = true)
+println("filter estimate: ", round(est, digits = 3), " ± ", round(se, digits = 3))
+```
+
+## 5. Check against the exact likelihood
+
+For LBDP the likelihood of a genealogy has a closed form (`lbdp_exact`, ported from R phylopomp).
+The filter is a Monte Carlo estimate of the same number.
+
+```{julia}
+exact = lbdp_exact(g; θ...)
+println("exact:           ", round(exact, digits = 3))
+println("filter - exact:  ", round(est - exact, digits = 3),
+        "  (", round((est - exact) / se, digits = 2), " standard errors)")
+```
+
+A difference of a few standard errors or less is what a correct filter gives.
+One tree is one check. The next cell repeats it on 8 more trees with 3 to 12 samples.
+On the natural scale an unbiased filter gives a mean of `exp(ll - exact)` equal to 1.
+
+```{julia}
+seed!(2)
+for k in 1:8
+    h = simulate(LBDP, θ; x0 = x0, graft = [1], tmax = 4.0, rng = rng)
+    while !(3 <= nsample(h) <= 12)
+        h = simulate(LBDP, θ; x0 = x0, graft = [1], tmax = 4.0, rng = rng)
+    end
+    ex = lbdp_exact(h; θ...)
+    w = [exp(logLik(pfilter(mgp_filter_pomp(h, LBDP; θ = θ, x0 = x0), Np = 1000)) - ex) for _ in 1:20]
+    m = sum(w) / 20; se = sqrt(sum((w .- m) .^ 2) / 19 / 20)
+    println("tree $k: ", lpad(nsample(h), 2), " samples   mean exp(ll - exact) = ",
+            round(m, digits = 3), " ± ", round(se, digits = 3))
+end
+```
+
+`test/mgp_filter_pomp_test.jl` runs the check on two trees simulated by R, and
+`test/exact_likelihood_test.jl` on SEIR, against an exact likelihood computed host by host.
+
+## 6. A likelihood profile
+
+```{julia}
+λs = 1.0:0.25:2.5
+ex = [lbdp_exact(g; θ..., λ = λ) for λ in λs]
+fi = map(λs) do λ
+    Pλ = mgp_filter_pomp(g, LBDP; θ = merge(θ, (λ = λ,)), x0 = x0)
+    logmeanexp([logLik(pfilter(Pλ, Np = 1000)) for _ in 1:10])
+end
+fig = CairoMakie.Figure(size = (600, 300))
+ax = CairoMakie.Axis(fig[1, 1], xlabel = "λ", ylabel = "log-likelihood")
+CairoMakie.lines!(ax, collect(λs), ex, label = "exact")
+CairoMakie.scatter!(ax, collect(λs), fi, label = "filter")
+CairoMakie.axislegend(ax)
+fig
+```

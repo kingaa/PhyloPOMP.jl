@@ -217,8 +217,10 @@ exact curve. `ci` combines both. A confidence interval that ignores
 
 Same tools, on a genealogy this time. `PhyloPOMP`'s Doob-Gillespie
 simulator builds a tree from the `@mgp`-generated `SEIR` model, and
-`NaiveSEIR.filter_pomp` turns a tree into a `pomp` object whose particle
-filter walks the tree's events.
+`mgp_filter_pomp` builds the particle filter for that tree from the same
+`SEIR` table: the compiler, with no hand-written SEIR code. The filter is
+checked against an exact likelihood in `test/exact_likelihood_test.jl`
+(see the compiler tutorial).
 
 Genealogy filters never declare `init_state`, because their particle
 state (node, coloring, compartment counts) has no natural "reported
@@ -228,8 +230,6 @@ POMP.jl since v0.11.1, which is what makes this part possible.
 ## 1. Simulate a tree
 
 ```{julia}
-using PhyloPOMP.NaiveSEIR
-
 β,σ,γ,ω,ψ,χ = 4.0, 1.0, 1.0, 1.0, 0.10, 0.0
 pop = 100
 θ_sim = (β=β, σ=σ, γ=γ, ω=ω, ψ=ψ, χ=χ, N=Float64(pop))
@@ -251,15 +251,16 @@ tree is big enough to fit, all from one seeded stream.
 ## 2. Filter it
 
 ```{julia}
-θ_fit = (β=β, σ=σ, γ=γ, ω=ω, ψ=ψ, χ=χ, pop=Float64(pop),
-          S0=(pop-1)/pop, E0=0.0, I0=1/pop, R0=0.0)
-G = NaiveSEIR.filter_pomp(g; θ_fit...)
+G = mgp_filter_pomp(g, PhyloPOMP.SEIR; θ=θ_sim, x0=x0)
 pfilter_loglik(G; Np=1000, nreps=10)
 ```
 
 Finite, as it should be: the same model generated this tree, at the same
 parameters. Note `ess` against `nreps`: a genealogy filter needs far more
 particles than the toy model for the same precision.
+
+The parameters of `G` are the table's own, `θ_sim`: `β, σ, γ, ω, ψ, χ, N`.
+The initial state `x0` is fixed when `G` is built; it is not a parameter.
 
 ## 3. `mif` on the transmission rate
 
@@ -275,9 +276,10 @@ mfg = mif(G; Nmif=20, Np=500,
 (β̂=coef(mfg).β, clean=pfilter_loglik(mfg; Np=1000, nreps=5))
 ```
 
-Expect β̂ to land well off the true value of 4.0. One 39-tip tree at
-`Np=500` and `Nmif=20` barely constrains a single transmission rate. A
-real fit needs more particles, more iterations, and several starts.
+Do not read much into how close β̂ lands to the true value of 4.0. One
+33-tip tree at `Np=500` and `Nmif=20` barely constrains a single
+transmission rate, and `ess` above is low. A real fit needs more
+particles, more iterations, and several starts.
 
 ## 4. Trace plot
 
@@ -317,6 +319,6 @@ They work on any `pomp` object, a toy model or a genealogy filter alike.
 ## Next
 
 Run Part 2's `profile` and `mcap` on `β` for a real confidence interval,
-at particle counts big enough to trust. Then the same on `MERS`, and on
-each of SIR, LBDP, BDEI, and BDSS as their filters land. See the pipeline
-plan, milestones M2 and M3.
+at particle counts big enough to trust. Then the same on `MERS`, `SIR`,
+`SI2R`, `LBDP`, `BDEI` and `BDSS`: `mgp_filter_pomp` builds each filter from
+its `@mgp` table. See the pipeline plan, milestones M2 and M3.

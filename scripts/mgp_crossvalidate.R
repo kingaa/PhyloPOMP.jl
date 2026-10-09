@@ -1,7 +1,7 @@
 ## Reference draws from R phylopomp for scripts/mgp_crossvalidate.jl.
 ## One Newick string per line. A blank line means the run had no samples.
 ## <out>.states has the final population of each run.
-## For MERS, SI2R and MTBD, the optional fourth file is
+## For MERS, SI2R, MTBD, BDEI and BDSS, the optional fourth file is
 ## `newick(x, obscure = FALSE)`, which keeps the deme of each sample.
 ## Parameters match the Julia script.
 ##
@@ -11,6 +11,9 @@
 ##   Rscript scripts/mgp_crossvalidate.R sir 2000 /tmp/r_sir.txt
 ##   Rscript scripts/mgp_crossvalidate.R si2r 2000 /tmp/r_si2r.txt /tmp/r_si2r_unobs.txt
 ##   Rscript scripts/mgp_crossvalidate.R mtbd 2000 /tmp/r_mtbd.txt /tmp/r_mtbd_unobs.txt
+##   Rscript scripts/mgp_crossvalidate.R lbdp 2000 /tmp/r_lbdp.txt
+##   Rscript scripts/mgp_crossvalidate.R bdei 2000 /tmp/r_bdei.txt /tmp/r_bdei_unobs.txt
+##   Rscript scripts/mgp_crossvalidate.R bdss 2000 /tmp/r_bdss.txt /tmp/r_bdss_unobs.txt
 ##
 ## Not part of test/runtests.jl. It needs R and phylopomp, and a KS test
 ## does not belong in CI.
@@ -56,6 +59,13 @@ for (i in seq_len(N)) {
     x <- runMTBD2(time = 6, t0 = 0, lambda_1_1 = 1.2, lambda_1_2 = 0.3, lambda_2_1 = 0.2,
                   lambda_2_2 = 0.9, m_1_2 = 0.2, m_2_1 = 0.1, mu_1 = 0.5, mu_2 = 0.5,
                   psi_1 = 0.3, psi_2 = 0.3, r_1 = 0.7, r_2 = 1, I1_0 = 1, I2_0 = 0)
+  } else if (model == "lbdp") {
+    x <- runLBDP(time = 4, t0 = 0, lambda = 1.5, mu = 0.5, psi = 0.3, chi = 0.2, n0 = 1)
+  } else if (model == "bdei") {
+    x <- runBDEI(time = 4, t0 = 0, sigma = 1, lambda = 2, mu = 0.5, chi = 0.4, pop = 1, E0 = 0, I0 = 1)
+  } else if (model == "bdss") {
+    x <- runBDSS(time = 3, t0 = 0, lambda_nn = 1, lambda_ns = 0.3, lambda_sn = 1.5, lambda_ss = 2.5,
+                 mu = 0.5, chi = 0.4, pop = 1, N0 = 1, S0 = 0)
   } else stop("unknown model: ", model)
   trees[i] <- newick(x)                                      # prune=TRUE, obscure=TRUE
   if (!is.na(out2)) trees2[i] <- newick(x, obscure = FALSE)  # keeps sample demes

@@ -2305,12 +2305,9 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <div class="ansi-escaped-output">
 <pre><span class="ansi-green-fg ansi-bold">  Activating</span> project at `~/Desktop/Projects/PhyloPOMP.jl/docs/tutorial`
 <span class="ansi-green-fg ansi-bold">Precompiling</span> packages...
-   1.6 s<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">IntervalSets → IntervalSetsRecipesBaseExt</span>
-   9.2 s<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">SciMLBase → SciMLBaseMakieExt</span>
-  15.5 s<span class="ansi-green-fg">  ✓ </span>PartiallyObservedMarkovProcesses → PartiallyObservedMarkovProcessesAoGExt
-  23.1 s<span class="ansi-green-fg">  ✓ </span>PhyloPOMP
-  14.4 s<span class="ansi-green-fg">  ✓ </span>PhyloPOMP → PhyloPOMPMakieExt
-  5 dependencies successfully precompiled in 40 seconds. 457 already precompiled.
+   6.8 s<span class="ansi-green-fg">  ✓ </span>PhyloPOMP
+   5.4 s<span class="ansi-green-fg">  ✓ </span>PhyloPOMP → PhyloPOMPMakieExt
+  2 dependencies successfully precompiled in 13 seconds. 460 already precompiled.
 </pre>
 </div>
 </div>
@@ -2465,25 +2462,23 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 </section>
 <section id="part-2-the-seir-genealogy" class="level1">
 <h1>Part 2: the SEIR genealogy</h1>
-<p>Same tools, on a genealogy this time. <code>PhyloPOMP</code>’s Doob-Gillespie simulator builds a tree from the <code>@mgp</code>-generated <code>SEIR</code> model, and <code>NaiveSEIR.filter_pomp</code> turns a tree into a <code>pomp</code> object whose particle filter walks the tree’s events.</p>
+<p>Same tools, on a genealogy this time. <code>PhyloPOMP</code>’s Doob-Gillespie simulator builds a tree from the <code>@mgp</code>-generated <code>SEIR</code> model, and <code>mgp_filter_pomp</code> builds the particle filter for that tree from the same <code>SEIR</code> table: the compiler, with no hand-written SEIR code. The filter is checked against an exact likelihood in <code>test/exact_likelihood_test.jl</code> (see the compiler tutorial).</p>
 <p>Genealogy filters never declare <code>init_state</code>, because their particle state (node, coloring, compartment counts) has no natural “reported state”. <code>mif</code> used to fail on any such model; the fix has been in Aaron’s POMP.jl since v0.11.1, which is what makes this part possible.</p>
 <section id="simulate-a-tree" class="level2">
 <h2 class="anchored" data-anchor-id="simulate-a-tree">1. Simulate a tree</h2>
 <div id="24" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">PhyloPOMP.NaiveSEIR</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>β,σ,γ,ω,ψ,χ <span class="op">=</span> <span class="fl">4.0</span>, <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.10</span>, <span class="fl">0.0</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>pop <span class="op">=</span> <span class="fl">100</span></span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>θ_sim <span class="op">=</span> (β<span class="op">=</span>β, σ<span class="op">=</span>σ, γ<span class="op">=</span>γ, ω<span class="op">=</span>ω, ψ<span class="op">=</span>ψ, χ<span class="op">=</span>χ, N<span class="op">=</span><span class="fu">Float64</span>(pop))</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>x0 <span class="op">=</span> (S<span class="op">=</span>pop<span class="op">-</span><span class="fl">1</span>, E<span class="op">=</span><span class="fl">0</span>, I<span class="op">=</span><span class="fl">1</span>, R<span class="op">=</span><span class="fl">0</span>)</span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> <span class="fu">MersenneTwister</span>(<span class="fl">20260813</span>)</span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="kw">local</span> g</span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="op">∈</span> <span class="fl">1</span><span class="op">:</span><span class="fl">100</span></span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> g <span class="op">=</span> <span class="fu">simulate</span>(PhyloPOMP.SEIR, θ_sim; x0<span class="op">=</span>x0, graft<span class="op">=</span>[<span class="fl">0</span>,<span class="fl">1</span>], tmax<span class="op">=</span><span class="fl">20.0</span>, rng<span class="op">=</span>rng)</span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">nsample</span>(g) <span class="op">≥</span> <span class="fl">20</span> <span class="op">&amp;&amp;</span> <span class="cf">break</span></span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a><span class="fu">nsample</span>(g)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>β,σ,γ,ω,ψ,χ <span class="op">=</span> <span class="fl">4.0</span>, <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">1.0</span>, <span class="fl">0.10</span>, <span class="fl">0.0</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>pop <span class="op">=</span> <span class="fl">100</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>θ_sim <span class="op">=</span> (β<span class="op">=</span>β, σ<span class="op">=</span>σ, γ<span class="op">=</span>γ, ω<span class="op">=</span>ω, ψ<span class="op">=</span>ψ, χ<span class="op">=</span>χ, N<span class="op">=</span><span class="fu">Float64</span>(pop))</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>x0 <span class="op">=</span> (S<span class="op">=</span>pop<span class="op">-</span><span class="fl">1</span>, E<span class="op">=</span><span class="fl">0</span>, I<span class="op">=</span><span class="fl">1</span>, R<span class="op">=</span><span class="fl">0</span>)</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> <span class="fu">MersenneTwister</span>(<span class="fl">20260813</span>)</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a><span class="kw">local</span> g</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> _ <span class="op">∈</span> <span class="fl">1</span><span class="op">:</span><span class="fl">100</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">global</span> g <span class="op">=</span> <span class="fu">simulate</span>(PhyloPOMP.SEIR, θ_sim; x0<span class="op">=</span>x0, graft<span class="op">=</span>[<span class="fl">0</span>,<span class="fl">1</span>], tmax<span class="op">=</span><span class="fl">20.0</span>, rng<span class="op">=</span>rng)</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">nsample</span>(g) <span class="op">≥</span> <span class="fl">20</span> <span class="op">&amp;&amp;</span> <span class="cf">break</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="fu">nsample</span>(g)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>0x0000000000000021</code></pre>
 </div>
@@ -2493,15 +2488,14 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <section id="filter-it" class="level2">
 <h2 class="anchored" data-anchor-id="filter-it">2. Filter it</h2>
 <div id="26" class="cell" data-execution_count="1">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>θ_fit <span class="op">=</span> (β<span class="op">=</span>β, σ<span class="op">=</span>σ, γ<span class="op">=</span>γ, ω<span class="op">=</span>ω, ψ<span class="op">=</span>ψ, χ<span class="op">=</span>χ, pop<span class="op">=</span><span class="fu">Float64</span>(pop),</span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>          S0<span class="op">=</span>(pop<span class="op">-</span><span class="fl">1</span>)<span class="op">/</span>pop, E0<span class="op">=</span><span class="fl">0.0</span>, I0<span class="op">=</span><span class="fl">1</span><span class="op">/</span>pop, R0<span class="op">=</span><span class="fl">0.0</span>)</span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>G <span class="op">=</span> NaiveSEIR.<span class="fu">filter_pomp</span>(g; θ_fit<span class="op">...</span>)</span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="fu">pfilter_loglik</span>(G; Np<span class="op">=</span><span class="fl">1000</span>, nreps<span class="op">=</span><span class="fl">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>G <span class="op">=</span> <span class="fu">mgp_filter_pomp</span>(g, PhyloPOMP.SEIR; θ<span class="op">=</span>θ_sim, x0<span class="op">=</span>x0)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="fu">pfilter_loglik</span>(G; Np<span class="op">=</span><span class="fl">1000</span>, nreps<span class="op">=</span><span class="fl">10</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
-<pre><code>(loglik = -144.81746553041913, se = 0.5223844126364423, ess = 3.7859030441699426)</code></pre>
+<pre><code>(loglik = -144.81746553041913, se = 0.5223844126364406, ess = 3.7859030441699257)</code></pre>
 </div>
 </div>
 <p>Finite, as it should be: the same model generated this tree, at the same parameters. Note <code>ess</code> against <code>nreps</code>: a genealogy filter needs far more particles than the toy model for the same precision.</p>
+<p>The parameters of <code>G</code> are the table’s own, <code>θ_sim</code>: <code>β, σ, γ, ω, ψ, χ, N</code>. The initial state <code>x0</code> is fixed when <code>G</code> is built; it is not a parameter.</p>
 </section>
 <section id="mif-on-the-transmission-rate" class="level2">
 <h2 class="anchored" data-anchor-id="mif-on-the-transmission-rate">3. <code>mif</code> on the transmission rate</h2>
@@ -2512,10 +2506,10 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>          cooling<span class="op">=</span><span class="fu">geometric_cooling</span>(<span class="fl">0.5</span>))</span>
 <span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>(β̂<span class="op">=</span><span class="fu">coef</span>(mfg).β, clean<span class="op">=</span><span class="fu">pfilter_loglik</span>(mfg; Np<span class="op">=</span><span class="fl">1000</span>, nreps<span class="op">=</span><span class="fl">5</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-display" data-execution_count="1">
-<pre><code>(β̂ = 3.7262259875273567, clean = (loglik = -145.31303303172558, se = 0.38192539312391777, ess = 3.2362289441626877))</code></pre>
+<pre><code>(β̂ = 3.7262259875273567, clean = (loglik = -145.3130330317256, se = 0.38192539312393503, ess = 3.2362289441626753))</code></pre>
 </div>
 </div>
-<p>Expect β̂ to land well off the true value of 4.0. One 39-tip tree at <code>Np=500</code> and <code>Nmif=20</code> barely constrains a single transmission rate. A real fit needs more particles, more iterations, and several starts.</p>
+<p>Do not read much into how close β̂ lands to the true value of 4.0. One 33-tip tree at <code>Np=500</code> and <code>Nmif=20</code> barely constrains a single transmission rate, and <code>ess</code> above is low. A real fit needs more particles, more iterations, and several starts.</p>
 </section>
 <section id="trace-plot" class="level2">
 <h2 class="anchored" data-anchor-id="trace-plot">4. Trace plot</h2>
@@ -2553,7 +2547,7 @@ var requirejs,require,define;(function(global,setTimeout){var req,s,head,baseEle
 <p>They work on any <code>pomp</code> object, a toy model or a genealogy filter alike.</p>
 <section id="next" class="level2">
 <h2 class="anchored" data-anchor-id="next">Next</h2>
-<p>Run Part 2’s <code>profile</code> and <code>mcap</code> on <code>β</code> for a real confidence interval, at particle counts big enough to trust. Then the same on <code>MERS</code>, and on each of SIR, LBDP, BDEI, and BDSS as their filters land. See the pipeline plan, milestones M2 and M3.</p>
+<p>Run Part 2’s <code>profile</code> and <code>mcap</code> on <code>β</code> for a real confidence interval, at particle counts big enough to trust. Then the same on <code>MERS</code>, <code>SIR</code>, <code>SI2R</code>, <code>LBDP</code>, <code>BDEI</code> and <code>BDSS</code>: <code>mgp_filter_pomp</code> builds each filter from its <code>@mgp</code> table. See the pipeline plan, milestones M2 and M3.</p>
 </section>
 </section>
 

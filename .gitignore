@@ -8,3 +8,22 @@ Manifest.toml
 *.log
 *.out
 *.toc
+*.nav
+*.snm
+*.vrb
+*.orig
+*.deb
+
+# Internal notes, kept local only
+/handoff.md
+/handoffs/
+/check_milestone*.md
+/findings_*.md
+/*_findings.md
+/gillepsie_*.md
+/docs/review_*
+/docs/note_*.md
+/docs/*.patch
+/docs/session_report_*
+/docs/pipeline_plan.*
+/docs/compiler/
