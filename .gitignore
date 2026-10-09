@@ -27,3 +27,7 @@ Manifest.toml
 /docs/session_report_*
 /docs/pipeline_plan.*
 /docs/compiler/
+/mers_guided_part1.md
+/ms_kli_reference.Rnw
+/results_7.23.md
+/seir_crossvalidate_results.md
