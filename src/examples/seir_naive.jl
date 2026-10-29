@@ -101,8 +101,8 @@ event_rates!(
     alpha[4] = alpha[3] = σ*E
     alpha[5] = @indicator(I > ellI, γ*(I-ellI))
     alpha[6] = ω*R
-    pi[1] = @indicator(I > 0, 1-ellI/I)
-    pi[2] = @indicator(I > 0, ellI/I)
+    pi[1] = @indicator(I > 0, (I+1-ellI)/(I+1))
+    pi[2] = @indicator(I > 0, ellI/(I+1))
     pi[3] = @indicator(E > 0, 1-ellE/E)
     pi[4] = @indicator(E > 0, ellE/E)
     pi[6] = pi[5] = 1.0

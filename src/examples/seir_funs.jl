@@ -42,8 +42,8 @@ transmission!(
     _...,
 ) = begin
     rate = β*S*I/pop
-    pi[1] = @indicator(I > 0, offI/I)
-    pi[2] = @indicator(I > 0, onI/I)
+    pi[1] = @indicator(I > 0, (offI+1)/(I+1))
+    pi[2] = @indicator(I > 0, onI/(I+1))
     alpha[1] = rate*pi[1]
     alpha[2] = rate*pi[2]
     rate-sum(alpha)
