@@ -41,7 +41,7 @@ singular_root!(
         live = false
         q = 0
     end
-    ;live, log(q), state
+    live, log(q), state
 end
 
 terminal_sample!(node, cols, (;S, E, I, R), t; ψ, χ, _...) = begin
@@ -64,7 +64,7 @@ terminal_sample!(node, cols, (;S, E, I, R), t; ψ, χ, _...) = begin
         live = false
         boost = 0
     end
-    ;live, log(boost), (;S, E, I, R)
+    live, log(boost), (;S, E, I, R)
 end
 
 inline_sample!(node, cols, state, t; ψ, _...) = begin
@@ -77,7 +77,7 @@ inline_sample!(node, cols, state, t; ψ, _...) = begin
         live = false
         boost = 0
     end
-    ;live, log(boost), state
+    live, log(boost), state
 end
 
 singular_sample!(node, cols, state, t; kwargs...) = begin
@@ -102,18 +102,18 @@ singular_branch!(node, cols, (;S, E, I, R), t; β, pop, _...) = begin
         boost = β*S*I/pop/p
         @assert k ≠ 0
         if k==1
-            fork!(cols,Infec,node.parlin,(Expos,Infec),node.chillins)
+            ellE, ellI = fork!(cols,Infec,node.parlin,(Expos,Infec),node.chillins)
         else
-            fork!(cols,Infec,node.parlin,(Infec,Expos),node.chillins)
+            ellE, ellI = fork!(cols,Infec,node.parlin,(Infec,Expos),node.chillins)
         end
         S -= 1
         E += 1
-        boost /= E*I
+        boost *= @binomratio((E,I),(ellE,ellI),(1,1),(1,1))
     else
         live = false
         boost = 0
     end
-    ;live, log(boost), (;S, E, I, R)
+    live, log(boost), (;S, E, I, R)
 end
 
 singular_part!(
@@ -134,7 +134,7 @@ singular_part!(
         end
     else
         ll = Prob(-Inf)
-        ;live, ll, state
+        live, ll, state
     end
 end
 

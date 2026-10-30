@@ -18,6 +18,11 @@ using .Demes: Expos, Infec, DemeSet
 
 include("seir_trees.jl")
 
+## gives the occupancy of each deme
+deme_occupancy(;E, I, _...,) = begin
+    ;E, I
+end
+
 ## Is the population state compatible with the genealogy?
 live_condition((;S, E, I, R), cols) = begin
     ellE, ellI = ell(cols)
@@ -27,96 +32,228 @@ end
 seir_rinit(; S0, E0, I0, R0, pop, _...) =
     barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
 
+singular_root!(node, cols, state, t; kwargs...,) = begin
+    n = deme_occupancy(;state...)
+    ells = ell(cols)
+    i, _, p = rcateg(n.-ells, true)
+    ll = -log(p)
+    if i > 0
+        live = true
+        plant!(cols, DemeSet(i), node.lineage)
+    else
+        live = false
+        ll = Prob(-Inf)
+    end
+    live, ll, state
+end
+
+terminal_sample!(node, cols, (;S, E, I, R), t; ψ, χ, _...) = begin
+    boost::Prob = 1
+    live = true
+    if node.lineage ∈ cols[Infec]
+        k,_,p = rcateg([ψ, χ], true)
+        _, ellI = chop!(cols, Infec, node.lineage)
+        if k==0
+            live = false
+        elseif k==1         # non-destructive sample
+            boost = ψ*(I-ellI)/p
+        elseif k==2         # destructive sample
+            boost = χ*I/p
+            I -= 1
+        end
+    else
+        live = false
+        boost = 0
+    end
+    live, log(boost), (;S, E, I, R)
+end
+
+inline_sample!(geneal, node, cols, state, t; ψ, _...) = begin
+    boost::Prob = 1
+    if node.lineage ∈ cols[Infec]
+        live = true
+        boost = ψ
+        chillin = geneal[node.children[1]].lineage
+        chop!(cols, Infec, node.lineage, Infec, chillin)
+    else
+        live = false
+        boost = 0
+    end
+    live, log(boost), state
+end
+
+singular_sample!(geneal, node, cols, state, t; kwargs...) = begin
+    if length(node.children) == 0
+        terminal_sample!(node, cols, state, t; kwargs...)
+    elseif length(node.children) == 1
+        inline_sample!(geneal, node, cols, state, t; kwargs...)
+    else
+        @assert false "impossible" # COV_EXCL_LINE
+    end
+end
+
+singular_branch!(geneal, node, cols, (;S, E, I, R), t; β, pop, _...) = begin
+    boost::Prob = 1
+    if node.lineage ∈ cols[Infec] && S > 0
+        live = true
+        chillins = map(node.children) do i
+            geneal[i].lineage
+        end
+        k, _, p = rcateg([1, 1], true)
+        boost = β*S*I/pop/p
+        @assert k ≠ 0
+        if k==1
+            ellE, ellI = fork!(cols, Infec, node.lineage, (Expos,Infec), chillins)
+        else
+            ellE, ellI = fork!(cols, Infec, node.lineage, (Infec,Expos), chillins)
+        end
+        S -= 1
+        E += 1
+        boost *= @binomratio((E,I),(ellE,ellI),(1,1),(1,1))
+    else
+        live = false
+        boost = 0
+    end
+    live, log(boost), (;S, E, I, R)
+end
+
 singular_part!(
-    cols, geneal, n, live, (;S, E, I, R);
-    pop, β, ψ, χ,
-    _...,
+    cols, state, t, geneal, n;
+    kwargs...,
 ) = begin
-    live = live_condition((;S, E, I, R), cols)
+    live = live_condition(state, cols)
     ll::Prob = 0
     if live
-        ellE, ellI = ell(cols)
         node = geneal[n]
         if node.type==Root
-            i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
-            ll -= log(p)
-            if ismissing(i)
-                live = false
-            else
-                ellE, ellI = plant!(cols,i,node.lineage)
-            end
+            live, ll, state = singular_root!(node, cols, state, t; kwargs...)
         elseif node.type==Sample
-            if node.lineage ∉ cols[Infec]
-                live = false
-            elseif length(node.children) == 0
-                k,_,p = rcateg([ψ, χ],true)
-                ll -= log(p)
-                ellE, ellI = chop!(cols,Infec,node.lineage)
-                if k==0
-                    live = false
-                elseif k==1         # non-destructive sample
-                    ll += log(ψ*(I-ellI));
-                elseif k==2         # destructive sample
-                    ll += log(χ*I)
-                    I -= 1
-                end
-            elseif length(node.children) == 1
-                chillin = geneal[node.children[1]].lineage
-                ellE, ellI = chop!(cols, Infec, node.lineage, Infec, chillin)
-                ll += log(ψ)
-            end
+            live, ll, state = singular_sample!(geneal, node, cols, state, t; kwargs...)
         elseif node.type==Node
-            if node.lineage ∉ cols[Infec]
-                live = false
-            else
-                chillins = map(node.children) do i
-                    geneal[i].lineage
-                end
-                ll += log(β*S*I/pop)
-                k, _, p = rcateg([1, 1], true)
-                ll -= log(p)
-                if k==1
-                    ellE, ellI = fork!(cols, Infec, node.lineage, (Expos,Infec), chillins)
-                else
-                    ellE, ellI = fork!(cols, Infec, node.lineage, (Infec,Expos), chillins)
-                end
-                if S > 0
-                    S -= 1
-                end
-                E += 1
-                ll -= log(E*I)
-            end
+            live, ll, state = singular_branch!(geneal, node, cols, state, t; kwargs...)
         else
             @assert false # COV_EXCL_LINE
         end
-    end
-    if !live
+    else
         ll = Prob(-Inf)
     end
-    ll, (;S, E, I, R), live
+    live, ll, state
 end
 
-event_rates!(
-    alpha, pi, cols, (;S, E, I, R);
-    β, σ, γ, ω, ψ, χ, pop,
-    _...,
-) = begin
-    ellE, ellI = ell(cols)
-    @assert I ≥ ellI && E ≥ ellE
-    alpha[2] = alpha[1] = β*S*I/pop
-    alpha[4] = alpha[3] = σ*E
-    alpha[5] = @indicator(I > ellI, γ*(I-ellI))
-    alpha[6] = ω*R
+rate_transmission!(alpha, pi, t, (;S, E, I, R), cols; β, pop, _...,) = begin
+    ellI = ell(cols,Infec)
+    rate = β*S*I/pop
     pi[1] = @indicator(I > 0, (I+1-ellI)/(I+1))
     pi[2] = @indicator(I > 0, ellI/(I+1))
-    pi[3] = @indicator(E > 0, 1-ellE/E)
-    pi[4] = @indicator(E > 0, ellE/E)
-    pi[6] = pi[5] = 1.0
-    (ψ+χ)*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
+    alpha .= rate.*pi
+    rate-sum(alpha)
+end
+
+rate_progression!(alpha, pi, t, (;S, E, I, R), cols; σ, _...,) = begin
+    rate = σ*E
+    ellE = ell(cols,Expos)
+    pi[1] = @indicator(E > 0, 1-ellE/E)
+    pi[2] = @indicator(E > 0, ellE/E)
+    alpha .= rate.*pi
+    rate-sum(alpha)
+end
+
+rate_recovery!(alpha, pi, t, (;S, E, I, R), cols; γ, _...,) = begin
+    rate = γ*I
+    ellI = ell(cols,Infec)
+    pi[1] = @indicator(I > ellI, 1-ellI/I)
+    alpha .= rate.*pi
+    rate-sum(alpha)
+end
+
+rate_waning!(alpha, pi, t, (;S, E, I, R), cols; ω, _...,) = begin
+    rate = ω*R
+    pi[1] = 1
+    alpha .= rate.*pi
+    rate-sum(alpha)
+end
+
+rate_sampling(t, (;S, E, I, R), cols; ψ, χ, _...,) = begin
+    rate = (ψ+χ)*I
+    rate
+end
+
+event_rates!(alpha, pi, t, state, cols; kwargs...) = begin
+    decay = zero(Prob)
+    decay += rate_transmission!(@view(alpha[1:2]), @view(pi[1:2]), t, state, cols; kwargs...,)
+    decay += rate_progression!(@view(alpha[3:4]), @view(pi[3:4]), t, state, cols; kwargs...,)
+    decay += rate_recovery!(@view(alpha[5]), @view(pi[5]), t, state, cols; kwargs...,)
+    decay += rate_waning!(@view(alpha[6]), @view(pi[6]), t, state, cols; kwargs...,)
+    decay += rate_sampling(t, state, cols; kwargs...,)
+    decay
+end
+
+move_transmission_off!(t, (;S, E, I, R), cols) = begin
+    S -= 1
+    E += 1
+    boost = @binomratio(E,ell(cols,Expos),1,0)
+    log(boost), (;S, E, I, R)
+end
+
+move_transmission_on!(t, (;S, E, I, R), cols) = begin
+    b, p = rand(cols[Infec]), inv(ell(cols,Infec))
+    S -= 1
+    E += 1
+    ellE, ellI = swap!(cols,Infec,Expos,b)
+    boost = @binomratio((E,I),(ellE,ellI),(1,1),(1,0))/p
+    log(boost), (;S, E, I, R)
+end
+
+move_progression_off!(t, (;S, E, I, R), cols) = begin
+    E -= 1
+    I += 1
+    boost = @binomratio(I,ell(cols,Infec),1,0)
+    log(boost), (;S, E, I, R)
+end
+
+move_progression_on!(t, (;S, E, I, R), cols) = begin
+    b, p = rand(cols[Expos]), inv(ell(cols,Expos))
+    ellE, ellI = swap!(cols,Expos,Infec,b)
+    E -= 1
+    I += 1
+    boost = @binomratio(I,ellI,1,1)/p
+    log(boost), (;S, E, I, R)
+end
+
+move_recovery!(t, (;S, E, I, R), cols) = begin
+    I -= 1
+    R += 1
+    boost = 1.0
+    log(boost), (;S, E, I, R)
+end
+
+move_waning!(t, (;S, E, I, R), cols) = begin
+    R -= 1
+    S += 1
+    boost = 1.0
+    log(boost), (;S, E, I, R)
+end
+
+regular_move!(k, t, state, cols) = begin
+    if k==1
+        move_transmission_off!(t, state, cols)
+    elseif k==2
+        move_transmission_on!(t, state, cols)
+    elseif k==3
+        move_progression_off!(t, state, cols)
+    elseif k==4
+        move_progression_on!(t, state, cols)
+    elseif k==5
+        move_recovery!(t, state, cols)
+    elseif k==6
+        move_waning!(t, state, cols)
+    else
+        @assert false "impossible" # COV_EXCL_LINE
+    end
 end
 
 regular_part!(
-    cols, t, tf, (;S, E, I, R);
+    cols, state, t, tf;
     kwargs...,
 ) = begin
     if t < tf
@@ -125,46 +262,13 @@ regular_part!(
         step::Time = 0
         decay::Prob = 0
         ll::Prob = 0
-        ellE, ellI = ell(cols)
         while t < tf
-            decay = event_rates!(
-                alpha, pi, cols, (;S, E, I, R);
-                kwargs...,
-            )
-            k, s = rcateg(alpha .* pi)
+            decay = event_rates!(alpha, pi, t, state, cols; kwargs...,)
+            k, s = rcateg(alpha)
             step = -log(rand())/s
             if k > 0 && t+step < tf
-                ll -= decay*step+log(pi[k])
-                if k==1
-                    S -= 1
-                    E += 1
-                    ll += log(1-ellE/E)
-                elseif k==2
-                    ll += log(ellI)
-                    b = rand(cols[Infec])
-                    ellE, ellI = swap!(cols,Infec,Expos,b)
-                    S -= 1
-                    E += 1
-                    ll += log(1-ellI/I)-log(E)
-                elseif k==3
-                    E -= 1
-                    I += 1
-                    ll += log(1-ellI/I)
-                elseif k==4
-                    ll += log(ellE)
-                    b = rand(cols[Expos])
-                    ellE, ellI = swap!(cols,Expos,Infec,b)
-                    E -= 1
-                    I += 1
-                    ll -= log(I)
-                elseif k==5
-                    ll -= log(1-ellI/I)
-                    I -= 1
-                    R += 1
-                elseif k==6
-                    R -= 1
-                    S += 1
-                end
+                ll1, state = regular_move!(k, t, state, cols)
+                ll += ll1 - decay*step - log(pi[k])
                 t += step
             else
                 step = tf - t
@@ -172,9 +276,8 @@ regular_part!(
                 break
             end
         end
-        @assert live_condition((;S, E, I, R), cols)
     end
-    ll, (;S, E, I, R)
+    ll, state
 end
 
 """
@@ -219,15 +322,15 @@ filter_pomp(
             function (;node, ll, live, cols, state, geneal, t, dt, kwargs...)
                 if live
                     cols = copy(cols)
-                    ll, state, live = singular_part!(cols, geneal, node, live, state; kwargs...)
+                    live, ll, state = singular_part!(cols, state, t, geneal, node; kwargs...)
                 else
                     ll = Prob(-Inf)
                 end
                 if live && dt > 0
-                    ll1, state = regular_part!(cols, t, t+dt, state; kwargs...)
+                    ll1, state = regular_part!(cols, state, t, t+dt; kwargs...)
                     ll += ll1
                 end
-                (;node = node+1, ll, cols, state, live)
+                (;node = node+1, ll, live, cols, state)
             end,
         ),
         logdmeasure = function (; ll, _...)

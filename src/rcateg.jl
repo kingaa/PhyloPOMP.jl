@@ -22,9 +22,9 @@ It is not necessary for the weights to be normalized:
 this is accomplished internally.
 """
 rcateg(
-    p::AbstractVector{<:Real},
+    p::Union{AbstractVector{F},NTuple{N,F}},
     prob::Bool = false,
-) = begin
+) where {N, F<:Real} = begin
     s::Prob = zero(Prob)
     for i ∈ eachindex(p)
         @assert p[i] ≥ 0 "invalid p[$i]=$(p[i]) detected"
@@ -60,7 +60,7 @@ end
 This call returns a draw from the categorical distribution on the enumeration `e`.  `e` should be an enumeration-type created, e.g., by [`@demes`](@ref `@demes`).
 """
 rcateg(
-    p::AbstractVector{<:Real},
+    p,
     demes::Type{D},
     prob::Bool = false,
 ) where {D <: Enum} = begin
@@ -76,7 +76,7 @@ This call returns a draw from the categorical distribution on the set `s`.
 The latter may be a `Set` or a `BitSet`.
 """
 rcateg(
-    p::AbstractVector{<:Real},
+    p,
     set::Union{BitSet, Set},
     prob::Bool = false,
 ) = begin
@@ -96,7 +96,7 @@ end
 This call returns a draw from the categorical distribution on the vector `v`.
 """
 rcateg(
-    p::AbstractVector{<:Real},
+    p,
     v::AbstractVector,
     prob::Bool = false,
 ) = begin
