@@ -80,7 +80,7 @@ end
 move_transmission_off!(t, (;S, E, I, R), guide, n, cols, rh) = begin
     S -= 1
     E += 1
-    boost = 1-ell(cols,Expos)/E
+    boost = @binomratio(E,ell(cols,Expos),1,0)
     log(boost), (;S, E, I, R)
 end
 
@@ -90,24 +90,24 @@ move_transmission_on!(t, (;S, E, I, R), guide, n, cols, rh) = begin
     _, ellI = swap!(cols,Infec,Expos,b)
     S -= 1
     E += 1
-    boost = (1-ellI/I)/E/p
+    boost = @binomratio(E,1,1,1)*@binomratio(I,ellI,1,0)/p
     log(boost), (;S, E, I, R)
 end
 
 move_progression_off!(t, (;S, E, I, R), guide, n, cols, rh) = begin
     E -= 1
     I += 1
-    boost = 1-ell(cols,Infec)/I
+    boost = @binomratio(I,ell(cols,Infec),1,0)
     log(boost), (;S, E, I, R)
 end
 
 move_progression_on!(t, (;S, E, I, R), guide, n, cols, rh) = begin
     relhaz!(rh,t,guide,n)
     b, p = choose_branch(rh,guide[n],cols,Expos,Infec)
-    swap!(cols,Expos,Infec,b)
+    ellE, ellI = swap!(cols,Expos,Infec,b)
     E -= 1
     I += 1
-    boost = inv(I*p)
+    boost = @binomratio(I,ellI,1,1)/p
     log(boost), (;S, E, I, R)
 end
 

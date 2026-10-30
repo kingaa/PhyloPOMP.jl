@@ -50,6 +50,9 @@ include("rcateg.jl")
 export @indicator
 include("indicator.jl")
 
+export @binomratio
+include("binomratio.jl")
+
 include("examples/Examples.jl")
 
 end # module PhyloPOMP

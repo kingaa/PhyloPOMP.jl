@@ -81,10 +81,10 @@ move_transmission!(
     E += 1
     if b == 0
         ellE = ell(cols,Expos)
-        boost = (1-ellE/E)/p
+        boost = @binomratio(E,ellE,1,0)/p
     else
         ellE, ellI = swap!(cols,Infec,Expos,b)
-        boost = (1-ellI/I)/E/p
+        boost = @binomratio(E,ellE,1,1)*@binomratio(I,ellI,1,0)/p
     end
     log(boost), (;S, E, I, R)
 end
@@ -98,10 +98,10 @@ move_progression!(
     I += 1
     if b == 0
         ellI = ell(cols,Infec)
-        boost = (1-ellI/I)/p
+        boost = @binomratio(I,ellI,1,0)/p
     else
-        swap!(cols,Expos,Infec,b)
-        boost = inv(I*p)
+        _, ellI = swap!(cols,Expos,Infec,b)
+        boost = @binomratio(I,ellI,1,1)/p
     end
     log(boost), (;S, E, I, R)
 end

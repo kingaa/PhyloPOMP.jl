@@ -24,7 +24,7 @@ struct FSMarkovProc{F<:AbstractFloat,N,D<:Enum}
         pi,Q = make_generator(F,args...)
         s = sqrt.(pi)
         d = Diagonal(s)
-        di = Diagonal(one(F)./s)
+        di = Diagonal(inv.(s))
         Lambda,U = eigen(Symmetric(di*Q*d),sortby=-)
         Lambda[1] = zero(F)
         L = d*U

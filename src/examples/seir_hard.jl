@@ -15,9 +15,9 @@ rate_transmission!(
     β, pop, _...,
 ) = begin
     rate = β*S*I/pop
-    onI = sum_relhaz(rh,node,cols,Infec,Expos)
+    on = sum_relhaz(rh,node,cols,Infec,Expos)
     pi[1] = @indicator(I > 0, (I-ell(cols,Infec)+1)/(I+1))
-    pi[2] = @indicator(I > 0, onI/(I+1))
+    pi[2] = @indicator(I > 0, on/(I+1))
     alpha[1] = rate*pi[1]
     alpha[2] = rate*pi[2]
     rate-sum(alpha)
@@ -28,9 +28,9 @@ rate_progression!(
     σ, _...,
 ) = begin
     rate = σ*E
-    onE = sum_relhaz(rh,node,cols,Expos,Infec)
+    on = sum_relhaz(rh,node,cols,Expos,Infec)
     pi[1] = @indicator(E > 0, (E-ell(cols,Expos))/E)
-    pi[2] = @indicator(E > 0, onE/E)
+    pi[2] = @indicator(E > 0, on/E)
     alpha[1] = rate*pi[1]
     alpha[2] = rate*pi[2]
     rate-sum(alpha)
@@ -79,32 +79,32 @@ end
 move_transmission_off!(t, (;S, E, I, R), node, cols, rh) = begin
     S -= 1
     E += 1
-    boost = 1-ell(cols,Expos)/E
+    boost = @binomratio(E,ell(cols,Expos),1,0)
     log(boost), (;S, E, I, R)
 end
 
 move_transmission_on!(t, (;S, E, I, R), node, cols, rh) = begin
     b, p = choose_branch(rh,node,cols,Infec,Expos)
-    _, ellI = swap!(cols,Infec,Expos,b)
+    ellE, ellI = swap!(cols,Infec,Expos,b)
     S -= 1
     E += 1
-    boost = (1-ellI/I)/E/p
+    boost = @binomratio((E,I),(ellE,ellI),(1,1),(1,0))/p
     log(boost), (;S, E, I, R)
 end
 
 move_progression_off!(t, (;S, E, I, R), node, cols, rh) = begin
     E -= 1
     I += 1
-    boost = 1-ell(cols,Infec)/I
+    boost = @binomratio(I,ell(cols,Infec),1,0)
     log(boost), (;S, E, I, R)
 end
 
 move_progression_on!(t, (;S, E, I, R), node, cols, rh) = begin
     b, p = choose_branch(rh,node,cols,Expos,Infec)
-    swap!(cols,Expos,Infec,b)
+    _, ellI = swap!(cols,Expos,Infec,b)
     E -= 1
     I += 1
-    boost = inv(I*p)
+    boost = @binomratio(I,ellI,1,1)/p
     log(boost), (;S, E, I, R)
 end
 

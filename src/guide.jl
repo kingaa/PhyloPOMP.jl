@@ -24,6 +24,8 @@ A `GuideNode` contains:
 struct GuideNode{F<:AbstractFloat,N,D<:Enum}
     "type of node at left endpoint of the interval"
     type::NodeType
+    "name of node"
+    name::Name
     "left end of the time interval"
     tbeg::Time
     "right end of the time interval"
@@ -84,6 +86,7 @@ struct Guide{F<:AbstractFloat,N,D<:Enum}
             linmap = Dict(zip(ells,eachindex(ells)))
             nodes[n] = GuideNode{F,N,D}(
                 g[n].type,
+                g[n].name,
                 g[n].slate,tend,
                 parlin,chillins,ells,linmap,
                 present,target,dtarget,
@@ -218,7 +221,7 @@ relhaz(
     cols::Coloring{D},
     i::D, j::D,
 ) where {D,F,N} = begin
-    lins = getindex(n,cols[i])
+    lins = getindex(n, cols[i])
     r[(i,j)][lins]
 end
 
@@ -227,16 +230,16 @@ sum_relhaz(
     n::GuideNode{F,N,D},
     cols::Coloring{D},
     i::D, j::D,
-) where {D,F,N} = sum(relhaz(r,n,cols,i,j))
+) where {D,F,N} = sum(relhaz(r, n, cols, i, j))
 
 choose_branch(
     r::AbstractDict{Tuple{D,D},Vector{F}},
-    n::GuideNode{F,N,D},
+    node::GuideNode{F,N,D},
     cols::Coloring{D},
     i::D, j::D,
 ) where {D,F,N} = begin
-    rates = relhaz(r,n,cols,i,j)
-    b, _, p = rcateg(rates,cols[i],true)
+    rates = relhaz(r, node, cols, i, j)
+    b, _, p = rcateg(rates, cols[i], true)
     b, p
 end
 
@@ -249,7 +252,7 @@ choose_branch(
     i::D, j::D,
 ) where {F,N,D} = begin
     lins = [guide[node].linmap[k] for k ∈ cols[i]]
-    p = relhaz(t,guide,node,i,j,lins)
+    p = relhaz(t, guide, node, i, j, lins)
     s1 = F(1+n-ell(cols,i))
     s2 = sum(p)
     s = s1+s2
