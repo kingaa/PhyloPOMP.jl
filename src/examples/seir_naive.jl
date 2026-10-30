@@ -18,33 +18,40 @@ using .Demes: Expos, Infec, DemeSet
 
 include("seir_trees.jl")
 
+## Is the population state compatible with the genealogy?
+live_condition((;S, E, I, R), cols) = begin
+    ellE, ellI = ell(cols)
+    I ≥ ellI && E ≥ ellE
+end
+
+seir_rinit(; S0, E0, I0, R0, pop, _...) =
+    barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
+
 singular_part!(
-    cols, geneal, node, ll, live,
-    S, E, I, R;
+    cols, geneal, n, live, (;S, E, I, R);
     pop, β, ψ, χ,
     _...,
 ) = begin
-    ellE, ellI = ell(cols)
-    if I < ellI || E < ellE
-        live = false
-    end
+    live = live_condition((;S, E, I, R), cols)
+    ll::Prob = 0
     if live
-        n = geneal[node]
-        if n.type==Root
+        ellE, ellI = ell(cols)
+        node = geneal[n]
+        if node.type==Root
             i, _, p = rcateg([E-ellE, I-ellI], DemeSet, true)
             ll -= log(p)
             if ismissing(i)
                 live = false
             else
-                ellE, ellI = plant!(cols,i,n.lineage)
+                ellE, ellI = plant!(cols,i,node.lineage)
             end
-        elseif n.type==Sample
-            if n.lineage ∉ cols[Infec]
+        elseif node.type==Sample
+            if node.lineage ∉ cols[Infec]
                 live = false
-            elseif length(n.children) == 0
+            elseif length(node.children) == 0
                 k,_,p = rcateg([ψ, χ],true)
                 ll -= log(p)
-                ellE, ellI = chop!(cols,Infec,n.lineage)
+                ellE, ellI = chop!(cols,Infec,node.lineage)
                 if k==0
                     live = false
                 elseif k==1         # non-destructive sample
@@ -53,25 +60,25 @@ singular_part!(
                     ll += log(χ*I)
                     I -= 1
                 end
-            elseif length(n.children) == 1
-                chillin = geneal[n.children[1]].lineage
-                ellE, ellI = chop!(cols,Infec,n.lineage,Infec,chillin)
+            elseif length(node.children) == 1
+                chillin = geneal[node.children[1]].lineage
+                ellE, ellI = chop!(cols, Infec, node.lineage, Infec, chillin)
                 ll += log(ψ)
             end
-        elseif n.type==Node
-            if n.lineage ∉ cols[Infec]
+        elseif node.type==Node
+            if node.lineage ∉ cols[Infec]
                 live = false
             else
-                chillins = map(n.children) do i
+                chillins = map(node.children) do i
                     geneal[i].lineage
                 end
                 ll += log(β*S*I/pop)
                 k, _, p = rcateg([1, 1], true)
                 ll -= log(p)
                 if k==1
-                    ellE, ellI = fork!(cols,Infec,n.lineage,(Expos,Infec),chillins)
+                    ellE, ellI = fork!(cols, Infec, node.lineage, (Expos,Infec), chillins)
                 else
-                    ellE, ellI = fork!(cols,Infec,n.lineage,(Infec,Expos),chillins)
+                    ellE, ellI = fork!(cols, Infec, node.lineage, (Infec,Expos), chillins)
                 end
                 if S > 0
                     S -= 1
@@ -86,12 +93,11 @@ singular_part!(
     if !live
         ll = Prob(-Inf)
     end
-    ll, S, E, I, R, live
+    ll, (;S, E, I, R), live
 end
 
 event_rates!(
-    alpha, pi, cols,
-    S, E, I, R;
+    alpha, pi, cols, (;S, E, I, R);
     β, σ, γ, ω, ψ, χ, pop,
     _...,
 ) = begin
@@ -106,26 +112,23 @@ event_rates!(
     pi[3] = @indicator(E > 0, 1-ellE/E)
     pi[4] = @indicator(E > 0, ellE/E)
     pi[6] = pi[5] = 1.0
-    ψ*I + χ*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
+    (ψ+χ)*I + γ*ellI + @indicator(I ≤ ellI, γ*(I-ellI))
 end
 
 regular_part!(
-    cols, ll,
-    t, dt,
-    S, E, I, R;
+    cols, t, tf, (;S, E, I, R);
     kwargs...,
 ) = begin
-    tf = t+dt
     if t < tf
         alpha = similar(Vector{Prob}, 6)
         pi = similar(Vector{Prob}, 6)
-        step::Time = zero(Time)
-        decay::Prob = zero(Prob)
+        step::Time = 0
+        decay::Prob = 0
+        ll::Prob = 0
         ellE, ellI = ell(cols)
         while t < tf
             decay = event_rates!(
-                alpha, pi, cols,
-                S, E, I, R;
+                alpha, pi, cols, (;S, E, I, R);
                 kwargs...,
             )
             k, s = rcateg(alpha .* pi)
@@ -169,25 +172,9 @@ regular_part!(
                 break
             end
         end
-        @assert I ≥ ellI && E ≥ ellE
+        @assert live_condition((;S, E, I, R), cols)
     end
-    ll, S, E, I, R
-end
-
-check(
-    gen::Genealogy,
-) = begin
-    for node ∈ eachindex(gen)
-        n = gen[node]
-        if n.type == Root
-            @assert length(n.children)==1 "wrong number of children ($(length(n.children)) != 1) at root $(n.name), t=$(n.slate)"
-        elseif n.type == Sample
-            @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
-        elseif n.type == Node
-            @assert length(n.children)==2 "wrong number of children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
-        end
-    end
-    nothing
+    ll, (;S, E, I, R)
 end
 
 """
@@ -211,52 +198,58 @@ filter_pomp(
         ),
         t0 = timezero(gen),
         times = times(gen),
+        userdata = (geneal = gen,),
         init_state = (
             node=one(Name),
             ll=zero(Prob),
             live=true,
             cols=Coloring(Demes),
-            S=Int64(0), E=Int64(0), I=Int64(0), R=Int64(0),
+            state=(S=Int64(0), E=Int64(0), I=Int64(0), R=Int64(0)),
         ),
-        rinit = function (; S0, E0, I0, R0, pop, _...)
-            state = barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
+        rinit = function (;kwargs...)
             (
                 node = one(Name),
                 ll = zero(Prob),
                 live = true,
                 cols = Coloring(Demes),
-                state...,
+                state = seir_rinit(;kwargs...),
             )
         end,
         rprocess = onestep(
-            function (
-                ; node, live, ll, cols, geneal,
-                t, dt,
-                S, E, I, R,
-                args...,
-                )
-                cols = copy(cols)
-                ll = zero(Prob)
-                ll, S, E, I, R, live = singular_part!(
-                    cols, geneal, node, ll, live,
-                    S, E, I, R;
-                    args...,
-                )
-                if live && dt > 0 && isfinite(ll)
-                    ll, S, E, I, R = regular_part!(
-                        cols, ll, t, dt,
-                        S, E, I, R;
-                        args...,
-                    )
+            function (;node, ll, live, cols, state, geneal, t, dt, kwargs...)
+                if live
+                    cols = copy(cols)
+                    ll, state, live = singular_part!(cols, geneal, node, live, state; kwargs...)
+                else
+                    ll = Prob(-Inf)
                 end
-                (;node = node+1, ll, cols, S, E, I, R, live)
+                if live && dt > 0
+                    ll1, state = regular_part!(cols, t, t+dt, state; kwargs...)
+                    ll += ll1
+                end
+                (;node = node+1, ll, cols, state, live)
             end,
         ),
         logdmeasure = function (; ll, _...)
             ll
         end,
-        userdata = (geneal = gen,),
     )
+end
+
+check(
+    gen::Genealogy,
+) = begin
+    for node ∈ eachindex(gen)
+        n = gen[node]
+        if n.type == Root
+            @assert length(n.children)==1 "wrong number of children ($(length(n.children)) != 1) at root $(n.name), t=$(n.slate)"
+        elseif n.type == Sample
+            @assert length(n.children)<2 "too many children ($(length(n.children)) > 1) at sample $(n.name), t=$(n.time)"
+        elseif n.type == Node
+            @assert length(n.children)==2 "wrong number of children ($(length(n.children)) ≠ 2) at node $(n.name), t=$(n.time)"
+        end
+    end
+    nothing
 end
 
 end
