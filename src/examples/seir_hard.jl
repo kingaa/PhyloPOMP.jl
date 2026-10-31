@@ -16,10 +16,9 @@ rate_transmission!(
 ) = begin
     rate = β*S*I/pop
     on = sum_relhaz(rh,node,cols,Infec,Expos)
-    pi[1] = @indicator(I > 0, (I-ell(cols,Infec)+1)/(I+1))
+    pi[1] = @indicator(I > 0, 1-ell(cols,Infec)/(I+1))
     pi[2] = @indicator(I > 0, on/(I+1))
-    alpha[1] = rate*pi[1]
-    alpha[2] = rate*pi[2]
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
@@ -29,10 +28,9 @@ rate_progression!(
 ) = begin
     rate = σ*E
     on = sum_relhaz(rh,node,cols,Expos,Infec)
-    pi[1] = @indicator(E > 0, (E-ell(cols,Expos))/E)
+    pi[1] = @indicator(E > 0, 1-ell(cols,Expos)/E)
     pi[2] = @indicator(E > 0, on/E)
-    alpha[1] = rate*pi[1]
-    alpha[2] = rate*pi[2]
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
@@ -41,9 +39,9 @@ rate_recovery!(
     γ, _...,
 ) = begin
     rate = γ*I
-    ellI = ell(cols,Infec)
-    pi[1] = @indicator(I > ellI, 1-ellI/I)
-    alpha[1] = rate*pi[1]
+    on = ell(cols,Infec)/I
+    pi[1] = @indicator(on < 1, 1-on)
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
@@ -53,7 +51,7 @@ rate_waning!(
 ) = begin
     rate = ω*R
     pi[1] = 1
-    alpha[1] = rate*pi[1]
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 

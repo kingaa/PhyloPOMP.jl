@@ -16,11 +16,10 @@ rate_transmission!(
     β, pop, _...,
 ) = begin
     rate = β*S*I/pop
-    on = ell(cols,Infec)
-    pi[1] = @indicator(I > 0, (I-on+1)/(I+1))
-    pi[2] = @indicator(I > 0, on/(I+1))
-    alpha[1] = rate*pi[1]
-    alpha[2] = rate*pi[2]
+    on = ell(cols,Infec)/(I+1)
+    pi[1] = @indicator(I > 0, 1-on)
+    pi[2] = @indicator(I > 0, on)
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
@@ -29,11 +28,10 @@ rate_progression!(
     σ, _...,
 ) = begin
     rate = σ*E
-    on = ell(cols,Expos)
-    pi[1] = @indicator(E > 0, (E-on)/E)
-    pi[2] = @indicator(E > 0, on/E)
-    alpha[1] = rate*pi[1]
-    alpha[2] = rate*pi[2]
+    on = ell(cols,Expos)/E
+    pi[1] = @indicator(E > 0, 1-on)
+    pi[2] = @indicator(E > 0, on)
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
@@ -42,9 +40,9 @@ rate_recovery!(
     γ, _...,
 ) = begin
     rate = γ*I
-    ellI = ell(cols,Infec)
-    pi[1] = @indicator(I > ellI, 1-ellI/I)
-    alpha[1] = rate*pi[1]
+    on = ell(cols,Infec)/I
+    pi[1] = @indicator(on < 1, 1-on)
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
@@ -54,7 +52,7 @@ rate_waning!(
 ) = begin
     rate = ω*R
     pi[1] = 1
-    alpha[1] = rate*pi[1]
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
@@ -87,10 +85,10 @@ end
 move_transmission_on!(t, (;S, E, I, R), guide, n, cols, rh) = begin
     relhaz!(rh,t,guide,n)
     b, p = choose_branch(rh,guide[n],cols,Infec,Expos)
-    _, ellI = swap!(cols,Infec,Expos,b)
+    ℓE, ℓI = swap!(cols,Infec,Expos,b)
     S -= 1
     E += 1
-    boost = @binomratio(E,1,1,1)*@binomratio(I,ellI,1,0)/p
+    boost = @binomratio((E,I),(ℓE,ℓI),(1,1),(1,0))/p
     log(boost), (;S, E, I, R)
 end
 
@@ -104,10 +102,10 @@ end
 move_progression_on!(t, (;S, E, I, R), guide, n, cols, rh) = begin
     relhaz!(rh,t,guide,n)
     b, p = choose_branch(rh,guide[n],cols,Expos,Infec)
-    ellE, ellI = swap!(cols,Expos,Infec,b)
+    ℓE, ℓI = swap!(cols,Expos,Infec,b)
     E -= 1
     I += 1
-    boost = @binomratio(I,ellI,1,1)/p
+    boost = @binomratio((E,I),(ℓE,ℓI),(0,1),(0,1))/p
     log(boost), (;S, E, I, R)
 end
 

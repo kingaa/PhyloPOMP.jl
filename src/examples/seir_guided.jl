@@ -23,29 +23,29 @@ include("seir_common.jl")
 rate_transmission!(alpha, pi, t, (;S, E, I, R), cols; β, pop, _...,) = begin
     rate = β*S*I/pop
     pi[1] = 1
-    alpha[1] = rate*pi[1]
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
 rate_progression!(alpha, pi, t, (;S, E, I, R), cols; σ, _...,) = begin
     rate = σ*E
     pi[1] = 1
-    alpha[1] = rate*pi[1]
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
 rate_recovery!(alpha, pi, t, (;S, E, I, R), cols; γ, _...,) = begin
     rate = γ*I
-    ellI = ell(cols,Infec)
-    pi[1] = @indicator(I > ellI, 1-ellI/I)
-    alpha[1] = rate*pi[1]
+    on = ell(cols,Infec)/I
+    pi[1] = @indicator(on < 1, 1-on)
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
 rate_waning!(alpha, pi, t, (;S, E, I, R), cols; ω, _...,) = begin
     rate = ω*R
     pi[1] = 1
-    alpha[1] = rate*pi[1]
+    alpha .= rate.*pi
     rate-sum(alpha)
 end
 
