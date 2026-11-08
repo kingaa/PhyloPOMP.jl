@@ -53,6 +53,9 @@ include("indicator.jl")
 export @binomratio
 include("binomratio.jl")
 
+export @mgp_soft_filter
+include("mgp.jl")
+
 include("examples/Examples.jl")
 
 end # module PhyloPOMP

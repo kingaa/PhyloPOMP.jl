@@ -9,7 +9,7 @@ include("seir_trees.jl")
 
 ## gives the occupancy of each deme
 deme_occupancy(;E, I, _...,) = begin
-    ;E, I
+    (;Expos=E, Infec=I)
 end
 
 ## Is the population state compatible with the genealogy?
@@ -29,7 +29,7 @@ singular_root!(
     node::GuideNode{F,N,D}, cols, state, t;
     kwargs...,
 ) where {F, N, D <: Enum} = begin
-    n = deme_occupancy(;state...)
+    n = Tuple(deme_occupancy(;state...))
     ells = ell(cols)
     i, _, p = rcateg(node.present[:,1].*(n.-ells), true)
     q::Prob = 0

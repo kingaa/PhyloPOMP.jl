@@ -247,13 +247,13 @@ choose_branch(
     t::Time,
     guide::Guide{F,N,D},
     node::Integer,
-    n,
+    n::Tuple,
     cols::Coloring{D},
     i::D, j::D,
 ) where {F,N,D} = begin
     lins = [guide[node].linmap[k] for k ∈ cols[i]]
     p = relhaz(t, guide, node, i, j, lins)
-    s1 = F(1+n-ell(cols,i))
+    s1 = F(1+n[Int(i)]-ell(cols,i))
     s2 = sum(p)
     s = s1+s2
     r = s*rand(F)
