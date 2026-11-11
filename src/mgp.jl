@@ -22,6 +22,11 @@ soft_filter_def(args::Expr...) = begin
         :state => :(),
         :eventmap => FuncMap(),
         :movemap => FuncMap(),
+        :types => quote
+            Name = PhyloPOMP.Name
+            Time = PhyloPOMP.Time
+            Prob = PhyloPOMP.Prob
+        end,
         :decls => Expr[]
     )
     parse_mgp_spec!(dict, args...)
@@ -186,10 +191,10 @@ process_move!(move, jump, dict) = begin
         make_swap_move!(move, jump, dict)
     elseif type == :fork
         jump[:has_sing] = :true
-        make_fork_move!(move, jump, dict)
+        make_fork_propnmove!(move, jump, dict)
     elseif type == :chop
         jump[:has_sing] = :true
-        make_chop_move!(move, jump, dict)
+        make_chop_propnmove!(move, jump, dict)
     else
         error("unknown type $type in move $(move[:name]) for jump $(jump[:name]).")
     end
@@ -266,10 +271,10 @@ make_swap_move!(move, jump, dict) = begin
             enns = $demeocc(state)
             if b == 0
                 ells = ell(cols)
-                boost = $offboost(n, ells)
+                boost = $offboost(enns, ells)
             else
                 ells = swap!(cols, $from, $to, b)
-                boost = $onboost(n, ells)
+                boost = $onboost(enns, ells)
             end
             log(boost/p), state
         end
@@ -278,43 +283,23 @@ make_swap_move!(move, jump, dict) = begin
     nothing
 end
 
-make_fork_move!(move, jump, dict) = begin
+make_fork_propnmove!(move, jump, dict) = begin
+    move[:to] = move[:to].args
+    make_fork_prop!(move, jump, dict)
+    make_fork_move!(move, jump, dict)
+    delete!(move,:from)
+    delete!(move,:to)
+    nothing
+end
+
+make_fork_prop!(move, jump, dict) = begin
     signature = (0,2)
-    fname = Symbol(:move_,move[:name])
-    from = pop!(move,:from)
-    to = pop!(move,:to).args
-    production = pop!(move,:production)
-    saturation = pop!(move,:saturation)
-    boost = make_boostfn!(production,saturation,move,dict,:fork)
+    from = move[:from]
+    to = move[:to]
     rate = jump[:ratefn]
     demeocc = dict[:demeoccfn]
-    popmove = jump[:popmovefn]
-    defn = quote
-        $fname = function(node, cols, state, t; kwargs...)
-            if node.parlin ∈ cols[$from]
-                k, _, p = rcateg(branch_options(node.present), true) # FIXME: care is needed in defn of 'branch_options'
-                rate = $rate(t, state; kwargs...)
-                if k==1
-                    ells = fork!(cols,$from,node.parlin,($(to[1]),$(to[2])),node.chillins)
-                else
-                    ells = fork!(cols,$from,node.parlin,($(to[2]),$(to[1])),node.chillins)
-                end
-                state = $popmove(t, state; kwargs...)
-                enns = $demeocc(state)
-                boost = $boost(enns,ells)
-                log(rate*boost/p), state
-            else
-                Prob(-Inf), state
-            end
-        end
-    end
-    push!(dict[:decls],defn)
-    if !haskey(dict[:movemap],signature)
-        dict[:movemap][signature] = Symbol[]
-    end
-    push!(dict[:movemap][signature], fname)
-    fname = Symbol(:prop_,move[:name])
     prop = pop!(move,:propfn)
+    fname = Symbol(:prop_,move[:name])
     defn = quote
         $fname = function(node, cols, state, t; kwargs...)
             if node.parlin ∈ cols[$from]
@@ -329,7 +314,82 @@ make_fork_move!(move, jump, dict) = begin
         end
     end
     push!(dict[:decls],defn)
-    if !haskey(dict[:eventmap],signature)
+    if !haskey(dict[:eventmap], signature)
+        dict[:eventmap][signature] = Symbol[]
+    end
+    push!(dict[:eventmap][signature], fname)
+    nothing
+end
+
+make_fork_move!(move, jump, dict) = begin
+    signature = (0,2)
+    fname = Symbol(:move_,move[:name])
+    from = move[:from]
+    to = move[:to]
+    production = pop!(move,:production)
+    saturation = pop!(move,:saturation)
+    boost = make_boostfn!(production,saturation,move,dict,:fork)
+    rate = jump[:ratefn]
+    demeocc = dict[:demeoccfn]
+    popmove = jump[:popmovefn]
+    defn = quote
+        $fname = function(node, cols, state, t; kwargs...)
+            if node.parlin ∈ cols[$from]
+                alpha = branch_options($(to[1]), $(to[2]), node.present)
+                k, _, p = rcateg(alpha, true)
+                rate = $rate(t, state; kwargs...)
+                if k==1
+                    ells = fork!(cols,$from,node.parlin,($(to[1]),$(to[2])),node.chillins)
+                else
+                    ells = fork!(cols,$from,node.parlin,($(to[2]),$(to[1])),node.chillins)
+                end
+                state = $popmove(t, state; kwargs...)
+                enns = $demeocc(state)
+                boost = $boost(enns, ells)
+                log(rate*boost/p), state
+            else
+                Prob(-Inf), state
+            end
+        end
+    end
+    push!(dict[:decls],defn)
+    if !haskey(dict[:movemap], signature)
+        dict[:movemap][signature] = Symbol[]
+    end
+    push!(dict[:movemap][signature], fname)
+    nothing
+end
+
+make_chop_propnmove!(move, jump, dict) = begin
+    move[:signature] = eval(move[:signature])
+    make_chop_prop!(move, jump, dict)
+    make_chop_move!(move, jump, dict)
+    delete!(move, :signature)
+    nothing
+end
+
+make_chop_prop!(move, jump, dict) = begin
+    signature = move[:signature]
+    from = move[:from]
+    prop = pop!(move,:propfn)
+    rate = jump[:ratefn]
+    demeocc = dict[:demeoccfn]
+    fname = Symbol(:prop_,move[:name])
+    defn = quote
+        $fname = function(node, cols, state, t; kwargs...)
+            if node.parlin ∈ cols[$from]
+                rate = $rate(t, state; kwargs...)
+                enns = $demeocc(state)
+                ells = ell(cols)
+                prop = $prop(state, enns, ells; kwargs...)
+                rate*prop
+            else
+                0
+            end
+        end
+    end
+    push!(dict[:decls], defn)
+    if !haskey(dict[:eventmap], signature)
         dict[:eventmap][signature] = Symbol[]
     end
     push!(dict[:eventmap][signature], fname)
@@ -337,25 +397,21 @@ make_fork_move!(move, jump, dict) = begin
 end
 
 make_chop_move!(move, jump, dict) = begin
-    signature = eval(move[:signature])
-    fname = Symbol(:move_,move[:name])
-    from = pop!(move,:from)
-    to = if haskey(move,:to)
-        pop!(move,:to)
-    else
-        nothing
-    end
+    signature = move[:signature]
+    from = pop!(move, :from)
+    to = pop!(move, :to, nothing)
     production = pop!(move,:production)
     saturation = pop!(move,:saturation)
     boost = make_boostfn!(production,saturation,move,dict,:chop)
     rate = jump[:ratefn]
-    demeocc = dict[:demeoccfn]
     popmove = jump[:popmovefn]
+    demeocc = dict[:demeoccfn]
     op = if isnothing(to)
         :(chop!(cols, $from, node.parlin))
     else
         :(chop!(cols, $from, node.parlin, $to, node.chillins[1]))
     end
+    fname = Symbol(:move_,move[:name])
     defn = quote
         $fname = function(node, cols, state, t; kwargs...)
             if node.parlin ∈ cols[$from]
@@ -371,30 +427,10 @@ make_chop_move!(move, jump, dict) = begin
         end
     end
     push!(dict[:decls],defn)
-    if !haskey(dict[:movemap],signature)
+    if !haskey(dict[:movemap], signature)
         dict[:movemap][signature] = Symbol[]
     end
     push!(dict[:movemap][signature], fname)
-    fname = Symbol(:prop_,move[:name])
-    prop = pop!(move,:propfn)
-    defn = quote
-        $fname = function(node, cols, state, t; kwargs...)
-            if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)
-                enns = $demeocc(state)
-                ells = ell(cols)
-                prop = $prop(state, enns, ells; kwargs...)
-                rate*prop
-            else
-                0
-            end
-        end
-    end
-    push!(dict[:decls],defn)
-    if !haskey(dict[:eventmap],signature)
-        dict[:eventmap][signature] = Symbol[]
-    end
-    push!(dict[:eventmap][signature], fname)
     nothing
 end
 
@@ -413,7 +449,7 @@ make_regmovefn!(dict) = begin
     fname = :regular_move!
     dict[:regmovefn] = fname
     defn = quote
-        $fname = function(k, t, guide, node, cols, state)
+        $fname = function(k, t, guide, node, cols, state; kwargs...)
             $body
         end
     end
@@ -429,8 +465,8 @@ make_regeventratefn!(dict) = begin
         prop = pop!(jump,:regpropfn)
         quote
             rate += r = $rate(t, state; kwargs...)
-            pi = $prop(state, ells; kwargs...)
-            alpha[$i] = r*pi
+            pi[$i] = $prop(state, enns, ells; kwargs...)
+            alpha[$i] = r*pi[$i]
         end
     end
     jumps = filter(x -> !haskey(x.second,:has_reg), dict[:jumps])
@@ -440,11 +476,13 @@ make_regeventratefn!(dict) = begin
             rate += $rate(t, state; kwargs...)
         end
     end
+    demeocc = dict[:demeoccfn]
     fname = :reg_event_rates!
     dict[:regeventratesfn] = fname
     defn = quote
         $fname = function(alpha, pi, t, state, cols; kwargs...)
             rate::Prob = 0
+            enns = $demeocc(state)
             ells = ell(cols)
             $(mpieces...)
             $(dpieces...)
@@ -476,7 +514,7 @@ make_regular_part!(dict) = begin
                 step = -log(rand())/s
                 if k > 0 && t+step < tf
                     ll1, state = $regmovefn(k, t, guide, n, cols, state)
-                    ll += ll1 - decay*step - log(pi[k])
+                    ll += ll1 - (decay*step + log(pi[k]))
                     t += step
                 else
                     step = tf - t
@@ -519,12 +557,12 @@ make_singmovefn!(dict) = begin
         end
         (:(nsample == $m && nchild == $n), expr)
     end
-    msg = "unrecognized node signature ($(Expr(:$,:nsample)), $(Expr(:$,:nchild))): model is incompatible with genealogy."
+    msg = :("unrecognized node signature (nsample = $nsample, nchild = $nchild): model is incompatible with genealogy.")
     body = switchblock(pieces...,:(error($msg)))
     fname = :singular_move!
     dict[:singmovefn] = fname
     defn = quote
-        $fname = function(nsample, nchild, node, t, state, cols; kwargs...)
+        $fname = function(nsample, nchild, node, cols, state, t; kwargs...)
             $body
             live = ll > Prob(-Inf)
             live, ll, state
@@ -564,6 +602,7 @@ end
 make_singular_part!(dict) = begin
     make_singmovefn!(dict)
     make_singular_rootfn!(dict)
+    demeocc = dict[:demeoccfn]
     livecond = dict[:livecondfn]
     fname = :singular_part!
     rootfn = pop!(dict,:singrootfn)
@@ -572,7 +611,9 @@ make_singular_part!(dict) = begin
     defn = quote
         $fname = function(cols, state, guide, n, t; kwargs...)
             ll::Prob = -Inf
-            live = $livecond(state, ell(cols))
+            enns = $demeocc(state)
+            ells = ell(cols)
+            live = $livecond(enns, ells)
             if live
                 node = guide[n]
                 nchild = length(node.chillins)
@@ -596,16 +637,19 @@ make_rinitfn(dict) = begin
     @assert haskey(dict,:rinit) "rinit not specified"
     fname = :rinitfn
     rinit = pop!(dict,:rinit)
+    types = dict[:types]
+    demes = dict[:deme_module]
     defn = :($fname = $rinit)
     quote
         let
+            $types
             $defn
             function (;kwargs...)
                 (
                     node = one(Name),
                     ll = zero(Prob),
                     live = true,
-                    cols = Coloring(Demes),
+                    cols = Coloring($demes),
                     state = $fname(;kwargs...),
                 )
             end
@@ -619,29 +663,31 @@ make_rprocessfn!(dict) = begin
     fname = :rprocessfn
     defn = quote
         $fname = function (;t, dt, guide, node, ll, live, cols, state, kwargs...,)
-                if live
-                    cols = copy(cols)
-                    live, ll, state = singular_part!(
-                        cols, state, guide, node, t;
-                        kwargs...,
-                    )
-                else
-                    ll = Prob(-Inf)
-                end
-                if live && dt > 0
-                    ll1, state = regular_part!(
-                        cols, state, guide, node, t, t+dt;
-                        kwargs...,
-                    )
-                    ll += ll1
-                end
-                (;node = node+1, ll, live, cols, state)
+            if live
+                cols = copy(cols)
+                live, ll, state = singular_part!(
+                    cols, state, guide, node, t;
+                    kwargs...,
+                )
+            else
+                ll = Prob(-Inf)
+            end
+            if live && dt > 0
+                ll1, state = regular_part!(
+                    cols, state, guide, node, t, t+dt;
+                    kwargs...,
+                )
+                ll += ll1
+            end
+            (;node = node+1, ll, live, cols, state)
         end
     end
     push!(dict[:decls],defn)
+    types = dict[:types]
     demedecls = pop!(dict,:demedecls)
     quote
         let
+            $types
             $demedecls
             $(dict[:decls]...)
             $fname

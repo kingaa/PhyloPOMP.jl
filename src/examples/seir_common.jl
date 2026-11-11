@@ -90,15 +90,11 @@ singular_sample!(node, cols, state, t; kwargs...) = begin
     end
 end
 
-branch_options(x::AbstractArray{Prob,2}) = begin
-    [x[1,1]*x[2,2], x[1,2]*x[2,1]]
-end
-
 singular_branch!(node, cols, (;S, E, I, R), t; β, pop, _...) = begin
     boost::Prob = 1
     if node.parlin ∈ cols[Infec] && S > 0
         live = true
-        k, _, p = rcateg(branch_options(node.present), true)
+        k, _, p = rcateg(branch_options(Expos,Infec,node.present), true)
         boost = β*S*I/pop/p
         @assert k ≠ 0
         if k==1

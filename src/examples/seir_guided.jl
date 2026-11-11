@@ -76,7 +76,7 @@ move_transmission!(
     t, guide, node, cols, (;S, E, I, R);
     kwargs...,
 ) = begin
-    b,p = choose_branch(t,guide,node,I,cols,Infec,Expos)
+    b,p = choose_branch(t,guide,node,(E,I),cols,Infec,Expos)
     S -= 1
     E += 1
     if b == 0
@@ -93,7 +93,7 @@ move_progression!(
     t, guide, node, cols, (;S, E, I, R);
     kwargs...,
 ) = begin
-    b,p = choose_branch(t,guide,node,E,cols,Expos,Infec)
+    b,p = choose_branch(t,guide,node,(E,I),cols,Expos,Infec)
     E -= 1
     I += 1
     if b == 0

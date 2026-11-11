@@ -40,7 +40,6 @@ spec = quote @mgp_soft_filter(
         ),
         prog=(
             rate=σ*E,
-            pi = 1,
             popmove=begin
                 E -= 1
                 I += 1
@@ -96,7 +95,7 @@ spec = quote @mgp_soft_filter(
                     signature=(1,1),
                     pi=1,
                     from=Infec,
-                    to=Invec,
+                    to=Infec,
                     production=(0,1),
                     saturation=(0,1),
                 ),

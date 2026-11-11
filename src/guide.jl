@@ -270,6 +270,18 @@ choose_branch(
     end
 end
 
+branch_options(
+    i::D, j::D, x::AbstractArray{F,2},
+) where {D,F} = begin
+    if i == j
+        [1]
+    else
+        ii = Int(i)
+        ij = Int(j)
+        [x[ii,1]*x[ij,2], x[ii,2]*x[ij,1]]
+    end
+end
+
 assimil!(
     parprob::AbstractVector{F},
     chilprobs::AbstractMatrix{F},

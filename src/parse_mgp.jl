@@ -31,7 +31,5 @@ repair_mgp_spec!(dict) = begin
     @assert haskey(dict,:enns) "enns not specified"
     @assert haskey(dict,:ells) "ells not specified"
     dict[:state] = make_named(dict[:state])
-    dict[:enns] = make_named(dict[:enns])
-    dict[:ells] = make_named(dict[:ells])
     nothing
 end
