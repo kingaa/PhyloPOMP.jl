@@ -1,5 +1,6 @@
 using PhyloPOMP
 using PartiallyObservedMarkovProcesses
+using RCall
 
 spec = quote @mgp_soft_filter(
     rinit = function(; N0, _...)
@@ -10,9 +11,6 @@ spec = quote @mgp_soft_filter(
     deme_occupancy=(N,),
     enns=(n,),
     ells=(ℓ,),
-    live_condition=begin
-        n ≥ ℓ
-    end,
     jumps=(
         birth=(
             rate=λ*N,
@@ -123,8 +121,6 @@ p = pomp(
 );
 pf = [pfilter(p,Np=1000) for _ in 1:16];
 pfest = logmeanexp(logLik.(pf), se=true, ess=true)
-
-using RCall
 
 R"""
 library(phylopomp)

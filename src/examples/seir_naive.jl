@@ -19,21 +19,15 @@ using .Demes: Expos, Infec, DemeSet
 include("seir_trees.jl")
 
 ## gives the occupancy of each deme
-deme_occupancy(;E, I, _...,) = begin
-    ;E, I
-end
-
-## Is the population state compatible with the genealogy?
-live_condition((;S, E, I, R), cols) = begin
-    ellE, ellI = ell(cols)
-    I ≥ ellI && E ≥ ellE
+deme_occupancy((;S, E, I, R)) = begin
+    E, I
 end
 
 seir_rinit(; S0, E0, I0, R0, pop, _...) =
     barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
 
 singular_root!(node, cols, state, t; kwargs...,) = begin
-    n = deme_occupancy(;state...)
+    n = deme_occupancy(state)
     ells = ell(cols)
     i, _, p = rcateg(n.-ells, true)
     if i > 0
@@ -122,7 +116,7 @@ singular_part!(
     cols, state, t, geneal, n;
     kwargs...,
 ) = begin
-    live = live_condition(state, cols)
+    live = isalive(deme_occupancy(state), ell(cols))
     ll::Prob = 0
     if live
         node = geneal[n]

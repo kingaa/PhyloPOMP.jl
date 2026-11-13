@@ -8,14 +8,8 @@ using .Demes: Expos, Infec, DemeSet
 include("seir_trees.jl")
 
 ## gives the occupancy of each deme
-deme_occupancy(;E, I, _...,) = begin
-    (;Expos=E, Infec=I)
-end
-
-## Is the population state compatible with the genealogy?
-live_condition((;S, E, I, R), cols) = begin
-    ellE, ellI = ell(cols)
-    I ≥ ellI && E ≥ ellE
+deme_occupancy((;S, E, I, R)) = begin
+    E, I
 end
 
 ## Singular-part section.
@@ -29,7 +23,7 @@ singular_root!(
     node::GuideNode{F,N,D}, cols, state, t;
     kwargs...,
 ) where {F, N, D <: Enum} = begin
-    n = Tuple(deme_occupancy(;state...))
+    n = deme_occupancy(state)
     ells = ell(cols)
     i, _, p = rcateg(node.present[:,1].*(n.-ells), true)
     q::Prob = 0
@@ -94,14 +88,9 @@ singular_branch!(node, cols, (;S, E, I, R), t; β, pop, _...) = begin
     boost::Prob = 1
     if node.parlin ∈ cols[Infec] && S > 0
         live = true
-        k, _, p = rcateg(branch_options(Expos,Infec,node.present), true)
+        i, j, p = branch_options_move(Expos, Infec, node.present)
+        ellE, ellI = fork!(cols,Infec,node.parlin,(i,j),node.chillins)
         boost = β*S*I/pop/p
-        @assert k ≠ 0
-        if k==1
-            ellE, ellI = fork!(cols,Infec,node.parlin,(Expos,Infec),node.chillins)
-        else
-            ellE, ellI = fork!(cols,Infec,node.parlin,(Infec,Expos),node.chillins)
-        end
         S -= 1
         E += 1
         boost *= @binomratio((E,I),(ellE,ellI),(1,1),(1,1))
@@ -116,7 +105,7 @@ singular_part!(
     cols, state, guide, n, t;
     kwargs...,
 ) = begin
-    live = live_condition(state, cols)
+    live = isalive(deme_occupancy(state), ell(cols))
     if live
         node = guide[n]
         if node.type==Root

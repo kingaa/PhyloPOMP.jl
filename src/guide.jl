@@ -270,15 +270,33 @@ choose_branch(
     end
 end
 
-branch_options(
+branch_options_prop(
     i::D, j::D, x::AbstractArray{F,2},
 ) where {D,F} = begin
     if i == j
-        [1]
+        ii = Int(i)
+        x[ii,1]*x[ii,2]
     else
         ii = Int(i)
         ij = Int(j)
-        [x[ii,1]*x[ij,2], x[ii,2]*x[ij,1]]
+        x[ii,1]*x[ij,2] + x[ii,2]*x[ij,1]
+    end
+end
+
+branch_options_move(
+    i::D, j::D, x::AbstractArray{F,2},
+) where {D,F} = begin
+    if i == j
+        i, j, Prob(1)
+    else
+        ii = Int(i)
+        ij = Int(j)
+        k, _, p = rcateg([x[ii,1]*x[ij,2], x[ii,2]*x[ij,1]], true)
+        if k == 1
+            i, j, p
+        else
+            j, i, p
+        end
     end
 end
 

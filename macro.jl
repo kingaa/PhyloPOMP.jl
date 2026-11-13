@@ -10,9 +10,6 @@ spec = quote @mgp_soft_filter(
     deme_occupancy=(E,I),
     enns=(nE,nI),
     ells=(ℓE,ℓI),
-    live_condition=begin
-        nI ≥ ℓI && nE ≥ ℓE
-    end,
     jumps=(
         trans=(
             rate=β*S*I/pop,
