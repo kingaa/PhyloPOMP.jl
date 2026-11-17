@@ -40,7 +40,7 @@ seed!(641922521)
     @info "soft filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
     @test isapprox(ll,-3.1014; atol=3*se)
 
-    ll, se = est(GuidedSEIR.filter_pomp(g, m(GuidedSEIR); par...))
+    ll, se = est(filter_pomp(GuidedSEIR.mgp, g; params=par))
     @info "semisoft filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
     @test isapprox(ll,-3.1014; atol=3*se)
 

@@ -8,8 +8,7 @@ using Test
 using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
-using PhyloPOMP.GuidedSEIR
-using PhyloPOMP.GuidedSEIR.Demes: Expos, Infec
+using PhyloPOMP.GuidedSEIR: mgp, seir_trees
 import PartiallyObservedMarkovProcesses as POMP
 
 heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
@@ -18,18 +17,36 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
 
     seed!(2123986527)
 
-    g = parse_newick(GuidedSEIR.seir_trees[1], time = 50.0)
+    g = parse_newick(seir_trees[1], time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured}
 
-    p = GuidedSEIR.filter_pomp(g,E0=0,I0=0,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1))
+    p = filter_pomp(
+        mgp, g,
+        params=(
+            β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
+            pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.0, R0 = 0.08,
+        )
+    )
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = GuidedSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0,ψ=0)
+    p = filter_pomp(
+        mgp, g,
+        params=(
+            β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.0, χ = 0.0,
+            pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
+        )
+    )
     @test p isa POMP.PompObject
     @test logLik(pfilter(p,Np=100))==-Inf
 
-    p = GuidedSEIR.filter_pomp(g,fsmarkov(Expos=>0.1,Infec=>1,(Expos,Infec)=>1),χ=0.01)
+    p = filter_pomp(
+        mgp, g,
+        params=(
+            β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.01,
+            pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
+        )
+    )
     @test p isa POMP.PompObject
 
     @info h2("simulate test")

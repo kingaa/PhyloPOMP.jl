@@ -2,14 +2,24 @@ using PhyloPOMP
 using PartiallyObservedMarkovProcesses
 
 spec = quote @mgp_soft_filter(
-    rinit = function(; S0, E0, I0, R0, pop, _...)
-        barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
-    end,
     state=(S,E,I,R),
     demes=(Expos,Infec),
     deme_occupancy=(E,I),
     enns=(nE,nI),
     ells=(ℓE,ℓI),
+    rinit = function(; S0, E0, I0, R0, pop, _...)
+        barycentric(Int64,(S=S0,E=E0,I=I0,R=R0),pop)
+    end,
+    init_state = :(S=Int64(0),E=Int64(0),I=Int64(0),R=Int64(0)),
+    knowledge = function(v; deme, type, time)
+        if type == Sample || type == Node
+            demekron!(v, Infec)
+            true
+        else
+            false
+        end
+    end,
+    guide = fsmarkov(Expos=>1, Infec=>1, (Expos,Infec)=>1),
     jumps=(
         trans=(
             rate=β*S*I/pop,
@@ -126,3 +136,14 @@ end
 x = eval(spec)
 
 @eval(@macroexpand $spec)
+
+include("src/examples/seir_trees.jl")
+g = parse_newick(seir_trees[1],time=50)
+
+p = filter_pomp(
+    x, g;
+    params=(
+        β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
+        pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08
+    ),
+)

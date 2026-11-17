@@ -168,9 +168,12 @@ make_singmovefn!(dict) = begin
                     f(node, cols, state, t; kwargs...)
                 end
                 k,_,p = rcateg(alpha, true)
-                @assert k > 0
-                ll, state = movefuns[k](node, cols, state, t; kwargs...)
-                ll -= log(p)
+                if k > 0
+                    ll, state = movefuns[k](node, cols, state, t; kwargs...)
+                    ll -= log(p)
+                else
+                    ll = Prob(-Inf)
+                end
             end
         else
             quote
