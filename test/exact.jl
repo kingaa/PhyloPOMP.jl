@@ -12,7 +12,7 @@ import ..Main: h1, h2
 @info h1("SEIR filters vs known likelihood")
 
 using Test
-using PhyloPOMP, PhyloPOMP.NaiveSEIR, PhyloPOMP.SoftSEIR, PhyloPOMP.GuidedSEIR, PhyloPOMP.HardSEIR
+using PhyloPOMP, PhyloPOMP.NaiveSEIR, PhyloPOMP.GuidedSEIR, PhyloPOMP.HardSEIR
 using Random: seed!
 seed!(641922521)
 
@@ -36,12 +36,8 @@ seed!(641922521)
     @info "naïve filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
     @test isapprox(ll,-3.1014; atol=3*se)
 
-    ll,se = est(SoftSEIR.filter_pomp(g, m(SoftSEIR); par...))
-    @info "soft filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
-    @test isapprox(ll,-3.1014; atol=3*se)
-
     ll, se = est(filter_pomp(GuidedSEIR.mgp, g; params=par))
-    @info "semisoft filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
+    @info "soft filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
     @test isapprox(ll,-3.1014; atol=3*se)
 
     ll,se = est(HardSEIR.filter_pomp(g, m(HardSEIR); par...))
