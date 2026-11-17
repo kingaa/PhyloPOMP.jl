@@ -1,19 +1,19 @@
-module GuidedSEIRTest
+module SoftSEIRTest
 
 import ..Main: h1, h2
 
-@info h1("SEIR model with guided proposals")
+@info h1("SEIR model with soft proposals")
 
 using Test
 using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
-using PhyloPOMP.GuidedSEIR: mgp, seir_trees
+using PhyloPOMP.SoftSEIR: mgp, seir_trees
 import PartiallyObservedMarkovProcesses as POMP
 
 heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
 
-@testset verbose=true "SEIR model with guided proposals" begin
+@testset verbose=true "SEIR model with soft proposals" begin
 
     seed!(2123986527)
 
