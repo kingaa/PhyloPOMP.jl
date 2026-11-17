@@ -202,10 +202,10 @@ make_singular_rootfn!(dict) = begin
     dict[:singrootfn] = fname = :singular_root!
     defn = quote
         $fname = function(node::GuideNode{F,N,D}, cols, state, t; kwargs...) where {F, N, D <: Enum}
-            ll::Prob = -Inf
+            q::Prob = 0
             i, _, p = rcateg(node.present[:,1], true)
             if i > 0
-                ll = -log(p)
+                q = inv(p)
                 plant!(cols, D(i), node.chillins[1])
                 enns = $demeocc(state)
                 ells = ell(cols)
@@ -213,7 +213,7 @@ make_singular_rootfn!(dict) = begin
             else
                 live = false
             end
-            live, ll, state
+            live, log(q), state
         end
     end
     push!(dict[:decls],defn)

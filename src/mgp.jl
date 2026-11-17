@@ -299,9 +299,8 @@ end
 make_rprocessfn!(dict) = begin
     make_regular_part!(dict)
     make_singular_part!(dict)
-    fname = :rprocessfn
     defn = quote
-        $fname = function (;t, dt, guide, node, ll, live, cols, state, kwargs...,)
+        function (;t, dt, guide, node, ll, live, cols, state, kwargs...,)
             if live
                 cols = copy(cols)
                 live, ll, state = singular_part!(
@@ -321,7 +320,6 @@ make_rprocessfn!(dict) = begin
             (;node = node+1, ll, live, cols, state)
         end
     end
-    push!(dict[:decls],defn)
     types = dict[:types]
     demedecls = dict[:demedecls]
     quote
@@ -329,7 +327,7 @@ make_rprocessfn!(dict) = begin
             $types
             $demedecls
             $(dict[:decls]...)
-            $fname
+            $defn
         end
     end
 end
