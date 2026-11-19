@@ -1,6 +1,6 @@
 # Reference
 
 ```@autodocs
-Modules = [PhyloPOMP, PhyloPOMP.Unstructured]
+Modules = [PhyloPOMP]
 Order   = [:module, :function, :macro, :type, :constant]
 ```

@@ -1,23 +1,27 @@
-const MgpDict = Dict{Symbol,Any}
-
 parse_mgp_spec1(arg) = arg
 
 parse_mgp_spec1(arg::Expr) = begin
     if arg.head == :tuple &&
         all(map(x -> (isa(x,Expr) && x.head==:(=)), arg.args))
         dict = MgpDict()
-        parse_mgp_spec!(dict, arg.args...)
+        parse_mgp_spec2!(dict, arg.args...)
         dict
     else
         arg
     end
 end
 
-parse_mgp_spec!(dict::MgpDict, args::Expr...) = begin
+parse_mgp_spec2!(dict::MgpDict, args::Expr...) = begin
     for arg in args
         @assert arg.head == :(=) && arg.args[1] isa Symbol "misspecified argument $arg."
         dict[arg.args[1]] = parse_mgp_spec1(arg.args[2])
     end
+    nothing
+end
+
+parse_mgp_spec!(dict::MgpDict, args::Expr...) = begin
+    parse_mgp_spec2!(dict, args...)
+    repair_mgp_spec!(dict)
     nothing
 end
 

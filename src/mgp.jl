@@ -1,13 +1,17 @@
+using PartiallyObservedMarkovProcesses: pomp
+
+const MgpDict = Dict{Symbol,Any}
+const FuncMap = Dict{Tuple{Int,Int},Vector{Symbol}}
+
 include("extract_symbols.jl")
 include("parse_mgp.jl")
 include("switchblock.jl")
 include("filter_singular.jl")
 include("filter_regular.jl")
 
-using PartiallyObservedMarkovProcesses: pomp
-
 macro mgp_soft_filter(args...)
-    esc(soft_filter_def(args...))
+    expr = soft_filter_def(args...)
+    esc(:(Base.@__doc__ $expr))
 end
 
 soft_filter_def(args::Expr...) = begin
@@ -27,34 +31,32 @@ soft_filter_def(args::Expr...) = begin
                 end
             end
         end,
-        :decls => Expr[]
+        :decls => Expr[
+            :(using PhyloPOMP),
+            :(using PhyloPOMP: Name, Time, Prob, Root, Node, Sample),
+        ],
     )
-    push!(dict[:decls],:(using PhyloPOMP))
-    push!(dict[:decls],:(using PhyloPOMP: Name, Time, Prob, Root, Node, Sample))
     parse_mgp_spec!(dict, args...)
-    repair_mgp_spec!(dict)
+    modname = pop!(dict,:name,Symbol(:MGP_,gensym()))
     process_demes!(dict)
     process_jumps!(dict)
     make_knowledge!(dict)
-    make_fsmp!(dict)
     make_rinitfn!(dict)
     make_init_state!(dict)
     make_logdmeasure!(dict)
     make_rprocessfn!(dict)
     decls = peelblock.(dict[:decls])
-    modname = Symbol(:MGP_,gensym())
-    #    mdoc = Expr(:block, Expr(:meta, :doc), modname)
+    mdoc = Expr(:block, Expr(:meta, :doc), modname)
     Expr(:toplevel,
          Expr(:module, true, modname,
-              Expr(:block,decls...)))
+              Expr(:block, decls...)),
+         mdoc, modname)
 end
 
 process_demes!(dict) = begin
     @assert haskey(dict,:demes) "demes not specified"
     @assert dict[:demes].head == :tuple "demes should be specified as a tuple"
     dict[:demes] = dict[:demes].args
-    nd = length(dict[:demes])
-    dict[:nullproduc] = (collect(fill(0,nd))...,)
     state = dict[:state]
     dict[:demeoccfn] = fname = :deme_occupancy
     @assert haskey(dict,:deme_occupancy) "deme_occupancy not specified"
@@ -70,8 +72,7 @@ process_demes!(dict) = begin
 end
 
 process_jumps!(dict) = begin
-    @assert haskey(dict, :jumps) "no jumps specified: null process"
-    jumps = dict[:jumps]
+    jumps = get(dict, :jumps, MgpDict())
     names = keys(jumps)
     for name ∈ names
         jump = jumps[name]
@@ -240,6 +241,7 @@ end
 make_rprocessfn!(dict) = begin
     make_regular_part!(dict)
     make_singular_part!(dict)
+    delete!(dict,:jumps)
     defn = quote
         const rprocessfn = function(;t, dt, guide, node, ll, live, cols, state, kwargs...,)
             if live
@@ -293,27 +295,27 @@ make_knowledge!(dict) = begin
     nothing
 end
 
-make_fsmp!(dict) = begin
-    @assert haskey(dict,:guide) "guide not specified"
-    g = pop!(dict,:guide)
-    push!(dict[:decls],:(const guideproc = $g))
-    nothing
-end
-
 filter_pomp(
     x::Module,
-    g::Genealogy;
+    g::Guide;
     kwargs...,
 ) = begin
-    guidegen = guide(g, x.guideproc, x.knowledge!)
     pomp(
-        ;t0 = timezero(guidegen),
-        times = times(guidegen),
-        userdata = (guide = guidegen,),
+        ;t0 = timezero(g),
+        times = times(g),
+        userdata = (guide = g,),
         init_state = x.init_state,
         rinit = x.rinitfn,
         rprocess = onestep(x.rprocessfn),
         logdmeasure = x.logdmeasurefn,
         kwargs...,
     )
+end
+
+macro guide(x, g, arg)
+    x = __module__.eval(x)
+    @assert x isa Module && isdefined(x,:knowledge!) "improper call to @guide"
+    m = x.eval(arg)
+    k = x.knowledge!
+    esc(:(PhyloPOMP.guide($g,$m,$k)))
 end

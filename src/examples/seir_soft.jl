@@ -1,21 +1,16 @@
+public SoftSEIR
+
 """
     SoftSEIR
 
-A module containing an implementation of the phylodynamic filter for
-an SEIR model, using a filter guide and "soft" proposals.  That is,
-when population-process events occur, the guide can steer those events
-preferentially onto (or away from) particular branches, but the
-overall event rate remains equal to that of the underlying population
-process.
+An implementation of the phylodynamic filter for an SEIR model, using
+a filter guide and "soft" proposals.  That is, when population-process
+events occur, the guide can steer those events preferentially onto (or
+away from) particular branches, but the overall event rate cannot
+increase above that of the underlying population process.
 """
-module SoftSEIR
-
-using ..PhyloPOMP
-using PartiallyObservedMarkovProcesses: pomp
-
-include("seir_trees.jl")
-
-const mgp = @mgp_soft_filter(
+const SoftSEIR = @mgp_soft_filter(
+    name=SoftSEIR,
     state=(S,E,I,R),
     demes=(Expos,Infec),
     deme_occupancy=(E,I),
@@ -33,7 +28,6 @@ const mgp = @mgp_soft_filter(
             false
         end
     end,
-    guide = fsmarkov(Expos=>0.1, Infec=>1, (Expos,Infec)=>1),
     jumps=(
         trans=(
             rate=β*S*I/pop,
@@ -136,4 +130,11 @@ const mgp = @mgp_soft_filter(
     ),
 )
 
-end
+SoftSEIR.include("seir_trees.jl")
+
+SoftSEIR.eval(
+    :(geneal = [
+        parse_newick(seir_trees[1],time=50,demes=DemeSet),
+        parse_newick(seir_trees[2],time=400,demes=DemeSet),
+    ])
+)

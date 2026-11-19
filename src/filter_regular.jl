@@ -50,8 +50,10 @@ make_swap_move!(move, jump, dict) = begin
 end
 
 make_regmovefn!(dict) = begin
-    @assert haskey(dict,:jumps) "no jumps specified: null process"
-    jumps = filter(x -> haskey(x.second,:has_reg), dict[:jumps])
+    jumps = filter(
+        x -> haskey(x.second,:has_reg),
+        get(dict, :jumps, MgpDict())
+    )
     dict[:nregjump] = length(jumps)
     names = keys(jumps)
     items = map(enumerate(names)) do (k,name)
@@ -60,7 +62,10 @@ make_regmovefn!(dict) = begin
         call = :((ll, state) = $fun(t, guide, node, cols, state; kwargs...))
         (cond, call)
     end
-    body = switchblock(items..., :(error("unreachable condition in `regular_move!` function")))
+    body = switchblock(
+        items...,
+        :(error("unreachable condition in `regular_move!` function"))
+    )
     fname = :regular_move!
     dict[:regmovefn] = fname
     defn = quote
@@ -73,8 +78,10 @@ make_regmovefn!(dict) = begin
 end
 
 make_regeventratefn!(dict) = begin
-    @assert haskey(dict,:jumps) "no jumps specified: null process"
-    jumps = filter(x -> haskey(x.second,:has_reg), dict[:jumps])
+    jumps = filter(
+        x -> haskey(x.second,:has_reg),
+        get(dict, :jumps, MgpDict())
+    )
     mpieces = map(enumerate(values(jumps))) do (i,jump)
         rate = pop!(jump,:ratefn)
         prop = pop!(jump,:regpropfn)
@@ -115,7 +122,7 @@ make_regular_part!(dict) = begin
     nj = pop!(dict,:nregjump)
     eventratesfn = pop!(dict,:regeventratesfn)
     regmovefn = pop!(dict,:regmovefn)
-    dict[:regularpartfn] = fname = :regular_part!
+    fname = :regular_part!
     defn = quote
         const $fname = function(cols, state, guide, n, t, tf; kwargs...,)
             local node, alpha, pi, step, decay, ll, ll1, k, s

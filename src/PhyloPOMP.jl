@@ -53,7 +53,7 @@ include("indicator.jl")
 export @binomratio
 include("binomratio.jl")
 
-export @mgp_soft_filter, isalive, filter_pomp
+export @mgp_soft_filter, @guide, isalive, filter_pomp
 include("mgp.jl")
 
 include("examples/Examples.jl")

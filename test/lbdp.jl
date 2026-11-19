@@ -11,6 +11,11 @@ using PhyloPOMP
 import PartiallyObservedMarkovProcesses as POMP
 using RCall
 
+heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
+
+"""
+   A soft filter for LBDP.
+"""
 const mgp = @mgp_soft_filter(
     rinit = function(; N0, _...)
         (N=N0,)
@@ -21,7 +26,6 @@ const mgp = @mgp_soft_filter(
     deme_occupancy=(N,),
     enns=(n,),
     ells=(ℓ,),
-    guide=fsmarkov(def=>1),
     jumps=(
         birth=(
             rate=λ*N,
@@ -98,22 +102,27 @@ n = "((((((((((:0.11078693391015726,((:0.0802787033444039,:0):0.0901256425088821
     seed!(2123986527)
 
     @test mgp isa Module
-    g = parse_newick(n, time=5)
+    g = @guide mgp parse_newick(n, time=5) fsmarkov(def=>1)
     p = filter_pomp(mgp, g; params=map(Float64,(;λ=2,μ=1,ψ=1,χ=0.1,N0=10)))
     @test p isa POMP.PompObject
     pfilter(p,Np=100)
     @btime pfilter($p, Np=1000)
-    @time pf = [pfilter(p, Np=1000) for _ ∈ 1:16]
-    pfest = logmeanexp(logLik.(pf), se=true)
 
-    R"""
+    if heavy
+
+        @time pf = [pfilter(p, Np=1000) for _ ∈ 1:16]
+        pfest = logmeanexp(logLik.(pf), se=true)
+
+        R"""
 library(phylopomp, warn.conflicts=FALSE)
 $n |>
   parse_newick(time=5) |>
   lbdp_exact(lambda=2,mu=1,psi=1,chi=0.1,n0=10) -> ll
 """
 
-    @info "filter: $(round(pfest.est,digits=1)) ± $(round(pfest.se,digits=2)), exact: $(round(@rget(ll),digits=1))"
+        @info "filter: $(round(pfest.est,digits=1)) ± $(round(pfest.se,digits=2)), exact: $(round(@rget(ll),digits=1))"
+
+    end
 
 end
 

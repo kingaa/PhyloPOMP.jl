@@ -1,5 +1,3 @@
-const FuncMap = Dict{Tuple{Int,Int},Vector{Symbol}}
-
 isalive(enns, ells) = begin
     all(enns .≥ ells)
 end
@@ -232,7 +230,6 @@ make_singular_part!(dict) = begin
     fname = :singular_part!
     rootfn = pop!(dict,:singrootfn)
     singmovefn = pop!(dict,:singmovefn)
-    dict[:singularpartfn] = fname
     defn = quote
         const $fname = function(cols, state, guide, n, t; kwargs...)
             local ll, enns, ells, live

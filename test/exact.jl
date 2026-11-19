@@ -12,11 +12,14 @@ import ..Main: h1, h2
 @info h1("SEIR filters vs known likelihood")
 
 using Test
-using PhyloPOMP, PhyloPOMP.NaiveSEIR, PhyloPOMP.SoftSEIR, PhyloPOMP.HardSEIR
+using PhyloPOMP, PhyloPOMP.NaiveSEIR, PhyloPOMP.HardSEIR
+using PhyloPOMP: SoftSEIR
 using Random: seed!
 seed!(641922521)
 
 @testset verbose=true "SEIR filters vs known likelihood" begin
+
+    @info "known log likelihood = -3.1014"
 
     ## a single infective carries the root lineage,
     ## so transmissions occur with I == ellI
@@ -36,7 +39,8 @@ seed!(641922521)
     @info "naïve filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
     @test isapprox(ll,-3.1014; atol=3*se)
 
-    ll, se = est(filter_pomp(SoftSEIR.mgp, g; params=par))
+    gd = @guide SoftSEIR g fsmarkov(Expos=>0.1, Infec=>1, (Expos,Infec)=>1)
+    ll, se = est(filter_pomp(SoftSEIR, gd; params=par))
     @info "soft filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
     @test isapprox(ll,-3.1014; atol=3*se)
 

@@ -15,7 +15,10 @@ mutable struct Coloring{D <: Enum, N}
             Tuple(BitSet() for _ ∈ Base.OneTo(length(demes)))
         )
     end
-    Coloring(demeset::Module) = Coloring(demeset.DemeSet)
+    Coloring(m::Module) = begin
+        @assert isdefined(m,:DemeSet) "DemeSet not defined in $m"
+        Coloring(m.DemeSet)
+    end
     Coloring(y::Coloring{D,N}) where {D,N} = new{D,N}(copy(y.cols))
 end
 

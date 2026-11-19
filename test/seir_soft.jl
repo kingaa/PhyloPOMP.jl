@@ -8,7 +8,7 @@ using Test
 using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
-using PhyloPOMP.SoftSEIR: mgp, seir_trees
+using PhyloPOMP: SoftSEIR
 import PartiallyObservedMarkovProcesses as POMP
 
 heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
@@ -17,11 +17,11 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
 
     seed!(2123986527)
 
-    g = parse_newick(seir_trees[1], time = 50.0)
-    @test g isa Genealogy{PhyloPOMP.Unstructured}
+    g = @guide SoftSEIR SoftSEIR.geneal[1] fsmarkov(Expos=>0.1, Infec=>1, (Expos,Infec)=>1)
+    @test g isa Guide
 
     p = filter_pomp(
-        mgp, g,
+        SoftSEIR, g,
         params=(
             β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.0,
             pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.0, R0 = 0.08,
@@ -31,7 +31,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     @test logLik(pfilter(p,Np=100))==-Inf
 
     p = filter_pomp(
-        mgp, g,
+        SoftSEIR, g,
         params=(
             β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.0, χ = 0.0,
             pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
@@ -41,7 +41,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
     @test logLik(pfilter(p,Np=100))==-Inf
 
     p = filter_pomp(
-        mgp, g,
+        SoftSEIR, g,
         params=(
             β = 4.0, σ = 1.0, γ = 1.0, ω = 1.0, ψ = 0.02, χ = 0.01,
             pop = 100, S0 = 0.9, E0 = 0.0, I0 = 0.02, R0 = 0.08,
