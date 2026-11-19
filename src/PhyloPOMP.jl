@@ -13,7 +13,6 @@ const Time = Float64
 const Prob = Float64
 
 using Reexport: @reexport
-@reexport using EnumX: @enumx
 
 import PartiallyObservedMarkovProcesses as POMP
 @reexport using PartiallyObservedMarkovProcesses
@@ -45,7 +44,7 @@ export Guide, GuideNode, guide, relhaz, relhaz_alloc, relhaz!,
     branch_options_move
 include("guide.jl")
 
-export @marks, rcateg
+export rcateg
 include("rcateg.jl")
 
 export @indicator

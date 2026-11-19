@@ -21,8 +21,8 @@ using Test
     @test ismissing(g.nodes[3].deme)
     @test sum(map(x->ismissing(x.deme),g.nodes))==20
     @test sum(map(x->!ismissing(x.deme),g.nodes))==65
-    @test sum(map(x->x.deme===SEIR.I,g.nodes))==52
-    @test sum(map(x->x.deme===SEIR.E,g.nodes))==13
+    @test sum(map(x->x.deme===I,g.nodes))==52
+    @test sum(map(x->x.deme===E,g.nodes))==13
     @test length(g.nodes)==85
     @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Sample)==24
     @test sum(map(x->x.type,g.nodes).==PhyloPOMP.Node)==56

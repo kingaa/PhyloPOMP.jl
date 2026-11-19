@@ -9,12 +9,13 @@ a demeset (see [@demes](@ref `@demes`)).
 """
 mutable struct Coloring{D <: Enum, N}
     cols::NTuple{N,BitSet}
-    Coloring(demeset::Module) = begin
-        demes = instances(demeset.DemeSet)
-        new{demeset.DemeSet,length(demes)}(
+    Coloring(demeset::Type{D}) where {D <: Enum} = begin
+        demes = instances(demeset)
+        new{demeset,length(demes)}(
             Tuple(BitSet() for _ ∈ Base.OneTo(length(demes)))
         )
     end
+    Coloring(demeset::Module) = Coloring(demeset.DemeSet)
     Coloring(y::Coloring{D,N}) where {D,N} = new{D,N}(copy(y.cols))
 end
 

@@ -26,9 +26,9 @@ seed!(641922521)
         pop=6, S0=4/6, E0=0.0, I0=1/6, R0=1/6,
     )
     m(M) = fsmarkov(
-        M.Demes.Expos=>0.1,
-        M.Demes.Infec=>1,
-        (M.Demes.Expos,M.Demes.Infec)=>1
+        M.Expos=>0.1,
+        M.Infec=>1,
+        (M.Expos,M.Infec)=>1
     )
     est(p) = logmeanexp([logLik(pfilter(p, Np=500)) for _ in 1:200], se=true)
 

@@ -46,16 +46,14 @@ const mgp = @mgp_soft_filter(
                     type=swap,
                     from=Infec,
                     to=Expos,
-                    production=(1,0),
-                    saturation=(1,0),
-
+                    idboost=@binomratio(nE,ℓE,1,0),
+                    swapboost=@binomratio((nE,nI),(ℓE,ℓI),(1,1),(1,0))
                 ),
                 fork=(
                     type=fork,
                     from=Infec,
                     to=(Expos,Infec),
-                    production=(1,1),
-                    saturation=(1,1),
+                    boost=@binomratio((nE,nI),(ℓE,ℓI),(1,1),(1,1))
                 ),
             ),
         ),
@@ -68,11 +66,10 @@ const mgp = @mgp_soft_filter(
             moves=(
                 swap=(
                     type=swap,
-                    pi=1,
                     from=Expos,
                     to=Infec,
-                    production=(0,1),
-                    saturation=(0,1),
+                    idboost=@binomratio(nI,ℓI,1,0),
+                    swapboost=@binomratio(nI,ℓI,1,1),
                 ),
             ),
         ),
@@ -88,8 +85,6 @@ const mgp = @mgp_soft_filter(
                     pi=begin
                         @indicator(I>ℓI, 1-ℓI/I)
                     end,
-                    production=(0,0),
-                    saturation=(0,0),
                 ),
             ),
         ),
@@ -101,10 +96,7 @@ const mgp = @mgp_soft_filter(
             end,
             moves=(
                 id=(
-                    pi=1,
                     type=id,
-                    production=(0,0),
-                    saturation=(0,0),
                 ),
             ),
         ),
@@ -114,32 +106,30 @@ const mgp = @mgp_soft_filter(
                 inline=(
                     type=chop,
                     signature=(1,1),
-                    pi=1,
                     from=Infec,
                     to=Infec,
-                    production=(0,1),
-                    saturation=(0,1),
+                    boost=@binomratio(nI,ℓI,1,1),
                 ),
                 terminal=(
                     type=chop,
                     signature=(1,0),
-                    pi=1,
                     from=Infec,
-                    production=(0,1),
-                    saturation=(0,0),
+                    boost=@binomratio(nI,ℓI,1,0),
                 ),
             ),
         ),
         sample_destruct=(
             rate=χ*I,
+            popmove=begin
+                I -= 1
+            end,
             moves=(
                 terminal=(
                     type=chop,
                     signature=(1,0),
                     pi=1,
                     from=Infec,
-                    production=(0,0),
-                    saturation=(0,0),
+                    boost=1,
                 ),
             ),
         ),

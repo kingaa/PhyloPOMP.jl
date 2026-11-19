@@ -1,5 +1,3 @@
-using EnumX: @enumx
-
 """
     @demes Name deme1 deme2 ...
 
@@ -8,7 +6,7 @@ Creates a new demeset, `Name`, which contains an enumeration of the demes
 enumeration and the enumeration type.
 """
 macro demes(name, first, rest...)
-    esc(:(@enumx T=DemeSet $name $first=1 $(rest...)))
+    esc(:(@enum $name $first=1 $(rest...)))
 end
 
 """
@@ -41,8 +39,4 @@ Returns a `Dict` that maps demes to strings.
 """
 enum2name(demes::Type{D}) where {D <: Enum} = begin
     Dict(i=>String(Symbol(i)) for i ∈ instances(demes))
-end
-
-macro isademeset(d)
-    esc(:(@assert $d isa Module && isdefined($d,:DemeSet) "construct a demeset using `@demes`"))
 end

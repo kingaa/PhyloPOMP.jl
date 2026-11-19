@@ -1,12 +1,12 @@
 make_id_move!(move, jump, dict) = begin
     demeocc = dict[:demeoccfn]
     popmove = jump[:popmovefn]
-    production = pop!(move,:production)
-    saturation = pop!(move,:saturation)
-    boost = make_boostfn!(production,saturation,move,dict,:id)
+    boost = pop!(move,:boost,1)
+    boost = make_boostfn!(boost,move,dict,:id)
     jump[:regmovefn] = fname = Symbol(:move_,move[:name])
     defn = quote
-        $fname = function(t, guide, node, cols, state; kwargs...)
+        const $fname = function(t, guide, node, cols, state; kwargs...)
+            local enns, ells, boost
             state = $popmove(t, state; kwargs...)
             enns = $demeocc(state)
             ells = ell(cols)
@@ -23,23 +23,24 @@ make_swap_move!(move, jump, dict) = begin
     popmove = jump[:popmovefn]
     from = pop!(move,:from)
     to = pop!(move,:to)
-    production = pop!(move,:production)
-    saturation = pop!(move,:saturation)
-    onboost = make_boostfn!(production,saturation,move,dict,:swap)
-    offboost = make_boostfn!(production,dict[:nullproduc],move,dict,:id)
+    idboost = pop!(move,:idboost)
+    swapboost = pop!(move,:swapboost)
+    idboost = make_boostfn!(idboost,move,dict,:id)
+    swapboost = make_boostfn!(swapboost,move,dict,:swap)
     jump[:regmovefn] = fname = Symbol(:move_,move[:name])
     defn = quote
-        $fname = function(t, guide, node, cols, state; kwargs...)
+        const $fname = function(t, guide, node, cols, state; kwargs...)
+            local enns, ells, boost, b, p
             enns = $demeocc(state)
             b, p = choose_branch(t, guide, node, enns, cols, $from, $to)
             state = $popmove(t, state; kwargs...)
             enns = $demeocc(state)
             if b == 0
                 ells = ell(cols)
-                boost = $offboost(enns, ells)
+                boost = $idboost(enns, ells)
             else
                 ells = swap!(cols, $from, $to, b)
-                boost = $onboost(enns, ells)
+                boost = $swapboost(enns, ells)
             end
             log(boost/p), state
         end
@@ -63,7 +64,7 @@ make_regmovefn!(dict) = begin
     fname = :regular_move!
     dict[:regmovefn] = fname
     defn = quote
-        $fname = function(k, t, guide, node, cols, state; kwargs...)
+        const $fname = function(k, t, guide, node, cols, state; kwargs...)
             $body
         end
     end
@@ -94,7 +95,8 @@ make_regeventratefn!(dict) = begin
     fname = :reg_event_rates!
     dict[:regeventratesfn] = fname
     defn = quote
-        $fname = function(alpha, pi, t, state, cols; kwargs...)
+        const $fname = function(alpha, pi, t, state, cols; kwargs...)
+            local rate, enns, ells
             rate::Prob = 0
             enns = $demeocc(state)
             ells = ell(cols)
@@ -115,7 +117,8 @@ make_regular_part!(dict) = begin
     regmovefn = pop!(dict,:regmovefn)
     dict[:regularpartfn] = fname = :regular_part!
     defn = quote
-        $fname = function(cols, state, guide, n, t, tf; kwargs...,)
+        const $fname = function(cols, state, guide, n, t, tf; kwargs...,)
+            local node, alpha, pi, step, decay, ll, ll1, k, s
             node = guide[n]
             alpha = similar(Vector{Prob},$nj)
             pi = similar(Vector{Prob},$nj)

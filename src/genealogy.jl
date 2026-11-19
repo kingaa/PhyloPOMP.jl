@@ -50,7 +50,7 @@ via a call to [`@demes`](@ref `@demes`).
 Internally, a genealogy is represented as a time-ordered sequence
 of *genealogical nodes* (represented by [`GenealNode`](@ref) objects).
 """
-mutable struct Genealogy{D}
+mutable struct Genealogy{D <: Enum}
     "Root-time of genealogy."
     t0::Time
     "Time of genealogy, i.e., right endpoint of the interval."
@@ -61,8 +61,7 @@ mutable struct Genealogy{D}
     nodes::Vector{GenealNode}
     "Constructor of an empty genealogy on the interval [t0,time]."
     Genealogy{D}(t0::Real, time::Real = t0,) where D = begin
-        @isademeset D
-        new{D}(Time(t0),Time(time),zero(Size),GenealNode{D.DemeSet}[])
+        new{D}(Time(t0),Time(time),zero(Size),GenealNode{D}[])
     end
 end
 

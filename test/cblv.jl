@@ -78,7 +78,6 @@ using Test
     @test_throws "improper" parse_cblv([3,2,1],[1,5,0])
     @test_throws "improper" parse_cblv([3,-2,1],[1,2,0])
     @test_throws "improper" parse_cblv([3,2,1],[1,2,-1])
-    @test_throws AssertionError parse_cblv([3,2,1],[1,2,0],demes=PhyloPOMP)
     @test_throws "exceeds" parse_cblv([3,2,1],[1,2,0],t0=5,time=6)
     @test_throws "invalid" parse_cblv([4.0,1,2],[1.0,0,3.5])
     @test_throws "invalid" parse_cblv([4.0,1,2],[1.0,0,0.5])

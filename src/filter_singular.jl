@@ -22,13 +22,14 @@ make_fork_prop!(move, jump, dict) = begin
     prop = pop!(move,:propfn)
     fname = Symbol(:prop_,move[:name])
     defn = quote
-        $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(node, cols, state, t; kwargs...)
+            local rate, enns, ells, p1, p2
             if node.parlin ∈ cols[$from]
                 rate = $rate(t, state; kwargs...)
                 enns = $demeocc(state)
                 ells = ell(cols)
                 p1 = $prop(state, enns, ells; kwargs...)
-                p2 = branch_options_prob($(to[1]), $(to[2]), node.present)
+                p2 = branch_options_prop($(to[1]), $(to[2]), node.present)
                 rate*p1*p2
             else
                 0
@@ -48,20 +49,20 @@ make_fork_move!(move, jump, dict) = begin
     fname = Symbol(:move_,move[:name])
     from = move[:from]
     to = move[:to]
-    production = pop!(move,:production)
-    saturation = pop!(move,:saturation)
-    boost = make_boostfn!(production,saturation,move,dict,:fork)
+    boost = pop!(move,:boost)
+    boost = make_boostfn!(boost,move,dict,:fork)
     rate = jump[:ratefn]
     demeocc = dict[:demeoccfn]
     popmove = jump[:popmovefn]
     defn = quote
-        $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(node, cols, state, t; kwargs...)
+            local rate, enns, ells, i, j, p, boost
             if node.parlin ∈ cols[$from]
-                i, j, p = branch_options_move($(to[1]), $(to[2]), node.present)
-                ells = fork!(cols,$from,node.parlin,(i,j),node.chillins)
                 rate = $rate(t, state; kwargs...)
                 state = $popmove(t, state; kwargs...)
                 enns = $demeocc(state)
+                i, j, p = branch_options_move($(to[1]), $(to[2]), node.present)
+                ells = fork!(cols,$from,node.parlin,(i,j),node.chillins)
                 boost = $boost(enns, ells)
                 log(rate*boost/p), state
             else
@@ -93,7 +94,8 @@ make_chop_prop!(move, jump, dict) = begin
     demeocc = dict[:demeoccfn]
     fname = Symbol(:prop_,move[:name])
     defn = quote
-        $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(node, cols, state, t; kwargs...)
+            local rate, enns, ells, prop
             if node.parlin ∈ cols[$from]
                 rate = $rate(t, state; kwargs...)
                 enns = $demeocc(state)
@@ -117,9 +119,8 @@ make_chop_move!(move, jump, dict) = begin
     signature = move[:signature]
     from = pop!(move, :from)
     to = pop!(move, :to, nothing)
-    production = pop!(move,:production)
-    saturation = pop!(move,:saturation)
-    boost = make_boostfn!(production,saturation,move,dict,:chop)
+    boost = pop!(move,:boost)
+    boost = make_boostfn!(boost,move,dict,:chop)
     rate = jump[:ratefn]
     popmove = jump[:popmovefn]
     demeocc = dict[:demeoccfn]
@@ -130,12 +131,13 @@ make_chop_move!(move, jump, dict) = begin
     end
     fname = Symbol(:move_,move[:name])
     defn = quote
-        $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(node, cols, state, t; kwargs...)
+            local rate, enns, ells, boost
             if node.parlin ∈ cols[$from]
                 rate = $rate(t, state; kwargs...)
                 state = $popmove(t, state; kwargs...)
-                ells = $op
                 enns = $demeocc(state)
+                ells = $op
                 boost = $boost(enns,ells)
                 log(rate*boost), state
             else
@@ -162,6 +164,7 @@ make_singmovefn!(dict) = begin
         nv = length(v)
         expr = if nv > 1
             quote
+                local ratefuns, movefuns, alpha, ll
                 ratefuns = [$(v...)]
                 movefuns = [$(w...)]
                 alpha = map(ratefuns) do f
@@ -177,6 +180,7 @@ make_singmovefn!(dict) = begin
             end
         else
             quote
+                local ll
                 ll, state = $(w[1])(node, cols, state, t; kwargs...)
             end
         end
@@ -187,7 +191,7 @@ make_singmovefn!(dict) = begin
     fname = :singular_move!
     dict[:singmovefn] = fname
     defn = quote
-        $fname = function(nsample, nchild, node, cols, state, t; kwargs...)
+        const $fname = function(nsample, nchild, node, cols, state, t; kwargs...)
             $body
             live = ll > Prob(-Inf)
             live, ll, state
@@ -201,7 +205,8 @@ make_singular_rootfn!(dict) = begin
     demeocc = dict[:demeoccfn]
     dict[:singrootfn] = fname = :singular_root!
     defn = quote
-        $fname = function(node::GuideNode{F,N,D}, cols, state, t; kwargs...) where {F, N, D <: Enum}
+        const $fname = function(node::GuideNode{F,N,D}, cols, state, t; kwargs...) where {F, N, D <: Enum}
+            local q, i, p, enns, ells, live
             q::Prob = 0
             i, _, p = rcateg(node.present[:,1], true)
             if i > 0
@@ -229,12 +234,14 @@ make_singular_part!(dict) = begin
     singmovefn = pop!(dict,:singmovefn)
     dict[:singularpartfn] = fname
     defn = quote
-        $fname = function(cols, state, guide, n, t; kwargs...)
+        const $fname = function(cols, state, guide, n, t; kwargs...)
+            local ll, enns, ells, live
             ll::Prob = -Inf
             enns = $demeocc(state)
             ells = ell(cols)
             live = isalive(enns, ells)
             if live
+                local node, nchild
                 node = guide[n]
                 nchild = length(node.chillins)
                 if node.type == PhyloPOMP.Root

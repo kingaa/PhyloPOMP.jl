@@ -14,7 +14,6 @@ using Test
     ];
 
     @demes SEIR E I
-    using .SEIR: E, I
     g = parse_newick(x,demes=SEIR,t0=0,time=1);
     z = guide(g,fsmarkov(I=>0.5,E=>0.5,(I,E)=>5));
     @test length(g)==length(z)

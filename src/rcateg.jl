@@ -1,14 +1,3 @@
-using EnumX: @enumx
-
-"""
-    @marks Name mark1 mark2 ...
-
-Creates a new module, `Name`, which contains an enumeration of the jump-marks `mark1`, `mark2`, ....
-"""
-macro marks(name, first, rest...)
-    esc(:(@enumx $name $first=1 $(rest...)))
-end
-
 """
     rcateg(p, prob = false)
 

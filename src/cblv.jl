@@ -120,18 +120,16 @@ Optional arguments:
 parse_cblv(
     x::Vector{F},
     y::Vector{F};
-    demes::Module = Unstructured,
+    demes::Type{E} = Unstructured,
     t0::Real = zero(Time),
     time::Union{Missing,Real} = missing,
-) where {F <: Real} = begin
+) where {F <: Real, E <: Enum} = begin
     @assert length(x)==length(y) "length mismatch"
     @assert length(x)>0 "empty CBLV representation"
     @assert maximum(x) == x[1] "improper CBLV representation"
     @assert maximum(y) <= x[1] "improper CBLV representation"
     @assert minimum(x) >= 0 "improper CBLV representation"
     @assert minimum(y) == 0 "improper CBLV representation"
-    @isademeset demes
-    E = demes.DemeSet
     G = Genealogy{demes}(Time(t0),Time(t0)+Time(x[1]))
     sizehint!(G.nodes,2*length(x))
     p::Name = 0

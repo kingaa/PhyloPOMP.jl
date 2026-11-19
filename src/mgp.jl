@@ -6,24 +6,12 @@ include("filter_regular.jl")
 
 using PartiallyObservedMarkovProcesses: pomp
 
-struct GuidedMGP
-    demes::Module
-    decls::Vector{Expr}
-    init_state::NamedTuple
-    rinit::Function
-    rprocess::Function
-    logdmeasure::Function
-    knowledge::Function
-    fsmp::FSMarkovProc
-end
-
 macro mgp_soft_filter(args...)
     esc(soft_filter_def(args...))
 end
 
 soft_filter_def(args::Expr...) = begin
     dict = MgpDict(
-        :deme_module => Symbol(:Demes_,gensym()),
         :demes => :((default,)),
         :state => :(),
         :eventmap => FuncMap(),
@@ -39,68 +27,26 @@ soft_filter_def(args::Expr...) = begin
                 end
             end
         end,
-        :types => quote
-            Name = PhyloPOMP.Name
-            Time = PhyloPOMP.Time
-            Prob = PhyloPOMP.Prob
-            Root = PhyloPOMP.Root
-            Node = PhyloPOMP.Node
-            Sample = PhyloPOMP.Sample
-        end,
         :decls => Expr[]
     )
+    push!(dict[:decls],:(using PhyloPOMP))
+    push!(dict[:decls],:(using PhyloPOMP: Name, Time, Prob, Root, Node, Sample))
     parse_mgp_spec!(dict, args...)
     repair_mgp_spec!(dict)
     process_demes!(dict)
     process_jumps!(dict)
-    rinit = make_rinitfn(dict)
-    init_state = make_init_state(dict)
-    rprocess = make_rprocessfn!(dict)
-    logdmeas = make_logdmeasure!(dict)
-    knowledge = make_knowledge!(dict)
-    fsmp = make_fsmp!(dict)
-    decls = Expr[
-        :(knowledge! = $knowledge),
-        :(fsmp = $fsmp),
-        :(logdmeasure = $logdmeas),
-        :(init_state = $init_state),
-        :(rinit = $rinit),
-        :(rprocess = $rprocess),
-    ]
-    quote
-        @eval @demes($(dict[:deme_module]), $(dict[:demes]...))
-
-        PhyloPOMP.GuidedMGP(
-            $(dict[:deme_module]),
-            $decls,
-            $init_state,
-            $rinit,
-            $rprocess,
-            $logdmeas,
-            $knowledge,
-            $fsmp,
-        )
-    end
-end
-
-showdefs(obj::GuidedMGP; _...) = begin
-    decls = Base.remove_linenums!.(copy(obj.decls))
-    strings = map(decls) do decl
-        if decl.head == :block
-            string(decl.args...)
-        else
-            string(decl)
-        end
-    end
-    join(strings,"\n\n")
-end
-
-Base.show(
-    io::IO,
-    obj::GuidedMGP,
-    kwargs...,
-) = begin
-    print(io, showdefs(obj; kwargs...))
+    make_knowledge!(dict)
+    make_fsmp!(dict)
+    make_rinitfn!(dict)
+    make_init_state!(dict)
+    make_logdmeasure!(dict)
+    make_rprocessfn!(dict)
+    decls = peelblock.(dict[:decls])
+    modname = Symbol(:MGP_,gensym())
+    #    mdoc = Expr(:block, Expr(:meta, :doc), modname)
+    Expr(:toplevel,
+         Expr(:module, true, modname,
+              Expr(:block,decls...)))
 end
 
 process_demes!(dict) = begin
@@ -109,21 +55,16 @@ process_demes!(dict) = begin
     dict[:demes] = dict[:demes].args
     nd = length(dict[:demes])
     dict[:nullproduc] = (collect(fill(0,nd))...,)
-    demedecls = map(dict[:demes]) do d
-        :($d = $(dict[:deme_module]).$d)
-    end
-    dict[:demedecls] = quote
-        $(demedecls...)
-    end
     state = dict[:state]
     dict[:demeoccfn] = fname = :deme_occupancy
     @assert haskey(dict,:deme_occupancy) "deme_occupancy not specified"
     demeocc = pop!(dict,:deme_occupancy)
     defn = quote
-        $fname = function($state,)
+        const $fname = function($state,)
             $demeocc
         end
     end
+    push!(dict[:decls],:(@eval @demes(DemeSet, $(dict[:demes]...))))
     push!(dict[:decls],defn)
     nothing
 end
@@ -155,7 +96,7 @@ make_ratefn!(jump, dict) = begin
     fname = Symbol(:rate_,jump[:name])
     jump[:ratefn] = fname
     defn = quote
-        $fname = function(t, $state; $(vars...), _...)
+        const $fname = function(t, $state; $(vars...), _...)
             $rate
         end
     end
@@ -176,7 +117,7 @@ make_popmovefn!(jump, dict) = begin
     fname = Symbol(:popmove_,jump[:name])
     jump[:popmovefn] = fname
     defn = quote
-        $fname = function(t, $state; $(vars...), _...)
+        const $fname = function(t, $state; $(vars...), _...)
             $(move...)
             $state
         end
@@ -237,7 +178,7 @@ make_propfn!(move, jump, dict) = begin
     fname = Symbol(:pi_,move[:name])
     move[:propfn] = fname
     defn = quote
-        $fname = function($state, $enns, $ells; $(vars...), _...)
+        const $fname = function($state, $enns, $ells; $(vars...), _...)
             $prop
         end
     end
@@ -246,61 +187,61 @@ make_propfn!(move, jump, dict) = begin
 end
 
 ## construct the boost function for a move
-make_boostfn!(production, saturation, move, dict, name) = begin
+make_boostfn!(boost, move, dict, name) = begin
     fname = Symbol(:boost_,move[:name],:_,name)
-    defn = :($fname = PhyloPOMP.binomratio($production,$saturation))
+    enns = dict[:enns]
+    ells = dict[:ells]
+    defn = quote
+        const $fname = function($enns, $ells)
+            $boost
+        end
+    end
     push!(dict[:decls],defn)
     fname
 end
 
-make_init_state(dict) = begin
+make_init_state!(dict) = begin
     @assert haskey(dict,:init_state) "init_state not specified"
     init_state = eval(pop!(dict,:init_state))
-    types = dict[:types]
-    demes = dict[:deme_module]
-    quote
-        let
-            $types
-            (
-                node=one(Name),
-                ll=zero(Prob),
-                live=true,
-                cols=Coloring($demes),
-                state=$init_state,
-            )
-        end
+    defn = quote
+        const init_state = (
+            node=one(Name),
+            ll=zero(Prob),
+            live=true,
+            cols=Coloring(DemeSet),
+            state=$init_state,
+        )
     end
+    push!(dict[:decls],defn)
+    nothing
 end
 
-make_rinitfn(dict) = begin
+make_rinitfn!(dict) = begin
     @assert haskey(dict,:rinit) "rinit not specified"
-    fname = :rinitfn
     rinit = pop!(dict,:rinit)
-    types = dict[:types]
-    demes = dict[:deme_module]
-    defn = :($fname = $rinit)
-    quote
-        let
-            $types
-            $defn
-            function (;kwargs...)
+    push!(dict[:decls],:(const user_rinit = $rinit))
+    push!(
+        dict[:decls],
+        quote
+            const rinitfn = function(;kwargs...)
                 (
                     node = one(Name),
                     ll = zero(Prob),
                     live = true,
-                    cols = Coloring($demes),
-                    state = $fname(;kwargs...),
+                    cols = Coloring(DemeSet),
+                    state = user_rinit(;kwargs...),
                 )
             end
         end
-    end
+    )
+    nothing
 end
 
 make_rprocessfn!(dict) = begin
     make_regular_part!(dict)
     make_singular_part!(dict)
     defn = quote
-        function (;t, dt, guide, node, ll, live, cols, state, kwargs...,)
+        const rprocessfn = function(;t, dt, guide, node, ll, live, cols, state, kwargs...,)
             if live
                 cols = copy(cols)
                 live, ll, state = singular_part!(
@@ -311,6 +252,7 @@ make_rprocessfn!(dict) = begin
                 ll = Prob(-Inf)
             end
             if live && dt > 0
+                local ll1
                 ll1, state = regular_part!(
                     cols, state, guide, node, t, t+dt;
                     kwargs...,
@@ -320,84 +262,58 @@ make_rprocessfn!(dict) = begin
             (;node = node+1, ll, live, cols, state)
         end
     end
-    types = dict[:types]
-    demedecls = dict[:demedecls]
-    quote
-        let
-            $types
-            $demedecls
-            $(dict[:decls]...)
-            $defn
-        end
-    end
+    push!(dict[:decls],defn)
+    nothing
 end
 
 make_logdmeasure!(dict) = begin
     @assert haskey(dict,:logdmeasure) "logdmeasure not specified"
-    fname = :logdmeas
     f = pop!(dict,:logdmeasure)
-    types = dict[:types]
-    demes = dict[:deme_module]
-    defn = :($fname = $f)
-    quote
-        let
-            $types
-            $defn
-            function (; node, ll, live, cols, state, kwargs...)
+    defn = :(const user_logdmeas = $f)
+    push!(dict[:decls], defn)
+    push!(
+        dict[:decls],
+        quote
+            const logdmeasurefn = function(; node, ll, live, cols, state, kwargs...)
                 if live
-                    ll + $fname(;state..., kwargs...)
+                    ll + user_logdmeas(;state..., kwargs...)
                 else
                     Prob(-Inf)
                 end
             end
         end
-    end
+    )
+    nothing
 end
 
 make_knowledge!(dict) = begin
     @assert haskey(dict,:knowledge) "knowledge not specified"
     know = pop!(dict,:knowledge)
-    types = dict[:types]
-    demes = dict[:deme_module]
-    demedecls = dict[:demedecls]
-    quote
-        let
-            $types
-            $demedecls
-            $know
-        end
-    end
+    push!(dict[:decls],:(const knowledge! = $know))
+    nothing
 end
 
 make_fsmp!(dict) = begin
     @assert haskey(dict,:guide) "guide not specified"
     g = pop!(dict,:guide)
-    types = dict[:types]
-    demes = dict[:deme_module]
-    demedecls = dict[:demedecls]
-    quote
-        let
-            $types
-            $demedecls
-            $g
-        end
-    end
+    push!(dict[:decls],:(const guideproc = $g))
+    nothing
 end
 
 filter_pomp(
-    x::GuidedMGP,
+    x::Module,
     g::Genealogy;
     kwargs...,
 ) = begin
-    guidegen = guide(g, x.fsmp, x.knowledge)
+    guidegen = guide(g, x.guideproc, x.knowledge!)
     pomp(
         ;t0 = timezero(guidegen),
         times = times(guidegen),
         userdata = (guide = guidegen,),
         init_state = x.init_state,
-        rinit = x.rinit,
-        rprocess = onestep(x.rprocess),
-        logdmeasure = x.logdmeasure,
+        rinit = x.rinitfn,
+        rprocess = onestep(x.rprocessfn),
+        logdmeasure = x.logdmeasurefn,
         kwargs...,
     )
 end

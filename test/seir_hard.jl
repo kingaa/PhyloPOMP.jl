@@ -9,7 +9,7 @@ using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
 using PhyloPOMP.HardSEIR
-using PhyloPOMP.HardSEIR.Demes: Expos, Infec
+using PhyloPOMP.HardSEIR: Expos, Infec
 import PartiallyObservedMarkovProcesses as POMP
 
 heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))

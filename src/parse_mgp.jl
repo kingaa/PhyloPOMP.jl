@@ -33,3 +33,12 @@ repair_mgp_spec!(dict) = begin
     dict[:state] = make_named(dict[:state])
     nothing
 end
+
+peelblock(arg::Expr) = begin
+    if arg.head == :block && length(arg.args)==2 &&
+        arg.args[1] isa LineNumberNode
+        arg.args[2]
+    else
+        arg
+    end
+end

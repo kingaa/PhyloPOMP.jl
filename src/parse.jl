@@ -20,12 +20,11 @@ parse_newick(
 
 parse_newick(
     input::AbstractString;
-    demes::Module = Unstructured,
+    demes::Type{E} = Unstructured,
     t0::Real = zero(Time),
     time::Union{Missing,Real} = missing,
-) = begin
-    @isademeset demes
-    D = demes.DemeSet
+) where {E <: Enum} = begin
+    D = demes
     dememapper = name2enum(D)
     tf = t0 = Time(t0)
     bl = zero(Time)
@@ -169,7 +168,7 @@ insert_zlb!(G::Genealogy{D}) where D = begin
     for n ∈ G.nodes
         if n.type==Sample && !isempty(n.children)
             q = length(G)+1
-            node = GenealNode{D.DemeSet}(q,n.slate,n.deme,Sample,n.name)
+            node = GenealNode{D}(q,n.slate,n.deme,Sample,n.name)
             push!(G.nodes,node)
             push!(n.children,q)
             n.type = Node
@@ -215,7 +214,7 @@ scan_branch!(
     end
     q = length(G.nodes)+1
     slate = G[p].slate + bl
-    n = GenealNode{D.DemeSet}(q,slate,deme,type)
+    n = GenealNode{D}(q,slate,deme,type)
     n.parent = p
     push!(G[p].children,q)
     push!(G.nodes,n)

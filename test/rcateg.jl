@@ -18,14 +18,12 @@ using Test
     @test 1.9 < t[2]/t[1] < 2.1
     @test 2.9 < t[3]/t[1] < 3.1
     
-    @marks U trans recov wane
-    using .U: trans, recov, wane, T as UType
-    
-    x = [rcateg([1.0, 2.0, 3.0],UType)[1] for _ in 1:10000]
+    @enum U trans=1 recov wane
+    x = [rcateg([1.0, 2.0, 3.0],U)[1] for _ in 1:10000]
     t = tally(x)
     @test 1.9 < t[recov]/t[trans] < 2.1
     @test 2.9 < t[wane]/t[trans] < 3.1
-    k,s = rcateg([0,0,0],UType)
+    k,s = rcateg([0,0,0],U)
     @test ismissing(k)
 
     b = BitSet([33, 45, 101])

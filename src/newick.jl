@@ -59,7 +59,7 @@ extnewick(
 ) where D = begin
     typenodemap = Dict(Node=>"node",Sample=>"sample",Root=>"root")
     nstr = Array{String}(undef,length(g))
-    dememap = enum2name(D.DemeSet)
+    dememap = enum2name(D)
     for i ∈ reverse(eachindex(g))
         t = typenodemap[g[i].type]
         dstr = if ismissing(g[i].deme)

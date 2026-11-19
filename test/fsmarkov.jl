@@ -10,7 +10,6 @@ using Test
 @testset verbose=true "finite-state Markov" begin
 
     @demes SI3R I1 I2 I3
-    using .SI3R: I1, I2, I3
     p = fsmarkov(I1=>1,I2=>1,I3=>1);
     @test sum(statdist(p))==1
     @test sum(abs.(generator(p)))==0

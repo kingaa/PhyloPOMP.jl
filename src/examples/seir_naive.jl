@@ -13,8 +13,7 @@ module NaiveSEIR
 using ..PhyloPOMP
 using ..PhyloPOMP: Root, Node, Sample, Name, Prob, Time
 
-@demes Demes Expos Infec
-using .Demes: Expos, Infec, DemeSet
+@demes DemeSet Expos Infec
 
 include("seir_trees.jl")
 
@@ -301,7 +300,7 @@ filter_pomp(
             node=one(Name),
             ll=zero(Prob),
             live=true,
-            cols=Coloring(Demes),
+            cols=Coloring(DemeSet),
             state=(S=Int64(0), E=Int64(0), I=Int64(0), R=Int64(0)),
         ),
         rinit = function (;kwargs...)
@@ -309,7 +308,7 @@ filter_pomp(
                 node = one(Name),
                 ll = zero(Prob),
                 live = true,
-                cols = Coloring(Demes),
+                cols = Coloring(DemeSet),
                 state = seir_rinit(;kwargs...),
             )
         end,
