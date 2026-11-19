@@ -11,7 +11,7 @@ using PhyloPOMP
 import PartiallyObservedMarkovProcesses as POMP
 using RCall
 
-heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","yes"))
+heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
 """
    A soft filter for LBDP.
