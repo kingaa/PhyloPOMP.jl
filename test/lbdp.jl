@@ -9,7 +9,6 @@ using BenchmarkTools
 using Random: seed!
 using PhyloPOMP
 import PartiallyObservedMarkovProcesses as POMP
-using RCall
 
 heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
@@ -17,19 +16,19 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
    A soft filter for LBDP.
 """
 const mgp = @mgp_soft_filter(
-    rinit = function(; N0, _...)
-        (N=N0,)
+    rinit = function(; n0, _...)
+        (n=n0,)
     end,
-    init_state=:(N=Int64(0),),
+    init_state=:(n=Int64(0),),
     demes=(def,),
-    state=(N,),
-    deme_occupancy=(N,),
+    state=(n,),
+    deme_occupancy=(n,),
     enns=(n,),
     ells=(ℓ,),
     jumps=(
         birth=(
-            rate=λ*N,
-            popmove=(N += 1),
+            rate=λ*n,
+            popmove=(n += 1),
             moves=(
                 reg=(
                     type=id,
@@ -47,8 +46,8 @@ const mgp = @mgp_soft_filter(
             ),
         ),
         death=(
-            rate=μ*N,
-            popmove=(N -= 1),
+            rate=μ*n,
+            popmove=(n -= 1),
             moves=(
                 regular=(
                     type=id,
@@ -60,7 +59,7 @@ const mgp = @mgp_soft_filter(
             ),
         ),
         sample_nondestruct=(
-            rate=ψ*N,
+            rate=ψ*n,
             moves=(
                 inline=(
                     type=chop,
@@ -80,8 +79,8 @@ const mgp = @mgp_soft_filter(
             ),
         ),
         sample_destruct=(
-            rate=χ*N,
-            popmove=(N -= 1),
+            rate=χ*n,
+            popmove=(n -= 1),
             moves=(
                 terminal=(
                     type=chop,
@@ -102,8 +101,9 @@ n = "((((((((((:0.11078693391015726,((:0.0802787033444039,:0):0.0901256425088821
     seed!(2123986527)
 
     @test mgp isa Module
-    g = @guide mgp parse_newick(n, time=5) fsmarkov(def=>1)
-    p = filter_pomp(mgp, g; params=map(Float64,(;λ=2,μ=1,ψ=1,χ=0.1,N0=10)))
+    t = parse_newick(n, time=5)
+    g = @guide mgp t fsmarkov(def=>1)
+    p = filter_pomp(mgp, g; params=map(Float64,(;λ=2,μ=1,ψ=1,χ=0.1,n0=10)))
     @test p isa POMP.PompObject
     pfilter(p,Np=100)
     @btime pfilter($p, Np=1000)
@@ -113,14 +113,9 @@ n = "((((((((((:0.11078693391015726,((:0.0802787033444039,:0):0.0901256425088821
         @time pf = [pfilter(p, Np=1000) for _ ∈ 1:16]
         pfest = logmeanexp(logLik.(pf), se=true)
 
-        R"""
-library(phylopomp, warn.conflicts=FALSE)
-$n |>
-  parse_newick(time=5) |>
-  lbdp_exact(lambda=2,mu=1,psi=1,chi=0.1,n0=10) -> ll
-"""
-
-        @info "filter: $(round(pfest.est,digits=1)) ± $(round(pfest.se,digits=2)), exact: $(round(@rget(ll),digits=1))"
+        ll,_ = lbdp_exact(t;coef(p)...)
+        
+        @info "filter: $(round(pfest.est,digits=1)) ± $(round(pfest.se,digits=2)), exact: $(round(ll,digits=1))"
 
     end
 

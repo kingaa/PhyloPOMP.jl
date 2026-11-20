@@ -70,12 +70,13 @@ Base.getindex(g::Genealogy, i::AbstractVector{<:Integer}) = g.nodes[i]
 Base.length(g::Genealogy) = length(g.nodes)
 Base.eachindex(g::Genealogy) = eachindex(g.nodes)
 
-roots(g::Genealogy) = findall(i->(g[i].type==Root),eachindex(g))
-tips(g::Genealogy) = findall(i->isempty(g[i].children),eachindex(g))
-samples(g::Genealogy) = findall(i->(g[i].type==Sample),eachindex(g))
-nodes(g::Genealogy) = findall(i->(g[i].type==Node),eachindex(g))
+roots(g::Genealogy) = findall(i->(g[i].type==Root), eachindex(g))
+tips(g::Genealogy) = findall(i->isempty(g[i].children), eachindex(g))
+samples(g::Genealogy) = findall(i->(g[i].type==Sample), eachindex(g))
+nodes(g::Genealogy) = findall(i->(g[i].type==Node), eachindex(g))
 timezero(g::Genealogy) = g.t0
-times(g::Genealogy) = [map(n->n.slate,g.nodes[2:end])...,g.time]
+times(g::Genealogy) = [map(n->n.slate, Base.rest(g.nodes,2))...,g.time]
+timewindow(g::Genealogy) = (g.t0, g.time)
 nsample(g::Genealogy) = g.nsample
 
 ==(n1::GenealNode{E1}, n2::GenealNode{E2}) where {E1,E2} = begin

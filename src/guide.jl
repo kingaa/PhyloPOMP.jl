@@ -334,7 +334,8 @@ Base.length(g::Guide) = length(g.nodes)
 Base.eachindex(g::Guide) = eachindex(g.nodes)
 
 timezero(g::Guide) = g.nodes[1].tbeg
-times(g::Guide) = map(n->n.tend,g.nodes)
+times(g::Guide) = map(n->n.tend, g.nodes)
+timewindow(g::Guide) = (timezero(g), g.nodes[end].tend)
 
 Base.show(
     io::IO,

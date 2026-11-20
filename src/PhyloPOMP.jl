@@ -20,8 +20,8 @@ import PartiallyObservedMarkovProcesses as POMP
 export @demes
 include("demes.jl")
 
-export GenealNode, Genealogy, times, timezero, roots, tips,
-    nsample, samples, nodes
+export GenealNode, Genealogy, times, timezero, timewindow, roots,
+    tips, nsample, samples, nodes
 include("genealogy.jl")
 
 export parse_newick
@@ -56,6 +56,9 @@ include("binomratio.jl")
 export @mgp_soft_filter, @guide, isalive, filter_pomp
 include("mgp.jl")
 
+export lbdp_exact
+include("lbdp.jl")
+
 include("examples/Examples.jl")
 
-end # module PhyloPOMP
+end
