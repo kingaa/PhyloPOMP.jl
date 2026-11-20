@@ -3,7 +3,6 @@ using PartiallyObservedMarkovProcesses: pomp
 const MgpDict = Dict{Symbol,Any}
 const FuncMap = Dict{Tuple{Int,Int},Vector{Symbol}}
 
-include("extract_symbols.jl")
 include("parse_mgp.jl")
 include("switchblock.jl")
 include("filter_singular.jl")
@@ -55,7 +54,7 @@ end
 
 process_demes!(dict) = begin
     @assert haskey(dict,:demes) "demes not specified"
-    @assert dict[:demes].head == :tuple "demes should be specified as a tuple"
+    @assert isexpr(dict[:demes],:tuple) "demes should be specified as a tuple"
     dict[:demes] = dict[:demes].args
     state = dict[:state]
     dict[:demeoccfn] = fname = :deme_occupancy

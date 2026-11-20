@@ -24,10 +24,7 @@ export GenealNode, Genealogy, times, timezero, timewindow, roots,
     tips, nsample, samples, nodes
 include("genealogy.jl")
 
-export parse_newick
-include("parse.jl")
-
-export newick
+export newick, parse_newick
 include("newick.jl")
 
 export cblv, parse_cblv
