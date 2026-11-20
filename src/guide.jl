@@ -97,6 +97,7 @@ struct Guide{F<:AbstractFloat,N,D<:Enum}
                 type=g[n].type,
                 time=g[n].slate,
             )
+            @assert known isa Bool "`knowledge!` must return `true` or `false` when applied to every node"
             if known
                 probs[:,parlin] = probs[:,parlin]./sum(probs[:,parlin])
             else

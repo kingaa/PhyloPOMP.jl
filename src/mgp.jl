@@ -318,3 +318,22 @@ macro guide(x, g, arg)
     k = x.knowledge!
     esc(:(PhyloPOMP.guide($g,$m,$k)))
 end
+
+macro with(vals, expr)
+    esc(
+        quote
+            let vals = $vals, expr = $(QuoteNode(expr))
+                local vlist
+                vlist = PhyloPOMP.withlist(vals)
+                eval(Expr(:let,vlist,expr))
+            end
+        end
+    )
+end
+
+withlist(v::Union{NamedTuple,AbstractDict}) = begin
+    Expr(:block,map((x,y) -> :($x = $y), keys(v), values(v))...)
+end
+
+withlist(v) = error("@with will not work with `vals` of type $(typeof(v)).")
+
