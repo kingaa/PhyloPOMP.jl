@@ -91,14 +91,14 @@ n = "((((((((((:0.11078693391015726,((:0.0802787033444039,:0):0.0901256425088821
     @info h2("pfilter benchmark")
     @btime pfilter($p, Np=1000)
 
+    ll,_ = lbdp_exact(tr; coef(p)...)
+    @info "exact likelihood: $(round(ll,digits=1))"
     if heavy
 
         @time pf = [pfilter(p, Np=1000) for _ ∈ 1:16]
         pfest = logmeanexp(logLik.(pf), se=true)
 
-        ll,_ = lbdp_exact(tr; coef(p)...)
-
-        @info "filter: $(round(pfest.est,digits=1)) ± $(round(pfest.se,digits=2)), exact: $(round(ll,digits=1))"
+        @info "filter likelihood: $(round(pfest.est,digits=1)) ± $(round(pfest.se,digits=2))"    
 
     end
 
