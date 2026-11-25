@@ -37,16 +37,16 @@ seed!(641922521)
 
     ll,se = est(NaiveSEIR.filter_pomp(g; par...))
     @info "naïve filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
-    @test isapprox(ll,-3.1014; atol=3*se)
+    @test isapprox(ll, -3.1014; atol=3*se)
 
     gd = @guide SoftSEIR g fsmarkov(Expos=>0.1, Infec=>1, (Expos,Infec)=>1)
     ll, se = est(filter_pomp(SoftSEIR, gd; params=par))
     @info "soft filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
-    @test isapprox(ll,-3.1014; atol=3*se)
+    @test isapprox(ll, -3.1014; atol=3*se)
 
     ll,se = est(HardSEIR.filter_pomp(g, m(HardSEIR); par...))
     @info "hard filter estimate = $(round(ll,digits=2)) ± $(round(se,sigdigits=2))"
-    @test isapprox(ll,-3.1014; atol=3*se)
+    @test isapprox(ll, -3.1014; atol=3*se)
 
 end
 

@@ -72,7 +72,7 @@ const mgp = @mgp_soft_filter(
             moves=(
                 terminal=(
                     type=chop, signature=(1,0), from=Infec,
-                    boost=1,
+                    boost=1.0,
                 ),
             ),
         ),
@@ -107,9 +107,9 @@ n = "((:0.11005806237502347,(((((:0.10826642369118866,(:0.06570402145902787,(((:
     if heavy
 
         @time pf = [pfilter(p, Np=1000) for _ ∈ 1:16]
-        pfest = logmeanexp(logLik.(pf), se=true)
+        est,se = logmeanexp(logLik.(pf), se=true)
 
-        trans = PhyloPOMP.@with coef(p) begin
+        trans = @with coef(p) begin
             m = inv(S0+I0+R0)
             λ = β*S0*m
             μ = γ
@@ -119,7 +119,7 @@ n = "((:0.11005806237502347,(((((:0.10826642369118866,(:0.06570402145902787,(((:
 
         ll,_ = lbdp_exact(tr; trans...)
 
-        @info "filter: $(round(pfest.est,digits=1)) ± $(round(pfest.se,digits=2))"
+        @info "filter: $(round(est,digits=1)) ± $(round(2se,digits=2))"
 
     end
 

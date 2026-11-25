@@ -1,7 +1,7 @@
 make_id_move!(move, jump, dict) = begin
     demeocc = dict[:demeoccfn]
     popmove = jump[:popmovefn]
-    boost = pop!(move,:boost,1)
+    boost = pop!(move,:boost,one(Prob))
     boost = make_boostfn!(boost,move,dict,:id)
     jump[:regmovefn] = fname = Symbol(:move_,move[:name])
     defn = quote
@@ -23,8 +23,8 @@ make_swap_move!(move, jump, dict) = begin
     popmove = jump[:popmovefn]
     from = pop!(move,:from)
     to = pop!(move,:to)
-    idboost = pop!(move,:idboost)
-    swapboost = pop!(move,:swapboost)
+    idboost = pop!(move,:idboost,one(Prob))
+    swapboost = pop!(move,:swapboost,one(Prob))
     idboost = make_boostfn!(idboost,move,dict,:id)
     swapboost = make_boostfn!(swapboost,move,dict,:swap)
     jump[:regmovefn] = fname = Symbol(:move_,move[:name])
@@ -86,8 +86,8 @@ make_regeventratefn!(dict) = begin
         rate = pop!(jump,:ratefn)
         prop = pop!(jump,:regpropfn)
         quote
-            rate += r = $rate(t, state; kwargs...)
-            pi[$i] = $prop(state, enns, ells; kwargs...)
+            rate += r = $rate(t, state; kwargs...)::Prob
+            pi[$i] = $prop(state, enns, ells; kwargs...)::Prob
             alpha[$i] = r*pi[$i]
         end
     end
@@ -95,7 +95,7 @@ make_regeventratefn!(dict) = begin
     dpieces = map(values(jumps)) do jump
         rate = jump[:ratefn]
         quote
-            rate += $rate(t, state; kwargs...)
+            rate += $rate(t, state; kwargs...)::Prob
         end
     end
     demeocc = dict[:demeoccfn]
@@ -124,7 +124,9 @@ make_regular_part!(dict) = begin
     regmovefn = pop!(dict,:regmovefn)
     fname = :regular_part!
     defn = quote
-        const $fname = function(cols, state, guide, n, t, tf; kwargs...,)
+        const $fname = function(
+            cols::Coloring, state::NamedTuple, guide::Guide,
+            n::Integer, t::Time, tf::Time; kwargs...,)
             local node, alpha, pi, step, decay, ll, ll1, k, s
             node = guide[n]
             alpha = similar(Vector{Prob},$nj)

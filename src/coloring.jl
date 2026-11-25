@@ -22,7 +22,7 @@ mutable struct Coloring{D <: Enum, N}
     Coloring(y::Coloring{D,N}) where {D,N} = new{D,N}(copy(y.cols))
 end
 
-copy(c::NTuple{N,BitSet}) where N = Tuple(copy(i) for i in c)
+copy(c::NTuple{N,BitSet}) where N = NTuple{N,BitSet}(copy(i) for i in c)
 
 copy(y::Coloring) = Coloring(y)
 

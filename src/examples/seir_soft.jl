@@ -10,6 +10,7 @@ away from) particular branches, but the overall event rate cannot
 increase above that of the underlying population process.
 """
 const SoftSEIR = @mgp_soft_filter(
+##@macroexpand@mgp_soft_filter(
     name=SoftSEIR,
     state=(S,E,I,R),
     demes=(Expos,Infec),
@@ -121,9 +122,7 @@ const SoftSEIR = @mgp_soft_filter(
                 terminal=(
                     type=chop,
                     signature=(1,0),
-                    pi=1,
                     from=Infec,
-                    boost=1,
                 ),
             ),
         ),

@@ -163,11 +163,7 @@ process_move!(move, jump, dict) = begin
 end
 
 make_propfn!(move, jump, dict) = begin
-    if haskey(move,:pi)
-        prop = pop!(move,:pi)
-    else
-        prop = 1
-    end
+    prop = pop!(move,:pi,one(Prob))
     state = dict[:state]
     enns = dict[:enns]
     ells = dict[:ells]
@@ -242,7 +238,10 @@ make_rprocessfn!(dict) = begin
     make_singular_part!(dict)
     delete!(dict,:jumps)
     defn = quote
-        const rprocessfn = function(;t, dt, guide, node, ll, live, cols, state, kwargs...,)
+        const rprocessfn = function(
+            ;t::Time, dt::Time, guide::Guide,
+            node::Integer, ll::Prob, live::Bool,
+            cols::Coloring, state::NamedTuple, kwargs...,)
             if live
                 cols = copy(cols)
                 live, ll, state = singular_part!(
@@ -318,22 +317,3 @@ macro guide(x, g, arg)
     k = x.knowledge!
     esc(:(PhyloPOMP.guide($g,$m,$k)))
 end
-
-macro with(vals, expr)
-    esc(
-        quote
-            let vals = $vals, expr = $(QuoteNode(expr))
-                local vlist
-                vlist = PhyloPOMP.withlist(vals)
-                eval(Expr(:let,vlist,expr))
-            end
-        end
-    )
-end
-
-withlist(v::Union{NamedTuple,AbstractDict}) = begin
-    Expr(:block,map((x,y) -> :($x = $y), keys(v), values(v))...)
-end
-
-withlist(v) = error("@with will not work with `vals` of type $(typeof(v)).")
-

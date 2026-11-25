@@ -20,17 +20,19 @@ make_fork_prop!(move, jump, dict) = begin
     prop = pop!(move,:propfn)
     fname = Symbol(:prop_,move[:name])
     defn = quote
-        const $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(
+            node::GenealNode, cols::Coloring,
+            state::NamedTuple, t::Time; kwargs...)
             local rate, enns, ells, p1, p2
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)
+                rate = $rate(t, state; kwargs...)::Prob
                 enns = $demeocc(state)
                 ells = ell(cols)
-                p1 = $prop(state, enns, ells; kwargs...)
-                p2 = branch_options_prop($(to[1]), $(to[2]), node.present)
+                p1 = $prop(state, enns, ells; kwargs...)::Prob
+                p2 = branch_options_prop($(to[1]), $(to[2]), node.present)::Prob
                 rate*p1*p2
             else
-                0
+                zero(Prob)
             end
         end
     end
@@ -47,25 +49,28 @@ make_fork_move!(move, jump, dict) = begin
     fname = Symbol(:move_,move[:name])
     from = move[:from]
     to = move[:to]
-    boost = pop!(move,:boost)
+    boost = pop!(move,:boost,one(Prob))
     boost = make_boostfn!(boost,move,dict,:fork)
     rate = jump[:ratefn]
     demeocc = dict[:demeoccfn]
     popmove = jump[:popmovefn]
     defn = quote
-        const $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(
+            node::GuideNode, cols::Coloring, state::S, t::Time;
+            kwargs...) where {S <: NamedTuple}
             local rate, enns, ells, i, j, p, boost
+            local s::S = state
+            local ll::Prob = -Inf
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)
-                state = $popmove(t, state; kwargs...)
+                rate = $rate(t, state; kwargs...)::Prob
+                s = $popmove(t, state; kwargs...)::S
                 enns = $demeocc(state)
                 i, j, p = branch_options_move($(to[1]), $(to[2]), node.present)
                 ells = fork!(cols,$from,node.parlin,(i,j),node.chillins)
-                boost = $boost(enns, ells)
-                log(rate*boost/p), state
-            else
-                Prob(-Inf), state
+                boost = $boost(enns, ells)::Prob
+                ll = log(rate*boost/p)
             end
+            ll, s
         end
     end
     push!(dict[:decls],defn)
@@ -92,16 +97,18 @@ make_chop_prop!(move, jump, dict) = begin
     demeocc = dict[:demeoccfn]
     fname = Symbol(:prop_,move[:name])
     defn = quote
-        const $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(
+            node::GuideNode, cols::Coloring,
+            state::NamedTuple, t::Time; kwargs...)
             local rate, enns, ells, prop
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)
+                rate = $rate(t, state; kwargs...)::Prob
                 enns = $demeocc(state)
                 ells = ell(cols)
-                prop = $prop(state, enns, ells; kwargs...)
+                prop = $prop(state, enns, ells; kwargs...)::Prob
                 rate*prop
             else
-                0
+                zero(Prob)
             end
         end
     end
@@ -117,7 +124,7 @@ make_chop_move!(move, jump, dict) = begin
     signature = move[:signature]
     from = pop!(move, :from)
     to = pop!(move, :to, nothing)
-    boost = pop!(move,:boost)
+    boost = pop!(move,:boost,one(Prob))
     boost = make_boostfn!(boost,move,dict,:chop)
     rate = jump[:ratefn]
     popmove = jump[:popmovefn]
@@ -129,18 +136,21 @@ make_chop_move!(move, jump, dict) = begin
     end
     fname = Symbol(:move_,move[:name])
     defn = quote
-        const $fname = function(node, cols, state, t; kwargs...)
+        const $fname = function(
+            node::GuideNode, cols::Coloring,
+            state::S, t::Time; kwargs...) where {S <: NamedTuple}
             local rate, enns, ells, boost
+            local s::S = state
+            local ll::Prob = -Inf
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)
-                state = $popmove(t, state; kwargs...)
+                rate = $rate(t, state; kwargs...)::Prob
+                s = $popmove(t, state; kwargs...)::S
                 enns = $demeocc(state)
                 ells = $op
-                boost = $boost(enns,ells)
-                log(rate*boost), state
-            else
-                Prob(-Inf), state
+                boost = $boost(enns,ells)::Prob
+                ll = log(rate*boost)
             end
+            ll, s
         end
     end
     push!(dict[:decls],defn)
@@ -162,24 +172,21 @@ make_singmovefn!(dict) = begin
         nv = length(v)
         expr = if nv > 1
             quote
-                local ratefuns, movefuns, alpha, ll
-                ratefuns = [$(v...)]
-                movefuns = [$(w...)]
-                alpha = map(ratefuns) do f
-                    f(node, cols, state, t; kwargs...)
-                end
+                local movefuns = ($(w...),)
+                local alpha = [f(node, cols, state, t; kwargs...)::Prob
+                    for f ∈ ($(v...),)]
                 k,_,p = rcateg(alpha, true)
                 if k > 0
-                    ll, state = movefuns[k](node, cols, state, t; kwargs...)
+                    ll, s = movefuns[k](node, cols, state, t; kwargs...)
                     ll -= log(p)
                 else
                     ll = Prob(-Inf)
+                    s = state
                 end
             end
         else
             quote
-                local ll
-                ll, state = $(w[1])(node, cols, state, t; kwargs...)
+                ll, s = $(w[1])(node, cols, state, t; kwargs...)
             end
         end
         (:(nsample == $m && nchild == $n), expr)
@@ -189,10 +196,15 @@ make_singmovefn!(dict) = begin
     fname = :singular_move!
     dict[:singmovefn] = fname
     defn = quote
-        const $fname = function(nsample, nchild, node, cols, state, t; kwargs...)
+        const $fname = function(
+            nsample::Integer, nchild::Integer, node::GuideNode,
+            cols::Coloring, state::S, t::Time; kwargs...) where {S <: NamedTuple}
+            local live::Bool
+            local ll::Prob
+            local s::S
             $body
             live = ll > Prob(-Inf)
-            live, ll, state
+            live, ll, s
         end
     end
     push!(dict[:decls],defn)
@@ -231,7 +243,9 @@ make_singular_part!(dict) = begin
     rootfn = pop!(dict,:singrootfn)
     singmovefn = pop!(dict,:singmovefn)
     defn = quote
-        const $fname = function(cols, state, guide, n, t; kwargs...)
+        const $fname = function(
+            cols::Coloring, state::NamedTuple, guide::Guide,
+            n::Integer, t::Time; kwargs...)
             local ll, enns, ells, live
             ll::Prob = -Inf
             enns = $demeocc(state)
