@@ -16,7 +16,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
 @testset verbose=true "SEIR model with guided proposals" begin
 
-    seed!(2123986527)
+    seed!(871682476)
 
     g = parse_newick(HardSEIR.seir_trees[1], time = 50.0)
     @test g isa Genealogy{PhyloPOMP.Unstructured}
@@ -48,8 +48,8 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
     if heavy
         @time ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
-        llest,llse = logmeanexp(ll,se=true)
-        @info "logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
+        est,se = logmeanexp(ll,se=true)
+        @info "logLik = $(round(est,digits=2)) ± $(round(2se,sigdigits=3))"
     end
 
 end

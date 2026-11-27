@@ -85,6 +85,7 @@ process_jump!(jump, dict) = begin
     make_ratefn!(jump, dict)
     make_popmovefn!(jump, dict)
     process_moves!(jump, dict)
+    nothing
 end
 
 ## construct one rate-function per jump and store in the dictionary

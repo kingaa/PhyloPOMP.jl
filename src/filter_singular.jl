@@ -23,13 +23,12 @@ make_fork_prop!(move, jump, dict) = begin
         const $fname = function(
             node::GenealNode, cols::Coloring,
             state::NamedTuple, t::Time; kwargs...)
-            local rate, enns, ells, p1, p2
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)::Prob
-                enns = $demeocc(state)
-                ells = ell(cols)
-                p1 = $prop(state, enns, ells; kwargs...)::Prob
-                p2 = branch_options_prop($(to[1]), $(to[2]), node.present)::Prob
+                local rate = $rate(t, state; kwargs...)::Prob
+                local enns = $demeocc(state)
+                local ells = ell(cols)
+                local p1 = $prop(state, enns, ells; kwargs...)::Prob
+                local p2 = branch_options_prop($(to[1]), $(to[2]), node.present)::Prob
                 rate*p1*p2
             else
                 zero(Prob)
@@ -58,19 +57,18 @@ make_fork_move!(move, jump, dict) = begin
         const $fname = function(
             node::GuideNode, cols::Coloring, state::S, t::Time;
             kwargs...) where {S <: NamedTuple}
-            local rate, enns, ells, i, j, p, boost
-            local s::S = state
-            local ll::Prob = -Inf
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)::Prob
-                s = $popmove(t, state; kwargs...)::S
-                enns = $demeocc(state)
-                i, j, p = branch_options_move($(to[1]), $(to[2]), node.present)
-                ells = fork!(cols,$from,node.parlin,(i,j),node.chillins)
-                boost = $boost(enns, ells)::Prob
-                ll = log(rate*boost/p)
+                local rate = $rate(t, state; kwargs...)::Prob
+                local s = $popmove(t, state; kwargs...)::S
+                local enns = $demeocc(s)
+                local i, j, p = branch_options_move($(to[1]), $(to[2]), node.present)
+                local ells = fork!(cols,$from,node.parlin,(i,j),node.chillins)
+                local boost = $boost(enns, ells)::Prob
+                local ll::Prob = log(rate*boost/p)
+                return (ll, s)
+            else
+                return (Prob(-Inf), state)
             end
-            ll, s
         end
     end
     push!(dict[:decls],defn)
@@ -100,12 +98,11 @@ make_chop_prop!(move, jump, dict) = begin
         const $fname = function(
             node::GuideNode, cols::Coloring,
             state::NamedTuple, t::Time; kwargs...)
-            local rate, enns, ells, prop
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)::Prob
-                enns = $demeocc(state)
-                ells = ell(cols)
-                prop = $prop(state, enns, ells; kwargs...)::Prob
+                local rate = $rate(t, state; kwargs...)::Prob
+                local enns = $demeocc(state)
+                local ells = ell(cols)
+                local prop = $prop(state, enns, ells; kwargs...)::Prob
                 rate*prop
             else
                 zero(Prob)
@@ -139,18 +136,16 @@ make_chop_move!(move, jump, dict) = begin
         const $fname = function(
             node::GuideNode, cols::Coloring,
             state::S, t::Time; kwargs...) where {S <: NamedTuple}
-            local rate, enns, ells, boost
-            local s::S = state
-            local ll::Prob = -Inf
             if node.parlin ∈ cols[$from]
-                rate = $rate(t, state; kwargs...)::Prob
-                s = $popmove(t, state; kwargs...)::S
-                enns = $demeocc(state)
-                ells = $op
-                boost = $boost(enns,ells)::Prob
-                ll = log(rate*boost)
+                local rate = $rate(t, state; kwargs...)::Prob
+                local s = $popmove(t, state; kwargs...)::S
+                local enns = $demeocc(s)
+                local ells = $op
+                local boost = $boost(enns,ells)::Prob
+                return (log(rate*boost), s)
+            else
+                return (Prob(-Inf), state)
             end
-            ll, s
         end
     end
     push!(dict[:decls],defn)
@@ -174,8 +169,8 @@ make_singmovefn!(dict) = begin
             quote
                 local movefuns = ($(w...),)
                 local alpha = [f(node, cols, state, t; kwargs...)::Prob
-                    for f ∈ ($(v...),)]
-                k,_,p = rcateg(alpha, true)
+                               for f ∈ ($(v...),)]
+                local k,_,p = rcateg(alpha, true)
                 if k > 0
                     ll, s = movefuns[k](node, cols, state, t; kwargs...)
                     ll -= log(p)
@@ -216,19 +211,17 @@ make_singular_rootfn!(dict) = begin
     dict[:singrootfn] = fname = :singular_root!
     defn = quote
         const $fname = function(node::GuideNode{F,N,D}, cols, state, t; kwargs...) where {F, N, D <: Enum}
-            local q, i, p, enns, ells, live
-            q::Prob = 0
-            i, _, p = rcateg(node.present[:,1], true)
+            local i, _, p = rcateg(node.present[:,1], true)
             if i > 0
-                q = inv(p)
+                local q = inv(p)
                 plant!(cols, D(i), node.chillins[1])
-                enns = $demeocc(state)
-                ells = ell(cols)
-                live = isalive(enns, ells)
+                local enns = $demeocc(state)
+                local ells = ell(cols)
+                local live = isalive(enns, ells)
+                return live, log(q), state
             else
-                live = false
+                return false, Prob(-Inf), state
             end
-            live, log(q), state
         end
     end
     push!(dict[:decls],defn)
@@ -246,15 +239,13 @@ make_singular_part!(dict) = begin
         const $fname = function(
             cols::Coloring, state::NamedTuple, guide::Guide,
             n::Integer, t::Time; kwargs...)
-            local ll, enns, ells, live
-            ll::Prob = -Inf
-            enns = $demeocc(state)
-            ells = ell(cols)
-            live = isalive(enns, ells)
+            local ll::Prob = -Inf
+            local enns = $demeocc(state)
+            local ells = ell(cols)
+            local live = isalive(enns, ells)
             if live
-                local node, nchild
-                node = guide[n]
-                nchild = length(node.chillins)
+                local node = guide[n]
+                local nchild = length(node.chillins)
                 if node.type == PhyloPOMP.Root
                     @assert nchild==1 "a root should have exactly one child"
                     live, ll, state = $rootfn(node, cols, state, t; kwargs...)

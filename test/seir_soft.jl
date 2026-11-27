@@ -15,7 +15,7 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
 @testset verbose=true "SEIR model with soft proposals" begin
 
-    seed!(2123986527)
+    seed!(871682476)
 
     g = @guide SoftSEIR SoftSEIR.geneal[1] fsmarkov(Expos=>0.1, Infec=>1, (Expos,Infec)=>1)
     @test g isa Guide
@@ -65,8 +65,8 @@ heavy = occursin(r"y|yes|t|true", get(ENV,"RUN_HEAVY_TESTS","no"))
 
     if heavy
         @time ll = [logLik(pfilter(p,Np=1000)) for _ ∈ 1:10]
-        llest,llse = logmeanexp(ll,se=true)
-        @info "logLik = $(round(llest,digits=2)) ± $(round(llse,sigdigits=3))"
+        est,se = logmeanexp(ll,se=true)
+        @info "logLik = $(round(est,digits=2)) ± $(round(2se,sigdigits=3))"
     end
 
 end

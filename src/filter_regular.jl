@@ -6,11 +6,10 @@ make_id_move!(move, jump, dict) = begin
     jump[:regmovefn] = fname = Symbol(:move_,move[:name])
     defn = quote
         const $fname = function(t, guide, node, cols, state; kwargs...)
-            local enns, ells, boost
             state = $popmove(t, state; kwargs...)
-            enns = $demeocc(state)
-            ells = ell(cols)
-            boost = $boost(enns, ells)
+            local enns = $demeocc(state)
+            local ells = ell(cols)
+            local boost = $boost(enns, ells)
             log(boost), state
         end
     end
@@ -30,9 +29,9 @@ make_swap_move!(move, jump, dict) = begin
     jump[:regmovefn] = fname = Symbol(:move_,move[:name])
     defn = quote
         const $fname = function(t, guide, node, cols, state; kwargs...)
-            local enns, ells, boost, b, p
-            enns = $demeocc(state)
-            b, p = choose_branch(t, guide, node, enns, cols, $from, $to)
+            local ells, boost
+            local enns = $demeocc(state)
+            local b, p = choose_branch(t, guide, node, enns, cols, $from, $to)
             state = $popmove(t, state; kwargs...)
             enns = $demeocc(state)
             if b == 0
@@ -70,7 +69,9 @@ make_regmovefn!(dict) = begin
     dict[:regmovefn] = fname
     defn = quote
         const $fname = function(k, t, guide, node, cols, state; kwargs...)
+            local ll::Prob
             $body
+            ll, state
         end
     end
     push!(dict[:decls],defn)
@@ -103,10 +104,9 @@ make_regeventratefn!(dict) = begin
     dict[:regeventratesfn] = fname
     defn = quote
         const $fname = function(alpha, pi, t, state, cols; kwargs...)
-            local rate, enns, ells
-            rate::Prob = 0
-            enns = $demeocc(state)
-            ells = ell(cols)
+            local rate::Prob = 0
+            local enns = $demeocc(state)
+            local ells = ell(cols)
             $(mpieces...)
             $(dpieces...)
             rate-sum(alpha)
@@ -127,18 +127,18 @@ make_regular_part!(dict) = begin
         const $fname = function(
             cols::Coloring, state::NamedTuple, guide::Guide,
             n::Integer, t::Time, tf::Time; kwargs...,)
-            local node, alpha, pi, step, decay, ll, ll1, k, s
-            node = guide[n]
-            alpha = similar(Vector{Prob},$nj)
-            pi = similar(Vector{Prob},$nj)
-            step::Time = 0
-            decay::Prob = 0
-            ll::Prob = 0
+            local node = guide[n]
+            local alpha = similar(Vector{Prob},$nj)
+            local pi = similar(Vector{Prob},$nj)
+            local step::Time = 0
+            local decay::Prob = 0
+            local ll::Prob = 0
             while t < tf
-                decay = $eventratesfn(alpha, pi, t, state, cols; kwargs...,)
-                k, s = rcateg(alpha)
+                decay = $eventratesfn(alpha, pi, t, state, cols; kwargs...,)::Prob
+                local k, s = rcateg(alpha)
                 step = -log(rand())/s
                 if k > 0 && t+step < tf
+                    local ll1
                     ll1, state = $regmovefn(k, t, guide, n, cols, state)
                     ll += ll1 - (decay*step + log(pi[k]))
                     t += step
